@@ -4898,7 +4898,8 @@ RegTypeInfo getRegTypeInfo(unsigned Opcode) {
 
 } // namespace llvm::HexagonII
 
-bool HexagonInstrInfo::usesQF32Operand(MachineInstr *MI, unsigned Index) const {
+bool HexagonInstrInfo::usesQF32Operand(const MachineInstr *MI,
+                                      unsigned Index) const {
   auto Info = HexagonII::getRegTypeInfo(MI->getOpcode());
   switch (Index) {
   case 1:
@@ -4917,7 +4918,8 @@ bool HexagonInstrInfo::usesQF32Operand(MachineInstr *MI, unsigned Index) const {
   return false;
 }
 
-bool HexagonInstrInfo::usesQF16Operand(MachineInstr *MI, unsigned Index) const {
+bool HexagonInstrInfo::usesQF16Operand(const MachineInstr *MI,
+                                      unsigned Index) const {
   auto Info = HexagonII::getRegTypeInfo(MI->getOpcode());
   switch (Index) {
   case 1:
@@ -4936,19 +4938,19 @@ bool HexagonInstrInfo::usesQF16Operand(MachineInstr *MI, unsigned Index) const {
   return false;
 }
 
-bool HexagonInstrInfo::usesQFOperand(MachineInstr *MI, unsigned Index) const {
+bool HexagonInstrInfo::usesQFOperand(const MachineInstr *MI, unsigned Index) const {
   return usesQF32Operand(MI, Index) || usesQF16Operand(MI, Index);
 }
 
-bool HexagonInstrInfo::isQFP32Instr(MachineInstr *MI) const {
+bool HexagonInstrInfo::isQFP32Instr(const MachineInstr *MI) const {
   return HexagonII::getOpRegType(MI->getOpcode()) == HexagonII::RegType::QF32;
 }
 
-bool HexagonInstrInfo::isQFP16Instr(MachineInstr *MI) const {
+bool HexagonInstrInfo::isQFP16Instr(const MachineInstr *MI) const {
   return HexagonII::getOpRegType(MI->getOpcode()) == HexagonII::RegType::QF16;
 }
 
-bool HexagonInstrInfo::isQFPInstr(MachineInstr *MI) const {
+bool HexagonInstrInfo::isQFPInstr(const MachineInstr *MI) const {
   return isQFP32Instr(MI) || isQFP16Instr(MI);
 }
 
@@ -4956,7 +4958,7 @@ bool HexagonInstrInfo::isQFPInstr(MachineInstr *MI) const {
 bool HexagonInstrInfo::hasQFPInstrs(const MachineFunction &MF) const {
   for (const MachineBasicBlock &MBB : MF)
     for (const MachineInstr &MI : MBB)
-      if (isQFPInstr(const_cast<MachineInstr *>(&MI)))
+      if (isQFPInstr(&MI))
         return true;
   return false;
 }
