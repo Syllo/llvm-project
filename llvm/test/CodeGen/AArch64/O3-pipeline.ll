@@ -1,5 +1,7 @@
 ; RUN: llc --debugify-and-strip-all-safe=0 -mtriple=arm64-- -O3 -debug-pass=Structure < %s -o /dev/null 2>&1 | \
 ; RUN:     grep -v "Verify generated machine code" | FileCheck %s
+; RUN: llc --debugify-and-strip-all-safe=0 -mtriple=arm64-- -O3 -debug-pass=Structure -aarch64-enable-sve-sme-intrinsic-selection < %s -o /dev/null 2>&1 | \
+; RUN:     grep -v "Verify generated machine code" | FileCheck %s --check-prefix=CHECK --check-prefix=SVESME
 
 ; REQUIRES: asserts
 
@@ -22,6 +24,10 @@
 ; CHECK-NEXT:       Expand large div/rem
 ; CHECK-NEXT:       Expand fp
 ; CHECK-NEXT:       Expand Atomic instructions
+; SVESME-NEXT:    SVE SME Intrinsic Selection Pass
+; SVESME-NEXT:      FunctionPass Manager
+; SVESME-NEXT:        Dominator Tree Construction
+; SVESME-NEXT:        Natural Loop Information
 ; CHECK-NEXT:     SVE intrinsics optimizations
 ; CHECK-NEXT:       FunctionPass Manager
 ; CHECK-NEXT:         Dominator Tree Construction
@@ -249,6 +255,10 @@
 ; CHECK-NEXT:       Machine Optimization Remark Emitter
 ; CHECK-NEXT:       AArch64 Assembly Printer
 ; CHECK-NEXT:       Free MachineFunction
+; SVESME-NEXT: Pass Arguments:  -domtree -loops
+; SVESME-NEXT:   FunctionPass Manager
+; SVESME-NEXT:     Dominator Tree Construction
+; SVESME-NEXT:     Natural Loop Information
 ; CHECK-NEXT: Pass Arguments:  -domtree
 ; CHECK-NEXT:   FunctionPass Manager
 ; CHECK-NEXT:     Dominator Tree Construction

@@ -7669,6 +7669,13 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     auto &TargetTriple = TC.getTriple();
     if (TargetTriple.isHexagon() || TargetTriple.isAArch64() ||
         TargetTriple.isX86()) {
+
+      if (TargetTriple.isAArch64()) {
+        // Enable SVE/SME intrinsic selection for Ripple
+        CmdArgs.push_back("-mllvm");
+        CmdArgs.push_back("-aarch64-enable-sve-sme-intrinsic-selection");
+      }
+
       if (!Args.hasArg(options::OPT_fdisable_ripple_lib)) {
         // Collect all the ripple's runtime libs (.bc files) available for the
         // target

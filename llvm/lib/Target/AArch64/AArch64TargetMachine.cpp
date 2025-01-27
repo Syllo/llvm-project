@@ -162,6 +162,10 @@ static cl::opt<int> EnableGlobalISelAtO(
     cl::desc("Enable GlobalISel at or below an opt level (-1 to disable)"),
     cl::init(0));
 
+cl::opt<bool> EnableSVESMEIntrinsicSelection(
+    "aarch64-enable-sve-sme-intrinsic-selection", cl::Hidden,
+    cl::desc("Enable SVE/SME intrinsic selection for Ripple"), cl::init(false));
+
 static cl::opt<bool>
     EnableSVEIntrinsicOpts("aarch64-enable-sve-intrinsic-opts", cl::Hidden,
                            cl::desc("Enable SVE intrinsic opts"),
@@ -264,6 +268,7 @@ LLVMInitializeAArch64Target() {
   initializeKCFIPass(PR);
   initializeSMEABIPass(PR);
   initializeSMEPeepholeOptPass(PR);
+  initializeSVESMEIntrinsicSelectionPass(PR);
   initializeSVEIntrinsicOptsPass(PR);
   initializeAArch64SpeculationHardeningPass(PR);
   initializeAArch64SLSHardeningPass(PR);
@@ -608,6 +613,11 @@ void AArch64PassConfig::addIRPasses() {
   // Always expand atomic operations, we don't deal with atomicrmw or cmpxchg
   // ourselves.
   addPass(createAtomicExpandLegacyPass());
+
+  // FIXME: Check for target feature SVE or SME.
+  if (EnableSVESMEIntrinsicSelection &&
+      TM->getOptLevel() >= CodeGenOptLevel::Default)
+    addPass(createSVESMEIntrinsicSelectionPass());
 
   // Expand any SVE vector library calls that we can't code generate directly.
   if (EnableSVEIntrinsicOpts &&
