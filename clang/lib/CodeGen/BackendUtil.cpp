@@ -64,8 +64,8 @@
 #include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/HipStdPar/HipStdPar.h"
 #include "llvm/Transforms/IPO/EmbedBitcodePass.h"
-#include "llvm/Transforms/IPO/InlineBitcodeLibrary.h"
 #include "llvm/Transforms/IPO/InferFunctionAttrs.h"
+#include "llvm/Transforms/IPO/InlineBitcodeLibrary.h"
 #include "llvm/Transforms/IPO/LowerTypeTests.h"
 #include "llvm/Transforms/IPO/ThinLTOBitcodeWriter.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
@@ -89,6 +89,8 @@
 #include "llvm/Transforms/Instrumentation/ThreadSanitizer.h"
 #include "llvm/Transforms/Instrumentation/TypeSanitizer.h"
 #include "llvm/Transforms/ObjCARC.h"
+#include "llvm/Transforms/Ripple/Preprocess/RippleFPExtFPTrunc.h"
+#include "llvm/Transforms/Ripple/Preprocess/RippleFPExtFPTruncRevert.h"
 #include "llvm/Transforms/Ripple/RippleModulePass.h"
 #include "llvm/Transforms/Scalar/EarlyCSE.h"
 #include "llvm/Transforms/Scalar/GVN.h"
@@ -1134,7 +1136,18 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
     //
     // Ripple
     ///
-    if (CodeGenOpts.EnableRipple)
+    if (CodeGenOpts.EnableRipple) {
+      PB.registerPipelineEarlySimplificationEPCallback(
+          [](ModulePassManager &MPM, OptimizationLevel Level,
+             ThinOrFullLTOPhase Phase) {
+            FunctionPassManager FPM;
+            FPM.addPass(RippleFPExtFPTruncPass());
+            MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+          });
+      PB.registerVectorizerEndEPCallback(
+          [&](FunctionPassManager &FPM, OptimizationLevel Level) {
+            FPM.addPass(RippleFPExtFPTruncRevertPass());
+          });
       PB.registerOptimizerEarlyEPCallback(
           [TM = std::ref(TM)](ModulePassManager &MPM, OptimizationLevel Level,
                               ThinOrFullLTOPhase Phase) {
@@ -1147,6 +1160,7 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
               MPM.addPass(InlineBitcodeLibraryPass());
             }
           });
+    }
 
     if (CodeGenOpts.FatLTO) {
       MPM.addPass(PB.buildFatLTODefaultPipeline(
