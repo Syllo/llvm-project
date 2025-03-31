@@ -14,5 +14,7 @@ add_llvm_component_library(LLVMRipple
   Core
   RippleBase
   RippleSESE
+  RippleFPExtFPTrunc
+  RippleFPExtFPTruncRevert
   Support
 )
