@@ -26,6 +26,7 @@ set(LLVM_LINK_COMPONENTS
   Object
   Passes
   ProfileData
+  Ripple
   ScalarOpts
   Support
   Target
@@ -95,6 +96,7 @@ add_clang_library(clangCodeGen
   CGRecordLayoutBuilder.cpp
   CGStmt.cpp
   CGStmtOpenMP.cpp
+  CGStmtRipple.cpp
   CGVTT.cpp
   CGVTables.cpp
   CodeGenABITypes.cpp

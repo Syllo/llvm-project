@@ -201,6 +201,10 @@ def hlsl_Group : OptionGroup<"<HLSL group>">, Group<f_Group>,
                    DocName<"HLSL options">,
                    Visibility<[ClangOption]>;
 
+def ripple_Group : OptionGroup<"<Ripple group>">, Group<f_Group>,
+                    DocName<"Ripple options">,
+                    Visibility<[ClangOption, CLOption]>;
+
 // Feature groups - these take command line options that correspond directly to
 // target specific features and can be translated directly from command line
 // options.
@@ -635,6 +639,7 @@ defvar hip = LangOpts<"HIP">;
 defvar gnu_mode = LangOpts<"GNUMode">;
 defvar asm_preprocessor = LangOpts<"AsmPreprocessor">;
 defvar hlsl = LangOpts<"HLSL">;
+defvar ripple = LangOpts<"Ripple">;
 
 defvar std = !strconcat("LangStandard::getLangStandardForKind(", lang_std.KeyPath, ")");
 
@@ -8698,6 +8703,28 @@ defm gpu_approx_transcendentals : BoolFOption<"gpu-approx-transcendentals",
   BothFlags<[], [ClangOption], " approximate transcendental functions">>;
 def : Flag<["-"], "fcuda-approx-transcendentals">, Alias<fgpu_approx_transcendentals>;
 def : Flag<["-"], "fno-cuda-approx-transcendentals">, Alias<fno_gpu_approx_transcendentals>;
+
+//===----------------------------------------------------------------------===//
+// Ripple Options
+//===----------------------------------------------------------------------===//
+
+let Group = ripple_Group in {
+
+def fenable_ripple : Flag<["-"], "fenable-ripple">,
+    Visibility<[ClangOption, CLOption, CC1Option]>,
+    HelpText<"Enable Ripple transformation">,
+    MarshallingInfoFlag<ripple>;
+
+def fripple_lib : Separate<["-"], "fripple-lib">,
+    Visibility<[ClangOption, CLOption, CC1Option]>,
+    HelpText<"Adds a file to the Ripple bitcode library path">;
+def fripple_lib_alias : Joined<["-"], "fripple-lib=">,
+    Visibility<[ClangOption, CLOption, CC1Option]>, Alias<fripple_lib>;
+
+def fdisable_ripple_lib : Flag<["-"], "fdisable-ripple-lib">,
+    HelpText<"Disable the use of Ripple bitcode libraries">;
+
+}
 
 //===----------------------------------------------------------------------===//
 // Frontend Options - cc1 + fc1

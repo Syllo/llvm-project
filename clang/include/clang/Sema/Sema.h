@@ -174,6 +174,7 @@ class SemaOpenCL;
 class SemaOpenMP;
 class SemaPPC;
 class SemaPseudoObject;
+class SemaRipple;
 class SemaRISCV;
 class SemaSPIRV;
 class SemaSYCL;
@@ -1501,6 +1502,11 @@ public:
     return *PseudoObjectPtr;
   }
 
+  SemaRipple &Ripple() {
+    assert(RipplePtr);
+    return *RipplePtr;
+  }
+
   SemaRISCV &RISCV() {
     assert(RISCVPtr);
     return *RISCVPtr;
@@ -1588,6 +1594,7 @@ private:
   std::unique_ptr<SemaOpenMP> OpenMPPtr;
   std::unique_ptr<SemaPPC> PPCPtr;
   std::unique_ptr<SemaPseudoObject> PseudoObjectPtr;
+  std::unique_ptr<SemaRipple> RipplePtr;
   std::unique_ptr<SemaRISCV> RISCVPtr;
   std::unique_ptr<SemaSPIRV> SPIRVPtr;
   std::unique_ptr<SemaSYCL> SYCLPtr;

@@ -72,6 +72,7 @@
 #include "clang/Sema/SemaOpenCL.h"
 #include "clang/Sema/SemaPPC.h"
 #include "clang/Sema/SemaRISCV.h"
+#include "clang/Sema/SemaRipple.h"
 #include "clang/Sema/SemaSPIRV.h"
 #include "clang/Sema/SemaSystemZ.h"
 #include "clang/Sema/SemaWasm.h"
@@ -3205,6 +3206,31 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
   }
   case Builtin::BI__builtin_counted_by_ref:
     if (BuiltinCountedByRef(TheCall))
+      return ExprError();
+    break;
+
+  case Builtin::BI__builtin_ripple_broadcast_i8:
+  case Builtin::BI__builtin_ripple_broadcast_u8:
+  case Builtin::BI__builtin_ripple_broadcast_i16:
+  case Builtin::BI__builtin_ripple_broadcast_u16:
+  case Builtin::BI__builtin_ripple_broadcast_i32:
+  case Builtin::BI__builtin_ripple_broadcast_u32:
+  case Builtin::BI__builtin_ripple_broadcast_i64:
+  case Builtin::BI__builtin_ripple_broadcast_u64:
+  case Builtin::BI__builtin_ripple_broadcast_f16:
+  case Builtin::BI__builtin_ripple_broadcast_bf16:
+  case Builtin::BI__builtin_ripple_broadcast_f32:
+  case Builtin::BI__builtin_ripple_broadcast_f64:
+  case Builtin::BI__builtin_ripple_broadcast_p:
+    if (getLangOpts().Ripple &&
+        Ripple().CheckHasRippleBlockType(TheCall->getArg(0), BuiltinID))
+      return ExprError();
+    break;
+  case Builtin::BI__builtin_ripple_get_index:
+  case Builtin::BI__builtin_ripple_get_size:
+  case Builtin::BI__builtin_ripple_parallel_idx:
+    if (getLangOpts().Ripple &&
+        Ripple().CheckBuiltinFunctionCall(FDecl, BuiltinID, TheCall))
       return ExprError();
     break;
   }

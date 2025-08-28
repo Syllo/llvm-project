@@ -82,6 +82,15 @@ set(hip_files
   __clang_hip_runtime_wrapper.h
   )
 
+
+set(ripple_files
+  ripple.h
+  ripple_hvx.h
+  ripple_math.h
+  __ripple_vec.h
+  ripple/zip.h
+  )
+
 set(hlsl_h
   hlsl.h
   )
@@ -322,6 +331,7 @@ set(files
   ${opencl_files}
   ${ppc_files}
   ${ppc_htm_files}
+  ${ripple_files}
   ${riscv_files}
   ${spirv_files}
   ${systemz_files}
