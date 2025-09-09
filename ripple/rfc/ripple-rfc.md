@@ -264,10 +264,10 @@ the number of supported SIMD dimensions (limited to one in C++ simd).
 # References
 [Ripple Manual]
 A programmer's manual for Ripple is available at
-`http://github.com/qualcomm/Ripple/ripple-manual.pdf`
+`https://github.com/Syllo/llvm-project/blob/ripple/ripple/doc/Ripple-Documentation-2025-09-09.pdf`
 
-An implementation of Ripple in LLVM is available at
-`http://github.com/qualcomm/Ripple`
+An implementation of Ripple based on LLVM 21.1.0 is available at
+`https://github.com/Syllo/llvm-project/tree/ripple`
 
 # Appendix 1: Ripple MLIR dialect
 
