@@ -63,6 +63,8 @@
 #include "mlir/Conversion/PDLToPDLInterp/PDLToPDLInterp.h"
 #include "mlir/Conversion/RaiseWasm/RaiseWasmMLIR.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
+#include "mlir/Conversion/RippleToLLVM/RippleToLLVM.h"
+#include "mlir/Conversion/SCFToAffine/SCFToAffine.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/SCFToEmitC/SCFToEmitC.h"
 #include "mlir/Conversion/SCFToGPU/SCFToGPUPass.h"
