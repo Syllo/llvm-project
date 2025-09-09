@@ -68,6 +68,7 @@
 #include "mlir/Dialect/PDLInterp/IR/PDLInterp.h"
 #include "mlir/Dialect/Ptr/IR/PtrDialect.h"
 #include "mlir/Dialect/Quant/IR/Quant.h"
+#include "mlir/Dialect/Ripple/Ripple.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SCF/IR/ValueBoundsOpInterfaceImpl.h"
 #include "mlir/Dialect/SCF/TransformOps/SCFTransformOps.h"
@@ -142,6 +143,7 @@ void mlir::registerAllDialects(DialectRegistry &registry) {
                   pdl_interp::PDLInterpDialect,
                   ptr::PtrDialect,
                   quant::QuantDialect,
+                  ripple::RippleDialect,
                   ROCDL::ROCDLDialect,
                   scf::SCFDialect,
                   shape::ShapeDialect,
