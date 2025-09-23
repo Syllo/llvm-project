@@ -648,7 +648,6 @@ defvar hip = LangOpts<"HIP">;
 defvar gnu_mode = LangOpts<"GNUMode">;
 defvar asm_preprocessor = LangOpts<"AsmPreprocessor">;
 defvar hlsl = LangOpts<"HLSL">;
-defvar ripple = LangOpts<"Ripple">;
 
 defvar std = !strconcat("LangStandard::getLangStandardForKind(", lang_std.KeyPath, ")");
 
@@ -9086,7 +9085,7 @@ let Group = ripple_Group in {
 def fenable_ripple : Flag<["-"], "fenable-ripple">,
     Visibility<[ClangOption, CLOption, CC1Option]>,
     HelpText<"Enable Ripple transformation">,
-    MarshallingInfoFlag<ripple>;
+    MarshallingInfoFlag<CodeGenOpts<"EnableRipple">>;
 
 def fripple_lib : Separate<["-"], "fripple-lib">,
     Visibility<[ClangOption, CLOption, CC1Option]>,
