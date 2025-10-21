@@ -2157,11 +2157,19 @@ void Ripple::padToTargetSIMDWidth() {
       for (unsigned IEl = 0; IEl < PaddedLength; ++IEl)
         MaskEls[IEl] = irBuilder.getInt1(IEl < EVTType.getVectorNumElements());
 
-      auto *NewStore = irBuilder.CreateMaskedStore(
+      LLVM_DEBUG({
+        auto *NewStore = irBuilder.CreateMaskedStore(
+            NewValueOperand, StoreI->getPointerOperand(), StoreI->getAlign(),
+            ConstantVector::get(MaskEls));
+        dbgs() << "[PadToTargetSIMD] Store, " << *StoreI
+              << " was mapped to " << *NewStore << "\n";
+      });
+
+      // Still emit the store in release mode, even if not used in debug
+      irBuilder.CreateMaskedStore(
           NewValueOperand, StoreI->getPointerOperand(), StoreI->getAlign(),
           ConstantVector::get(MaskEls));
-      LLVM_DEBUG(dbgs() << "[PadToTargetSIMD] Store, " << *StoreI
-                        << " was mapped to " << *NewStore << "\n";);
+
       InstructionsToRemove.push(StoreI);
     } else if (auto *IntrnscInst = dyn_cast<IntrinsicInst>(I)) {
 

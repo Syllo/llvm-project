@@ -7684,7 +7684,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
         ;
         std::vector<std::string> TargetRTLibs;
         std::string TargetName = TargetTriple.getArchName().str();
-        
         std::string LibPrefix = ""; // Default value to include all libs
         if (TargetTriple.isX86()) {
           RippleRTLibPath = TC.getDriver().ResourceDir;
@@ -7717,7 +7716,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
           llvm::sys::path::append(RippleIncludePath, "include");
           CmdArgs.push_back(Args.MakeArgString("-I" + RippleIncludePath.str()));
         }
-        
         llvm::sys::path::append(RippleRTLibPath, "lib",
                                 TargetTriple.getTriple(), "ripple", TargetName);
 
