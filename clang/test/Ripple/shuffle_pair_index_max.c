@@ -12,9 +12,11 @@ extern "C"
   return BlockSize * 2 - 1;
 }
 
-// CHECK: shuffle_index_max_test
-// CHECK: %[[LoadIn2:[0-9A-Za-z_.]+]] = load <32 x float>, ptr %Input2
+// CHECK-LABEL: shuffle_index_max_test
+// CHECK-SAME: i32 noundef %[[ARRAYSIZE:[0-9]+]], ptr {{.*}} %[[INPUT:[0-9]+]], ptr {{.*}} %[[INPUT2:[0-9]+]], ptr {{.*}} %[[OUTPUT:[0-9]+]]
+// CHECK: %[[LoadIn2:[0-9]+]] = load <32 x float>, ptr %[[INPUT2]]
 // CHECK: shufflevector <32 x float> %[[LoadIn2]], <32 x float> poison, <32 x i{{[0-9]+}}> <i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31, i{{[0-9]+}} 31>
+
 void shuffle_index_max_test(size_t ArraySize, float *Input, float *Input2,
                             float *Output) {
   ripple_block_t BS = ripple_set_block_shape(0, 32);

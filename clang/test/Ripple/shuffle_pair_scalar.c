@@ -15,9 +15,10 @@ void testScalarShufflepair(int *OutputLHS, int *OutputRHS, int *Dummy) {
   int LHSExpect = 42;
   int RHSExpect = 52;
 
-  // CHECK: testScalarShufflepair
-  // CHECK: store i{{[0-9]+}} 42, ptr %OutputLHS
-  // CHECK: store i{{[0-9]+}} 52, ptr %OutputRHS
+  // CHECK-LABEL: testScalarShufflepair
+  // CHECK-SAME: ptr {{.*}} %[[OUTPUTLHS:[0-9]+]], ptr {{.*}} %[[OUTPUTRHS:[0-9]+]], ptr {{.*}} %[[DUMMY:[0-9]+]]
+  // CHECK: store i{{[0-9]+}} 42, ptr %[[OUTPUTLHS]]
+  // CHECK: store i{{[0-9]+}} 52, ptr %[[OUTPUTRHS]]
   *OutputLHS = ripple_shuffle_pair(LHSExpect, RHSExpect, indexingFunLHS);
   *OutputRHS = ripple_shuffle_pair(LHSExpect, RHSExpect, indexingFunRHS);
 }

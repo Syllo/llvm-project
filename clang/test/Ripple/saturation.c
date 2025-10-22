@@ -168,6 +168,80 @@ gen_check_ripple_sat_1d(128, sub, sll, sll);
 gen_check_ripple_sat_1d(128, sub, ull, ull);
 
 // }}}
+// }}}
+
+// {{{ shl
+
+gen_check_ripple_sat_1d(128, shl, i8, int8_t);
+// CHECK-CLANG: @check_shl_sat_i8
+// CHECK-RIPPLE: @check_shl_sat_i8
+// CHECK-CLANG: @llvm.sshl.sat.i8
+// CHECK-RIPPLE: @llvm.sshl.sat.v128i8
+// CHECK-CLANG: ret
+// CHECK-RIPPLE: ret
+gen_check_ripple_sat_1d(64, shl, i16, int16_t);
+// CHECK-CLANG: @check_shl_sat_i16
+// CHECK-RIPPLE: @check_shl_sat_i16
+// CHECK-CLANG: @llvm.sshl.sat.i16
+// CHECK-RIPPLE: @llvm.sshl.sat.v64i16
+// CHECK-CLANG: ret
+// CHECK-RIPPLE: ret
+gen_check_ripple_sat_1d(32, shl, i32, int32_t);
+// CHECK-CLANG: @check_shl_sat_i32
+// CHECK-RIPPLE: @check_shl_sat_i32
+// CHECK-CLANG: @llvm.sshl.sat.i32
+// CHECK-RIPPLE: @llvm.sshl.sat.v32i32
+// CHECK-CLANG: ret
+// CHECK-RIPPLE: ret
+gen_check_ripple_sat_1d(16, shl, i64, int64_t);
+// CHECK-CLANG: @check_shl_sat_i64
+// CHECK-RIPPLE: @check_shl_sat_i64
+// CHECK-CLANG: @llvm.sshl.sat.i64
+// CHECK-RIPPLE: @llvm.sshl.sat.v16i64
+// CHECK-CLANG: ret
+// CHECK-RIPPLE: ret
+gen_check_ripple_sat_1d(128, shl, u8, uint8_t);
+// CHECK-CLANG: @check_shl_sat_u8
+// CHECK-RIPPLE: @check_shl_sat_u8
+// CHECK-CLANG: @llvm.ushl.sat.i8
+// CHECK-RIPPLE: @llvm.ushl.sat.v128i8
+// CHECK-CLANG: ret
+// CHECK-RIPPLE: ret
+gen_check_ripple_sat_1d(64, shl, u16, uint16_t);
+// CHECK-CLANG: @check_shl_sat_u16
+// CHECK-RIPPLE: @check_shl_sat_u16
+// CHECK-CLANG: @llvm.ushl.sat.i16
+// CHECK-RIPPLE: @llvm.ushl.sat.v64i16
+// CHECK-CLANG: ret
+// CHECK-RIPPLE: ret
+gen_check_ripple_sat_1d(32, shl, u32, uint32_t);
+// CHECK-CLANG: @check_shl_sat_u32
+// CHECK-RIPPLE: @check_shl_sat_u32
+// CHECK-CLANG: @llvm.ushl.sat.i32
+// CHECK-RIPPLE: @llvm.ushl.sat.v32i32
+// CHECK-CLANG: ret
+// CHECK-RIPPLE: ret
+gen_check_ripple_sat_1d(16, shl, u64, uint64_t);
+// CHECK-CLANG: @check_shl_sat_u64
+// CHECK-RIPPLE: @check_shl_sat_u64
+// CHECK-CLANG: @llvm.ushl.sat.i64
+// CHECK-RIPPLE: @llvm.ushl.sat.v16i64
+// CHECK-CLANG: ret
+// CHECK-RIPPLE: ret
+
+gen_check_ripple_sat_1d(128, shl, c, char);
+gen_check_ripple_sat_1d(128, shl, sc, sc);
+gen_check_ripple_sat_1d(128, shl, uc, uc);
+gen_check_ripple_sat_1d(128, shl, ss, ss);
+gen_check_ripple_sat_1d(128, shl, us, us);
+gen_check_ripple_sat_1d(128, shl, si, si);
+gen_check_ripple_sat_1d(128, shl, ui, ui);
+gen_check_ripple_sat_1d(128, shl, sl, sl);
+gen_check_ripple_sat_1d(128, shl, ul, ul);
+gen_check_ripple_sat_1d(128, shl, sll, sll);
+gen_check_ripple_sat_1d(128, shl, ull, ull);
+
+// }}}
 
 int main(void) {
   // CHECK-CLANG: @main

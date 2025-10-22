@@ -1,5 +1,5 @@
-// REQUIRES: target-x86_64 || target-aarch64 || target=hexagon{{.*}}
-// RUN: %clang %s -std=c++20 -fenable-ripple -Xclang -disable-llvm-passes -Wripple -S -emit-llvm -o - | FileCheck %s --implicit-check-not="warning:"
+// REQUIRES: target-x86_64 || target-aarch64 || hexagon-registered-target
+// RUN: %clang_cc1 %s -std=c++20 -fenable-ripple -disable-llvm-passes -Wripple -emit-llvm -o - | FileCheck %s --implicit-check-not="warning:"
 
 #include <ripple.h>
 
