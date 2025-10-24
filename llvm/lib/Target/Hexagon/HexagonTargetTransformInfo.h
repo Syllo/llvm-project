@@ -38,6 +38,7 @@ class HexagonTTIImpl final : public BasicTTIImplBase<HexagonTTIImpl> {
 
   const HexagonSubtarget &ST;
   const HexagonTargetLowering &TLI;
+  const DataLayout &DL;
 
   const HexagonSubtarget *getST() const { return &ST; }
   const HexagonTargetLowering *getTLI() const { return &TLI; }
