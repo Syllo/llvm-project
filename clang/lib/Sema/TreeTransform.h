@@ -13364,7 +13364,7 @@ StmtResult TreeTransform<Derived>::TransformRippleComputeConstruct(
     return getSema().Ripple().CreateRippleParallelComputeStmt(
         C->getPragmaRange(), C->getProcessingElementRange(), C->getDimsRange(),
         NewBlockShape, C->getDimensionIds(), ForLoop.get(),
-        !C->generateRemainder());
+        !C->generateRemainder(), C->generateMaskedPostlude());
   else
     return C;
 }
