@@ -2,8 +2,8 @@
 // TODO: add appropriate CHECK lines for RUN lines without FileCheck
 // RUN: %clang -g -S -fenable-ripple -O0 -emit-llvm %s -o %t
 // RUN: %clang -g -S -fenable-ripple -O1 -emit-llvm %s -o %t
-// RUN: %clang -g -S -fenable-ripple -O2 -emit-llvm %s -o - 2>&1 | FileCheck %s
-// RUN: %clang -g -S -fenable-ripple -Os -emit-llvm %s -o - 2>&1 | FileCheck %s
+// RUN: %clang -g -S -fenable-ripple -O2 -emit-llvm %s -o - 2>&1 | FileCheck %s --implicit-check-not="warning:" --implicit-check-not="error:"
+// RUN: %clang -g -S -fenable-ripple -Os -emit-llvm %s -o - 2>&1 | FileCheck %s --implicit-check-not="warning:" --implicit-check-not="error:"
 // RUN: %clang -g -S -fenable-ripple -Oz -emit-llvm %s -o %t
 // RUN: %clang -g -S -fenable-ripple -O3 -emit-llvm %s -o %t
 

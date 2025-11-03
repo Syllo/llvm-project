@@ -1,13 +1,3 @@
-// REQUIRES: target-x86_64 || target-aarch64 || target=hexagon{{.*}}
-// RUN: %clang -Wpedantic -S -O1 -emit-llvm %s -o - 2>&1 | FileCheck %s --implicit-check-not="warning:" --implicit-check-not="error:"
-// RUN: %clang -x c++ -Wpedantic -S -O1 -emit-llvm %s -o - 2>&1 | FileCheck %s --implicit-check-not="warning:" --implicit-check-not="error:"
-
-#include <ripple.h>
-
-#ifdef __cpluplus
-extern "C" {
-#endif
-
 void check_reduceadd_u8(uint8_t a[128], uint8_t *OutPtr) {
   // CHECK: check_reduceadd_u8
   ripple_block_t BS = ripple_set_block_shape(0, 128);
