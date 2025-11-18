@@ -21,3 +21,4 @@ add_llvm_component_library(LLVMRippleBase
 )
 
 add_subdirectory(Preprocess)
+add_subdirectory(Module)
