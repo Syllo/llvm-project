@@ -19,3 +19,5 @@ add_llvm_component_library(LLVMRippleBase
   Support
   TransformUtils
 )
+
+add_subdirectory(Preprocess)
