@@ -1767,6 +1767,13 @@ def OpenMP : DiagGroup<"openmp", [
 def SourceUsesOpenACC : DiagGroup<"source-uses-openacc">;
 def OpenACC : DiagGroup<"openacc", [SourceUsesOpenACC]>;
 
+// ClangIR (CIR) warnings emitted by MLIR-side passes routed through clang.
+def ClangIR : DiagGroup<"clangir">;
+def RemarkClangIR : DiagGroup<"remark-clangir">;
+
+// Ripple warnings.
+def SourceUsesRipple : DiagGroup<"source-uses-ripple">;
+
 // Backend warnings.
 def BackendInlineAsm : DiagGroup<"inline-asm">;
 def BackendSourceMgr : DiagGroup<"source-mgr">;
