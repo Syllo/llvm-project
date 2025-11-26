@@ -3002,6 +3002,11 @@ void StmtProfiler::VisitHLSLOutArgExpr(const HLSLOutArgExpr *S) {
   VisitStmt(S);
 }
 
+void StmtProfiler::VisitRippleComputeConstruct(
+    const RippleComputeConstruct *S) {
+  VisitStmt(S);
+}
+
 void Stmt::Profile(llvm::FoldingSetNodeID &ID, const ASTContext &Context,
                    bool Canonical, bool ProfileLambdaExpr) const {
   StmtProfilerWithPointers Profiler(ID, Context, Canonical, ProfileLambdaExpr);
