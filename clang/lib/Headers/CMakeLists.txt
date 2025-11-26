@@ -91,6 +91,7 @@ set(hip_files
 
 set(ripple_files
   ripple.h
+  ripple_math.h
   __ripple_vec.h
   )
 
