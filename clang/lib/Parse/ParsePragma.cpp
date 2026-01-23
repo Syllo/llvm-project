@@ -4354,7 +4354,7 @@ void PragmaRISCVHandler::HandlePragma(Preprocessor &PP,
 }
 
 // '#pragma ripple parallel [IgnoreEmptyStmts]? [NoRemainder]?
-// [BlockIndependent]?  [Thread]? [ThreadChunk(<ChunkRef> | integer_literal)]?'
+// [BlockIndependent]? [Thread]? [ThreadChunk(<ChunkRef> | integer_literal)]?'
 void PragmaRippleHandler::HandlePragma(Preprocessor &PP,
                                        PragmaIntroducer Introducer,
                                        Token &FirstToken) {
@@ -4371,7 +4371,7 @@ void PragmaRippleHandler::HandlePragma(Preprocessor &PP,
     return false;
   };
 
-  auto ParseBlockShape = [&](IdentifierInfo *&BlockShape) -> bool {
+  auto ParseBlockShape = [&](UnqualifiedId &BlockShape) -> bool {
     constexpr StringRef RippleBlock("ripple parallel Block()");
     auto LastToKLoc = Tok.getLocation();
     PP.Lex(Tok);
@@ -4383,12 +4383,12 @@ void PragmaRippleHandler::HandlePragma(Preprocessor &PP,
     }
     PP.Lex(Tok);
     LastToKLoc = Tok.getLocation();
-    BlockShape = Tok.is(tok::identifier) ? Tok.getIdentifierInfo() : nullptr;
-    if (!BlockShape) {
+    if (!Tok.is(tok::identifier)) {
       auto WarnLoc = PP.getLocForEndOfToken(LastToKLoc, 0);
       PP.Diag(WarnLoc, diag::warn_pragma_expected_identifier) << RippleBlock;
       return true;
     }
+    BlockShape.setIdentifier(Tok.getIdentifierInfo(), Tok.getLocation());
     PP.Lex(Tok);
     if (Tok.isNot(tok::r_paren)) {
       auto WarnLoc = PP.getLocForEndOfToken(LastToKLoc, 0);
@@ -4439,7 +4439,6 @@ void PragmaRippleHandler::HandlePragma(Preprocessor &PP,
 
   auto ParseThreadChunk = [&](SemaRipple::AnnotationData &AnnotData) -> bool {
     constexpr StringRef RippleThreadChunk("ripple parallel ThreadChunk()");
-    SourceLocation ThreadChunkBegin = Tok.getLocation();
     auto LastToKLoc = Tok.getLocation();
     PP.Lex(Tok);
     if (Tok.isNot(tok::l_paren)) {
@@ -4450,13 +4449,11 @@ void PragmaRippleHandler::HandlePragma(Preprocessor &PP,
     }
     PP.Lex(Tok);
     LastToKLoc = Tok.getLocation();
-    AnnotData.ThreadChunkID =
-        Tok.is(tok::identifier) ? Tok.getIdentifierInfo() : nullptr;
-    AnnotData.ThreadChunkIDRange =
-        SourceRange(ThreadChunkBegin, Tok.getLocation());
-    if (AnnotData.ThreadChunkID)
+    if (Tok.is(tok::identifier)) {
+      AnnotData.ThreadChunkID.setIdentifier(Tok.getIdentifierInfo(),
+                                            Tok.getLocation());
       PP.Lex(Tok);
-    else {
+    } else {
       uint64_t ChunkVal;
       if (parseCstInt(ChunkVal, StringRef(), false)) {
         PP.Diag(Tok.getLocation(), diag::warn_pragma_invalid_argument)
@@ -4472,8 +4469,8 @@ void PragmaRippleHandler::HandlePragma(Preprocessor &PP,
 
     if (Tok.isNot(tok::r_paren)) {
       llvm::SmallString<128> ErrObject;
-      if (AnnotData.ThreadChunkID) {
-        ErrObject = AnnotData.ThreadChunkID->getName();
+      if (AnnotData.ThreadChunkID.isValid()) {
+        ErrObject = AnnotData.ThreadChunkID.Identifier->getName();
       } else {
         assert(AnnotData.ThreadChunkVal.has_value());
         ErrObject = std::to_string(AnnotData.ThreadChunkVal.value());
@@ -4505,7 +4502,6 @@ void PragmaRippleHandler::HandlePragma(Preprocessor &PP,
     PP.Lex(Tok);
     Arg = Tok.getIdentifierInfo();
     if (Arg && Arg->isStr("Block")) {
-      SourceLocation BlockBegin = Tok.getLocation();
       if (ParsedBlock) {
         PP.Diag(Tok.getLocation(), diag::warn_pragma_invalid_argument)
             << "repeated Block" << "ripple parallel" << /*Expected=*/true
@@ -4515,7 +4511,6 @@ void PragmaRippleHandler::HandlePragma(Preprocessor &PP,
       if (ParseBlockShape(AnnotData->BlockShape))
         return;
       ParsedBlock = true;
-      AnnotData->BlockShapeRange = SourceRange(BlockBegin, Tok.getLocation());
     } else if (Arg && Arg->isStr("Dims")) {
       SourceLocation DimsBegin = Tok.getLocation();
       if (ParsedDims) {
