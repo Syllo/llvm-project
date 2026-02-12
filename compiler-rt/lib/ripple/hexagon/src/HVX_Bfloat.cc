@@ -40,12 +40,11 @@ RIPPLE_INTRIN_INLINE v64bf16 ripple_ew_pure_to_bf16_trunc(v64f32 In) {
 /// by a bare truncation.
 #define shiftNan(V64I32In, b)                                                  \
   ({                                                                           \
-    uint16_t ForType;                                                          \
+    uint16_t ForType = 0;                                                      \
     v64u16 Trunc = hvx_cast_from_i32(split((V64I32In), o), ForType);           \
     v64u16 CutMant = hvx_cast_from_i32(split((V64I32In), e), ForType);         \
-    ripple_block_t b = ripple_set_block_shape(0, 64);                          \
-    uint16_t Truncated = vec_to_ripple<64, uint16_t>(b, Trunc);                \
-    uint16_t CutMantissa = vec_to_ripple<64, uint16_t>(b, CutMant);            \
+    uint16_t Truncated = vec_to_ripple<64, uint16_t>((b), Trunc);              \
+    uint16_t CutMantissa = vec_to_ripple<64, uint16_t>((b), CutMant);          \
     constexpr uint16_t Signless = 0x7FFF;                                      \
     constexpr uint16_t Inf = 0x7F80;                                           \
     constexpr uint16_t U16Nan = 0x7FC0;                                        \
