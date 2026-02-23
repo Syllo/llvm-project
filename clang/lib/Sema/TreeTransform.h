@@ -13370,10 +13370,7 @@ StmtResult TreeTransform<Derived>::TransformRippleComputeConstruct(
   if (ForLoop.get() != C->getAssociatedForStmt() ||
       OldBlockShapeValue != NewBlockShape)
     return getSema().Ripple().CreateRippleParallelComputeStmt(
-        C->getPragmaRange(), C->getProcessingElementRange(), C->getDimsRange(),
-        NewBlockShape, C->getDimensionIds(), ForLoop.get(),
-        !C->generateRemainder(), C->generateMaskedPostlude(),
-        C->threadCodegen(), NewThreadChunk, C->getChunkVal());
+        *C, NewBlockShape, ForLoop.get(), NewThreadChunk);
   else
     return C;
 }

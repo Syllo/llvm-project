@@ -536,7 +536,7 @@ Retry:
         AnnotRange, PragmaVals->BlockShape.getSourceRange(),
         PragmaVals->DimsRange, BlockRefExpr.getAs<DeclRefExpr>()->getDecl(),
         PragmaVals->Dims, Stmt.get(), PragmaVals->NoRemainder,
-        PragmaVals->MaskPostlude, PragmaVals->IsThread, ThreadChunkDecl,
+        PragmaVals->MaskPostlude, PragmaVals->ThreadSched, ThreadChunkDecl,
         PragmaVals->ThreadChunkVal);
   }
 
