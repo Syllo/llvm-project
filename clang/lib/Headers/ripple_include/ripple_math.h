@@ -160,42 +160,51 @@
 
 #define isnan(val)                                                             \
   _Generic((val),                                                              \
-      int8_t: 0,                                                               \
-      int16_t: 0,                                                              \
-      int32_t: 0,                                                              \
-      int64_t: 0,                                                              \
-      uint8_t: 0,                                                              \
-      uint16_t: 0,                                                             \
-      uint32_t: 0,                                                             \
-      uint64_t: 0,                                                             \
+      char: 0,                                                                 \
+      signed char: 0,                                                          \
+      short: 0,                                                                \
+      int: 0,                                                                  \
+      long: 0,                                                                 \
+      long long: 0,                                                            \
+      unsigned char: 0,                                                        \
+      unsigned short: 0,                                                       \
+      unsigned int: 0,                                                         \
+      unsigned long: 0,                                                        \
+      unsigned long long: 0,                                                   \
       _Float16: __builtin_isnan(val),                                          \
       float: __builtin_isnan(val),                                             \
       double: __builtin_isnan(val))
 
 #define isinf(val)                                                             \
   _Generic((val),                                                              \
-      int8_t: 0,                                                               \
-      int16_t: 0,                                                              \
-      int32_t: 0,                                                              \
-      int64_t: 0,                                                              \
-      uint8_t: 0,                                                              \
-      uint16_t: 0,                                                             \
-      uint32_t: 0,                                                             \
-      uint64_t: 0,                                                             \
+      char: 0,                                                                 \
+      signed char: 0,                                                          \
+      short: 0,                                                                \
+      int: 0,                                                                  \
+      long: 0,                                                                 \
+      long long: 0,                                                            \
+      unsigned char: 0,                                                        \
+      unsigned short: 0,                                                       \
+      unsigned int: 0,                                                         \
+      unsigned long: 0,                                                        \
+      unsigned long long: 0,                                                   \
       _Float16: __builtin_isinf(val),                                          \
       float: __builtin_isinf(val),                                             \
       double: __builtin_isinf(val))
 
 #define isfinite(val)                                                          \
   _Generic((val),                                                              \
-      int8_t: 1,                                                               \
-      int16_t: 1,                                                              \
-      int32_t: 1,                                                              \
-      int64_t: 1,                                                              \
-      uint8_t: 1,                                                              \
-      uint16_t: 1,                                                             \
-      uint32_t: 1,                                                             \
-      uint64_t: 1,                                                             \
+      char: 1,                                                                 \
+      signed char: 1,                                                          \
+      short: 1,                                                                \
+      int: 1,                                                                  \
+      long: 1,                                                                 \
+      long long: 1,                                                            \
+      unsigned char: 1,                                                        \
+      unsigned short: 1,                                                       \
+      unsigned int: 1,                                                         \
+      unsigned long: 1,                                                        \
+      unsigned long long: 1,                                                   \
       _Float16: __builtin_isfinite(val),                                       \
       float: __builtin_isfinite(val),                                          \
       double: __builtin_isfinite(val))
@@ -204,40 +213,49 @@
 
 #define isnan(val)                                                             \
   _Generic((val),                                                              \
-      int8_t: 0,                                                               \
-      int16_t: 0,                                                              \
-      int32_t: 0,                                                              \
-      int64_t: 0,                                                              \
-      uint8_t: 0,                                                              \
-      uint16_t: 0,                                                             \
-      uint32_t: 0,                                                             \
-      uint64_t: 0,                                                             \
+      char: 0,                                                                 \
+      signed char: 0,                                                          \
+      short: 0,                                                                \
+      int: 0,                                                                  \
+      long: 0,                                                                 \
+      long long: 0,                                                            \
+      unsigned char: 0,                                                        \
+      unsigned short: 0,                                                       \
+      unsigned int: 0,                                                         \
+      unsigned long: 0,                                                        \
+      unsigned long long: 0,                                                   \
       float: __builtin_isnan(val),                                             \
       double: __builtin_isnan(val))
 
 #define isinf(val)                                                             \
   _Generic((val),                                                              \
-      int8_t: 0,                                                               \
-      int16_t: 0,                                                              \
-      int32_t: 0,                                                              \
-      int64_t: 0,                                                              \
-      uint8_t: 0,                                                              \
-      uint16_t: 0,                                                             \
-      uint32_t: 0,                                                             \
-      uint64_t: 0,                                                             \
+      char: 0,                                                                 \
+      signed char: 0,                                                          \
+      short: 0,                                                                \
+      int: 0,                                                                  \
+      long: 0,                                                                 \
+      long long: 0,                                                            \
+      unsigned char: 0,                                                        \
+      unsigned short: 0,                                                       \
+      unsigned int: 0,                                                         \
+      unsigned long: 0,                                                        \
+      unsigned long long: 0,                                                   \
       float: __builtin_isinf(val),                                             \
       double: __builtin_isinf(val))
 
 #define isfinite(val)                                                          \
   _Generic((val),                                                              \
-      int8_t: 1,                                                               \
-      int16_t: 1,                                                              \
-      int32_t: 1,                                                              \
-      int64_t: 1,                                                              \
-      uint8_t: 1,                                                              \
-      uint16_t: 1,                                                             \
-      uint32_t: 1,                                                             \
-      uint64_t: 1,                                                             \
+      char: 1,                                                                 \
+      signed char: 1,                                                          \
+      short: 1,                                                                \
+      int: 1,                                                                  \
+      long: 1,                                                                 \
+      long long: 1,                                                            \
+      unsigned char: 1,                                                        \
+      unsigned short: 1,                                                       \
+      unsigned int: 1,                                                         \
+      unsigned long: 1,                                                        \
+      unsigned long long: 1,                                                   \
       float: __builtin_isfinite(val),                                          \
       double: __builtin_isfinite(val))
 
