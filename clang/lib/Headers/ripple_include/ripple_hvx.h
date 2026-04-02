@@ -23,7 +23,9 @@
 // Note: this only declares HVX native vector types.
 // Add more __decl_* lines to declare vector types that
 // that are suitable for other architectures.
+
 #include "ripple.h"
+#include <stdint.h>
 
 #define __decl_f_vec_t(CT, T, W, N, BW)                                        \
   typedef CT v##N##T##W __attribute__((vector_size(BW)))                       \
