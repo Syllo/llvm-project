@@ -944,6 +944,15 @@ ripple_shuffle_pair(double x, double y,
 
 /* _________________________ Saturation Ops _________________________________*/
 
+#define __ripple_sat_any(Type, UI, Op, X, Y)                                   \
+  ((Type)(sizeof(Type) == 1                                                    \
+              ? __builtin_ripple_##Op##_sat_##UI##8(X, Y)                      \
+              : (sizeof(Type) == 2                                             \
+                     ? __builtin_ripple_##Op##_sat_##UI##16(X, Y)              \
+                     : (sizeof(Type) == 4                                      \
+                            ? __builtin_ripple_##Op##_sat_##UI##32(X, Y)       \
+                            : __builtin_ripple_##Op##_sat_##UI##64(X, Y)))))
+
 #ifndef __cplusplus
 
 #define __ripple_TYPEID(X)                                                     \
@@ -960,15 +969,6 @@ ripple_shuffle_pair(double x, double y,
       unsigned long: 8,                                                        \
       long long: 9,                                                            \
       unsigned long long: 10) RIPPLE_REENABLE_GENERIC_WARNING
-
-#define __ripple_sat_any(Type, UI, Op, X, Y)                                   \
-  ((Type)(sizeof(Type) == 1                                                    \
-              ? __builtin_ripple_##Op##_sat_##UI##8(X, Y)                      \
-              : (sizeof(Type) == 2                                             \
-                     ? __builtin_ripple_##Op##_sat_##UI##16(X, Y)              \
-                     : (sizeof(Type) == 4                                      \
-                            ? __builtin_ripple_##Op##_sat_##UI##32(X, Y)       \
-                            : __builtin_ripple_##Op##_sat_##UI##64(X, Y)))))
 
 #define __ripple_sat_any_generic(Op, X, Y)                                     \
   RIPPLE_DISABLE_GENERIC_WARNING                                               \
@@ -1010,6 +1010,43 @@ ripple_shuffle_pair(double x, double y,
     __ripple_sat_any_generic(shl, X, Y);                                       \
   })                                                                           \
   RIPPLE_REENABLE_GENERIC_WARNING
+
+#else // defined(__cplusplus)
+
+#define spec_sat_any_generic(Op, CT, IU)                                       \
+  __attribute__((always_inline)) static CT ripple_##Op##_sat(const CT X,       \
+                                                             const CT Y) {     \
+    return __ripple_sat_any(CT, IU, Op, X, Y);                                 \
+  }
+
+#define spec_sat_any_char(Op)                                                  \
+  __attribute__((always_inline)) static char ripple_##Op##_sat(const char X,   \
+                                                               const char Y) { \
+    return __ripple_char_is_signed ? __ripple_sat_any(char, i, Op, X, Y)       \
+                                   : __ripple_sat_any(char, u, Op, X, Y);      \
+  }
+
+#define ripple_sat_itypes(Op)                                                  \
+  spec_sat_any_generic(Op, signed char, i);                                    \
+  spec_sat_any_generic(Op, unsigned char, u);                                  \
+  spec_sat_any_generic(Op, signed short, i);                                   \
+  spec_sat_any_generic(Op, unsigned short, u);                                 \
+  spec_sat_any_generic(Op, signed int, i);                                     \
+  spec_sat_any_generic(Op, unsigned int, u);                                   \
+  spec_sat_any_generic(Op, signed long, i);                                    \
+  spec_sat_any_generic(Op, unsigned long, u);                                  \
+  spec_sat_any_generic(Op, signed long long, i);                               \
+  spec_sat_any_generic(Op, unsigned long long, u);                             \
+  spec_sat_any_char(Op);
+
+ripple_sat_itypes(add);
+ripple_sat_itypes(sub);
+ripple_sat_itypes(shl);
+
+#undef spec_sat_any_generic
+#undef spec_sat_any_char
+#undef ripple_sat_itypes
+#undef __ripple_sat_any
 
 #endif // !__cplusplus
 
