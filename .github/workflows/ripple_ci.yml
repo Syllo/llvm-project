@@ -32,10 +32,17 @@ jobs:
     name: Build and Test ripple
     runs-on: [self-hosted, ubuntu-24.04]
     strategy:
+      fail-fast: false
       matrix:
         targets:
-          - { arch: X86, triple: x86_64-pc-linux-gnu }
-          - { arch: AArch64, triple: aarch64-linux-gnu }
+          - arch: X86
+            triple: x86_64-unknown-linux-gnu
+            toolchain-extra-cmake: -DLLVM_ENABLE_RUNTIMES=compiler-rt -DCOMPILER_RT_BUILD_BUILTINS=ON -DCOMPILER_RT_HAS_x86_64_BFLOAT16=ON
+            extra-cmake: -DCMAKE_CXX_FLAGS=-rtlib=compiler-rt -DCMAKE_CXX_STANDARD_LIBRARIES=-lunwind -DISPC_EXECUTABLE=$ISPC_EXECUTABLE
+          - arch: AArch64
+            triple: aarch64-none-linux-gnu
+            toolchain-extra-cmake:
+            extra-cmake: -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_CXX_FLAGS="--sysroot=$AARCH64_TOOLCHAIN/aarch64-none-linux-gnu/libc/ --gcc-toolchain=$AARCH64_TOOLCHAIN -march=armv9.2-a" -DCMAKE_CROSSCOMPILING_EMULATOR="qemu-aarch64;-L;$AARCH64_TOOLCHAIN/aarch64-none-linux-gnu/libc"
 
     steps:
       - name: Checkout Code
@@ -47,9 +54,14 @@ jobs:
             ${CMAKE_HOST_OPT-} \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_ENABLE_ASSERTIONS=ON \
-            -DLLVM_ENABLE_PROJECTS="clang" \
+            -DLLVM_ENABLE_PROJECTS="clang;lld" \
             -DLLVM_TARGETS_TO_BUILD=${{ matrix.targets.arch }} \
-            -DLLVM_DEFAULT_TARGET_TRIPLE=${{ matrix.targets.triple }}
+            -DLLVM_DEFAULT_TARGET_TRIPLE=${{ matrix.targets.triple }} \
+            -DCLANG_DEFAULT_LINKER=lld \
+            ${{ matrix.targets.toolchain-extra-cmake }}
+
+      - name: Build Ripple Compiler
+        run: cmake --build build
 
       - name: Clang Ripple Lit Tests
         run: cmake --build build --target check-clang-ripple
@@ -59,6 +71,28 @@ jobs:
 
       - name: Ripple LLVM Lit Tests
         run: cmake --build build --target check-llvm-transforms-ripple
+
+      - name: Install Ripple Compiler
+        run: cmake --install build --prefix ${{ github.workspace }}/install
+
+      - name: Clone Ripple Test Suite
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          repository: Ripple-Programming/ripple-test-suite
+          path: ripple-test-suite
+
+      - name: Configure Ripple Test Suite
+        run: |
+          cmake -G Ninja -S ripple-test-suite -B build-ripple-test-suite \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=${{ github.workspace }}/install/bin/clang++ \
+            ${{ matrix.targets.extra-cmake }}
+
+      - name: Build Ripple Test Suite
+        run: cmake --build build-ripple-test-suite
+
+      - name: Run Ripple Test Suite
+        run: cmake --build build-ripple-test-suite -- check
 
   hexagon_build_and_test:
     if: github.repository_owner == 'Ripple-Programming'
@@ -200,7 +234,7 @@ jobs:
           cmake -G Ninja -S ripple-test-suite -B build-ripple-test-suite \
             -DCMAKE_SYSTEM_NAME=HexagonStandalone \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER=$(pwd)/install/bin/clang++ \
+            -DCMAKE_CXX_COMPILER=${{ github.workspace }}/install/bin/clang++ \
             -DCMAKE_CXX_FLAGS="-mv81 -std=c++11 -stdlib=libstdc++" \
             -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT" \
             -DCMAKE_CROSSCOMPILING_EMULATOR="$CI_CMAKE_CROSSCOMPILING_EMULATOR"
