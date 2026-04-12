@@ -2276,6 +2276,9 @@ void Ripple::padToTargetSIMDWidth() {
             }
           }
         }
+
+        MustBePadded.insert(I);
+        AddUserInstsToWorklist(I, Worklist);
       } else {
         std::string ErrStr;
         raw_string_ostream OSS(ErrStr);
@@ -2854,6 +2857,40 @@ void Ripple::padToTargetSIMDWidth() {
 
       InstToPadded.insert_or_assign({Phi, PaddedLength}, NewPhi);
       InstructionsToRemove.push_back(Phi);
+    } else if (auto *CallI = dyn_cast<CallInst>(I)) {
+      // Build new argument list using padded counterparts, asserting that each
+      // vector argument's padded length equals its unpadded length (enforced
+      // by GetInstructionsThatMustBePadded).
+      SmallVector<Value *> NewArgs;
+      for (auto &Arg : CallI->args()) {
+        auto *ArgV = Arg.get();
+        if (auto *ArgVType = dyn_cast<FixedVectorType>(ArgV->getType())) {
+          assert(ArgVType->getNumElements() == GetPaddedLength(ArgV) &&
+                 "PadToTargetSIMD: CallInst arg vector length must equal its "
+                 "padded length.");
+          NewArgs.push_back(
+              GetPaddedV(ArgV, ArgVType->getNumElements(), InstToPadded));
+        } else {
+          NewArgs.push_back(ArgV);
+        }
+      }
+
+      irBuilder.SetInsertPoint(CallI);
+      auto *NewCallI = irBuilder.CreateCall(CallI->getFunctionType(),
+                                            CallI->getCalledOperand(), NewArgs,
+                                            CallI->getName() + ".pad");
+
+      // For vector-returning calls, record in InstToPadded so downstream
+      // padded instructions can look up the replacement via GetPaddedV.
+      // For non-vector returns, replace all uses directly since those users
+      // are not tracked through InstToPadded.
+      if (auto *RetVType = dyn_cast<FixedVectorType>(CallI->getType())) {
+        unsigned PaddedLength = RetVType->getNumElements();
+        InstToPadded.insert_or_assign({CallI, PaddedLength}, NewCallI);
+      } else {
+        CallI->replaceAllUsesWith(NewCallI);
+      }
+      InstructionsToRemove.push_back(CallI);
     } else {
       llvm_unreachable("Not yet Implemented error.");
     }
