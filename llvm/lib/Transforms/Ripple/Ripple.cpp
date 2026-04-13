@@ -2412,9 +2412,8 @@ void Ripple::padToTargetSIMDWidth() {
       }
       irBuilder.SetInsertPoint(GEPI);
       auto *NewGEP =
-          irBuilder.CreateGEP(VectorType::get(GEPI->getType()->getScalarType(),
-                                              PaddedLength, false),
-                              NewPointer, NewIndices, GEPI->getName() + ".pad");
+          irBuilder.CreateGEP(GEPI->getSourceElementType(), NewPointer,
+                              NewIndices, GEPI->getName() + ".pad");
 
       auto NaturallyPaddedLength = LegalVT.getVectorNumElements();
       if (NaturallyPaddedLength != PaddedLength) {
