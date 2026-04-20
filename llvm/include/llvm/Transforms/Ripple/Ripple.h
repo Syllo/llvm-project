@@ -1986,6 +1986,9 @@ private:
   /// @brief Checks the function's return
   Error checkRippleFunctionReturn(const ReturnInst *Return) const;
 
+  /// @brief Replaces vector divisions with equivalent fast Ripple functions
+  void replaceDivCalls();
+
   /// @brief Creates a DILocalVariable of vector type from a scalar
   /// DILocalVariable, or nullptr if the DILocalVariable has no type
   DILocalVariable *createVectorLocalFromScalarLocal(

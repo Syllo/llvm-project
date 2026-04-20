@@ -1943,7 +1943,8 @@ IntrinsicInst *Ripple::rippleSliceIntrinsic(Instruction *I) {
 
 IntrinsicInst *Ripple::rippleIntrinsicsWithBlockShapeOperand(Instruction *I) {
   return intrinsicWithId(I, {Intrinsic::ripple_broadcast,
-                             Intrinsic::ripple_stack, Intrinsic::ripple_reshape,
+                             Intrinsic::ripple_stack,
+                             Intrinsic::ripple_reshape,
                              Intrinsic::ripple_block_getsize,
                              Intrinsic::ripple_block_index});
 }
@@ -2019,6 +2020,103 @@ void Ripple::initFuncRPOT() {
   FuncRPOT = new ReversePostOrderTraversal<Function *>(&F);
 }
 
+void Ripple::replaceDivCalls() {
+  // Only replace operations with a matching Ripple runtime entry point.
+
+  for (auto &I : make_early_inc_range(instructions(F))) {
+    auto &TS = getRippleShape(&I);
+    if (TS.isScalar())
+      continue;
+    if (auto *BinOpI = dyn_cast<BinaryOperator>(&I)) {
+      if (BinOpI->getOpcode() == Instruction::UDiv ||
+          BinOpI->getOpcode() == Instruction::SDiv) {
+        Value *LHS = BinOpI->getOperand(0);
+        Value *RHS = BinOpI->getOperand(1);
+
+        Type *LHSTy = LHS->getType();
+        Type *RHSTy = RHS->getType();
+
+        if ((LHSTy->isIntegerTy(16) || LHSTy->isIntegerTy(32)) &&
+            (RHSTy->isIntegerTy(16) || RHSTy->isIntegerTy(32))) {
+          irBuilder.SetInsertPoint(BinOpI);
+
+          auto &Mod = *F.getParent();
+
+          FunctionCallee TestDivFunc =
+              (BinOpI->getOpcode() == Instruction::UDiv)
+                  ? (LHSTy->isIntegerTy(16)
+                         ? Mod.getFunction("ripple_ew_pure_divu16")
+                         : Mod.getFunction("ripple_ew_pure_divu"))
+                  : (LHSTy->isIntegerTy(16)
+                         ? Mod.getFunction("ripple_ew_pure_divi16")
+                         : Mod.getFunction("ripple_ew_pure_divi"));
+
+          if (TestDivFunc) {
+            FunctionType *FTy =
+                FunctionType::get(BinOpI->getType(), {LHSTy, RHSTy}, false);
+
+            FunctionCallee DivFunc =
+                (BinOpI->getOpcode() == Instruction::UDiv)
+                    ? (LHSTy->isIntegerTy(16)
+                           ? Mod.getOrInsertFunction("divu16", FTy)
+                           : Mod.getOrInsertFunction("divu", FTy))
+                    : (LHSTy->isIntegerTy(16)
+                           ? Mod.getOrInsertFunction("divi16", FTy)
+                           : Mod.getOrInsertFunction("divi", FTy));
+
+            CallInst *DivCallOp =
+                irBuilder.CreateCall(DivFunc, {LHS, RHS}, "divu_val");
+
+            setRippleShape(DivCallOp, TS);
+
+            invalidateRippleDataFor(BinOpI);
+            auto It = BinOpI->getIterator();
+            ReplaceInstWithValue(It, DivCallOp);
+          }
+        }
+      } else if (BinOpI->getOpcode() == Instruction::FDiv) {
+        Value *LHS = BinOpI->getOperand(0);
+        Value *RHS = BinOpI->getOperand(1);
+
+        Type *LHSTy = LHS->getType();
+        Type *RHSTy = RHS->getType();
+
+        if (LHSTy->isBFloatTy() || RHSTy->isBFloatTy())
+          continue;
+
+        if ((LHSTy->is16bitFPTy() || LHSTy->isFloatTy()) &&
+            (RHSTy->is16bitFPTy() || RHSTy->isFloatTy())) {
+          irBuilder.SetInsertPoint(BinOpI);
+
+          auto &Mod = *F.getParent();
+
+          FunctionCallee TestDivFunc =
+              (LHSTy->isFloatTy()) ? Mod.getFunction("ripple_ew_pure_divf")
+                                   : Mod.getFunction("ripple_ew_pure_divf16");
+
+          if (TestDivFunc) {
+            FunctionType *FTy =
+                FunctionType::get(BinOpI->getType(), {LHSTy, RHSTy}, false);
+
+            FunctionCallee DivFunc =
+                (LHSTy->isFloatTy()) ? Mod.getOrInsertFunction("divf", FTy)
+                                     : Mod.getOrInsertFunction("divf16", FTy);
+
+            CallInst *DivCallOp =
+                irBuilder.CreateCall(DivFunc, {LHS, RHS}, "divu_val");
+
+            setRippleShape(DivCallOp, TS);
+
+            invalidateRippleDataFor(BinOpI);
+            auto It = BinOpI->getIterator();
+            ReplaceInstWithValue(It, DivCallOp);
+          }
+        }
+      }
+    }
+  }
+}
+
 PreservedAnalyses Ripple::run() {
 
   LLVM_DEBUG(dbgs() << "[Ripple] Processing function " << F.getName() << "\n");
@@ -2088,6 +2186,10 @@ PreservedAnalyses Ripple::run() {
 
   if (Error e = simplifyLinearSeries())
     llvm_unreachable("compiler error: Linear Series simplification failure");
+
+  replaceDivCalls();
+  assert(allInstructionsHaveRippleShapes() &&
+         "Some instruction has no Ripple shape");
 
   LLVM_DEBUG(dbgs() << "Function before vector instruction generation:\n";
              F.print(dbgs()));
@@ -3759,6 +3861,7 @@ void Ripple::genVectorInstructions() {
     FastMathFlags FMF = isa<FPMathOperator>(binOp) ? binOp->getFastMathFlags()
                                                    : FastMathFlags{};
     irBuilder.setFastMathFlags(FMF);
+
     Value *newBinop = irBuilder.CreateBinOp(
         binOp->getOpcode(), bcastedOperands[0], bcastedOperands[1],
         vectorizedName(binOp), binOp->getMetadata(LLVMContext::MD_fpmath));
