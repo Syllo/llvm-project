@@ -71,7 +71,7 @@ jobs:
           - arch: Hexagon
             triple: hexagon-unknown-unknown-elf
             cxx_flags: -stdlib=libc++ -D_USE_GENERIC_XLOCALE_SHIMS -D_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE -D_C99 -D_C_AS_CPP -D_HAS_GENERIC_TEMPLATES=0
-            sysroot: $HEXAGON_SDK/tools/HEXAGON_Tools/19.0.04/Tools/target/hexagon
+            sdk: qualcomm-community-edition
 
     steps:
       - name: Checkout Code
@@ -97,6 +97,44 @@ jobs:
 
       - name: Build Ripple Compiler
         run: cmake --build build
+
+      - name: Setup Hexagon SDK community edition environment
+        if: matrix.targets.sdk == 'qualcomm-community-edition'
+        shell: bash
+        run: |
+          if [ -z "${HEXAGON_SDK:-}" ]; then
+            echo "ERROR: HEXAGON_SDK is not set" >&2; exit 1
+          fi
+          if [ ! -f "$HEXAGON_SDK/setup_sdk_env.source" ]; then
+            echo "ERROR: $HEXAGON_SDK/setup_sdk_env.source not found" >&2; exit 1
+          fi
+          # HEXAGON_SDK_ROOT must be unset: setup_sdk_env.source uses it as an output variable
+          unset HEXAGON_SDK_ROOT
+          . "$HEXAGON_SDK/setup_sdk_env.source"
+          if [ -z "${DEFAULT_HEXAGON_TOOLS_ROOT:-}" ]; then
+            echo "ERROR: setup_sdk_env.source did not set DEFAULT_HEXAGON_TOOLS_ROOT" >&2; exit 1
+          fi
+          echo "CI_CMAKE_CROSSCOMPILING_EMULATOR=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-sim;--simulated_returnval;--" >> "$GITHUB_ENV"
+          echo "CI_HEXAGON_SYSROOT=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools/target/hexagon" >> "$GITHUB_ENV"
+
+      - name: Fail on unknown SDK
+        if: matrix.targets.sdk != 'qualcomm-community-edition'
+        env:
+          SDK_VALUE: ${{ matrix.targets.sdk }}
+        run: |
+          echo "ERROR: Unknown sdk value '$SDK_VALUE'" >&2; exit 1
+
+      - name: Validate Hexagon SDK environment
+        run: |
+          if [ -z "${CI_HEXAGON_SYSROOT:-}" ]; then
+            echo "ERROR: CI_HEXAGON_SYSROOT is not set" >&2; exit 1
+          fi
+          if [ ! -d "$CI_HEXAGON_SYSROOT" ]; then
+            echo "ERROR: Sysroot directory not found: $CI_HEXAGON_SYSROOT" >&2; exit 1
+          fi
+          if [ -z "${CI_CMAKE_CROSSCOMPILING_EMULATOR:-}" ]; then
+            echo "ERROR: CI_CMAKE_CROSSCOMPILING_EMULATOR is not set" >&2; exit 1
+          fi
 
       - name: Install Ripple Compiler
         run: cmake --install build --prefix ${{ github.workspace }}/install
@@ -128,19 +166,19 @@ jobs:
             -DCMAKE_CXX_COMPILER_TARGET=${{ matrix.targets.triple }} \
             -DCMAKE_CXX_FLAGS="${{ matrix.targets.cxx_flags }}" \
             -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=eld" \
-            -DCMAKE_SYSROOT="${{ matrix.targets.sysroot }}"
+            -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT"
 
       - name: Build Ripple compiler-rt
         run: cmake --build build-compiler-rt
 
       - name: Install Ripple compiler-rt
-        run: cmake --install build-compiler-rt --prefix $(${{ github.workspace }}/install/bin/clang --print-resource-dir)
+        run: cmake --install build-compiler-rt --prefix "$(${{ github.workspace }}/install/bin/clang --print-resource-dir)"
 
       # The clang Ripple lit tests that exercise the external Ripple runtime library
       # use the build clang, which has a different resource dir than the installed
       # clang, so install there too.
       - name: Install Ripple compiler-rt to build resource dir
-        run: cmake --install build-compiler-rt --prefix $(./build/bin/clang --print-resource-dir)
+        run: cmake --install build-compiler-rt --prefix "$(./build/bin/clang --print-resource-dir)"
 
       - name: Clang Ripple Lit Tests
         run: cmake --build build --target check-clang-ripple
@@ -164,8 +202,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER=$(pwd)/install/bin/clang++ \
             -DCMAKE_CXX_FLAGS="-mv81 -std=c++11 -stdlib=libstdc++" \
-            -DCMAKE_SYSROOT="$HEXAGON_SDK/tools/HEXAGON_Tools/19.0.04/Tools/target/hexagon" \
-            -DCMAKE_CROSSCOMPILING_EMULATOR="$HEXAGON_SDK/tools/HEXAGON_Tools/19.0.04/Tools/bin/hexagon-sim;--simulated_returnval;--"
+            -DCMAKE_SYSROOT="$CI_HEXAGON_SYSROOT" \
+            -DCMAKE_CROSSCOMPILING_EMULATOR="$CI_CMAKE_CROSSCOMPILING_EMULATOR"
 
       - name: Build Ripple Test Suite
         run: cmake --build build-ripple-test-suite
