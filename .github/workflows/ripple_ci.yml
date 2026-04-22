@@ -136,6 +136,12 @@ jobs:
       - name: Install Ripple compiler-rt
         run: cmake --install build-compiler-rt --prefix $(${{ github.workspace }}/install/bin/clang --print-resource-dir)
 
+      # The clang Ripple lit tests that exercise the external Ripple runtime library
+      # use the build clang, which has a different resource dir than the installed
+      # clang, so install there too.
+      - name: Install Ripple compiler-rt to build resource dir
+        run: cmake --install build-compiler-rt --prefix $(./build/bin/clang --print-resource-dir)
+
       - name: Clang Ripple Lit Tests
         run: cmake --build build --target check-clang-ripple
 
