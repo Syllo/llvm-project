@@ -92,7 +92,7 @@ jobs:
         run: cmake --build build-ripple-test-suite
 
       - name: Run Ripple Test Suite
-        run: cmake --build build-ripple-test-suite -- check
+        run: cmake --build build-ripple-test-suite --target check -- -k 0
 
   hexagon_build_and_test:
     if: github.repository_owner == 'Ripple-Programming'
@@ -243,4 +243,4 @@ jobs:
         run: cmake --build build-ripple-test-suite
 
       - name: Run Ripple Test Suite
-        run: cmake --build build-ripple-test-suite -- check
+        run: cmake --build build-ripple-test-suite --target check -- -k 0
