@@ -7,15 +7,15 @@
 // CHECK-LABEL: define dso_local void @test_branch(
 // CHECK-SAME: ptr noundef readonly captures(none) [[F1:%.*]], ptr noundef readonly captures(none) [[F2:%.*]], ptr noundef readonly captures(none) [[F3:%.*]], ptr noundef writeonly captures(none) [[OUT:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load <4 x i8>, ptr [[F1]], align 1
 // CHECK-NEXT:    [[UNMASKEDLOAD:%.*]] = load <4 x i8>, ptr [[F2]], align 1
-// CHECK-NEXT:    [[UNMASKEDLOAD52:%.*]] = load <4 x i8>, ptr [[F1]], align 1
-// CHECK-NEXT:    [[UNMASKEDLOAD53:%.*]] = load <4 x i8>, ptr [[F3]], align 1
-// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE_RIPPLE_BRANCH_CLONE:%.*]] = shufflevector <4 x i8> [[UNMASKEDLOAD52]], <4 x i8> poison, <12 x i32> <i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
-// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE31_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE_RIPPLE_BRANCH_CLONE:%.*]] = shufflevector <4 x i8> [[UNMASKEDLOAD53]], <4 x i8> poison, <12 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 0, i32 1, i32 2, i32 3>
-// CHECK-NEXT:    [[COND12_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED_RIPPLE_BRANCH_CLONE:%.*]] = shufflevector <12 x i8> [[DOTRIPPLE_LS_INSTANCE_RIPPLE_BRANCH_CLONE]], <12 x i8> [[DOTRIPPLE_LS_INSTANCE31_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE_RIPPLE_BRANCH_CLONE]], <12 x i32> <i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison, i32 20, i32 21, i32 22, i32 23>
-// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE30_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE:%.*]] = shufflevector <4 x i8> [[UNMASKEDLOAD]], <4 x i8> poison, <12 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison>
-// CHECK-NEXT:    [[COND12_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED51:%.*]] = shufflevector <12 x i8> [[COND12_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED_RIPPLE_BRANCH_CLONE]], <12 x i8> [[DOTRIPPLE_LS_INSTANCE30_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE]], <12 x i32> <i32 0, i32 1, i32 2, i32 3, i32 16, i32 17, i32 18, i32 19, i32 8, i32 9, i32 10, i32 11>
-// CHECK-NEXT:    store <12 x i8> [[COND12_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED51]], ptr [[OUT]], align 1
+// CHECK-NEXT:    [[UNMASKEDLOAD46:%.*]] = load <4 x i8>, ptr [[F3]], align 1
+// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE32_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE:%.*]] = shufflevector <4 x i8> [[UNMASKEDLOAD]], <4 x i8> poison, <12 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison>
+// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE:%.*]] = shufflevector <4 x i8> [[TMP0]], <4 x i8> poison, <12 x i32> <i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
+// CHECK-NEXT:    [[COND15_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED:%.*]] = select <12 x i1> <i1 false, i1 false, i1 false, i1 false, i1 true, i1 true, i1 true, i1 true, i1 poison, i1 poison, i1 poison, i1 poison>, <12 x i8> [[DOTRIPPLE_LS_INSTANCE32_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE]], <12 x i8> [[DOTRIPPLE_LS_INSTANCE]]
+// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE32_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE38:%.*]] = shufflevector <4 x i8> [[UNMASKEDLOAD46]], <4 x i8> poison, <12 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 0, i32 1, i32 2, i32 3>
+// CHECK-NEXT:    [[COND15_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED45:%.*]] = shufflevector <12 x i8> [[COND15_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED]], <12 x i8> [[DOTRIPPLE_LS_INSTANCE32_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE38]], <12 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 20, i32 21, i32 22, i32 23>
+// CHECK-NEXT:    store <12 x i8> [[COND15_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED45]], ptr [[OUT]], align 1
 // CHECK-NEXT:    ret void
 //
 void test_branch(uint8_t *f1, uint8_t *f2, uint8_t *f3, uint8_t *out) {
@@ -34,18 +34,18 @@ void test_branch(uint8_t *f1, uint8_t *f2, uint8_t *f3, uint8_t *out) {
 // CHECK-LABEL: define dso_local void @test_switch(
 // CHECK-SAME: ptr noundef readonly captures(none) [[F1:%.*]], ptr noundef readonly captures(none) [[F2:%.*]], ptr noundef readonly captures(none) [[F3:%.*]], ptr noundef readonly captures(none) [[F4:%.*]], ptr noundef writeonly captures(none) [[OUT:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load <4 x i8>, ptr [[F1]], align 1
 // CHECK-NEXT:    [[UNMASKEDLOAD:%.*]] = load <4 x i8>, ptr [[F2]], align 1
-// CHECK-NEXT:    [[UNMASKEDLOAD82:%.*]] = load <4 x i8>, ptr [[F1]], align 1
-// CHECK-NEXT:    [[UNMASKEDLOAD83:%.*]] = load <4 x i8>, ptr [[F3]], align 1
-// CHECK-NEXT:    [[UNMASKEDLOAD84:%.*]] = load <4 x i8>, ptr [[F4]], align 1
-// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE46_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE_RIPPLE_BRANCH_CLONE:%.*]] = shufflevector <4 x i8> [[UNMASKEDLOAD83]], <4 x i8> poison, <16 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison>
-// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE_RIPPLE_BRANCH_CLONE:%.*]] = shufflevector <4 x i8> [[UNMASKEDLOAD82]], <4 x i8> poison, <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
-// CHECK-NEXT:    [[COND22_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED_RIPPLE_BRANCH_CLONE:%.*]] = select <16 x i1> <i1 false, i1 false, i1 false, i1 false, i1 poison, i1 poison, i1 poison, i1 poison, i1 true, i1 true, i1 true, i1 true, i1 poison, i1 poison, i1 poison, i1 poison>, <16 x i8> [[DOTRIPPLE_LS_INSTANCE46_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE_RIPPLE_BRANCH_CLONE]], <16 x i8> [[DOTRIPPLE_LS_INSTANCE_RIPPLE_BRANCH_CLONE]]
-// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE46_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE54_RIPPLE_BRANCH_CLONE:%.*]] = shufflevector <4 x i8> [[UNMASKEDLOAD84]], <4 x i8> poison, <16 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 0, i32 1, i32 2, i32 3>
-// CHECK-NEXT:    [[COND22_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED65_RIPPLE_BRANCH_CLONE:%.*]] = shufflevector <16 x i8> [[COND22_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED_RIPPLE_BRANCH_CLONE]], <16 x i8> [[DOTRIPPLE_LS_INSTANCE46_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE54_RIPPLE_BRANCH_CLONE]], <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison, i32 8, i32 9, i32 10, i32 11, i32 28, i32 29, i32 30, i32 31>
-// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE45_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE:%.*]] = shufflevector <4 x i8> [[UNMASKEDLOAD]], <4 x i8> poison, <16 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
-// CHECK-NEXT:    [[COND22_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED81:%.*]] = shufflevector <16 x i8> [[COND22_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED65_RIPPLE_BRANCH_CLONE]], <16 x i8> [[DOTRIPPLE_LS_INSTANCE45_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE]], <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 20, i32 21, i32 22, i32 23, i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
-// CHECK-NEXT:    store <16 x i8> [[COND22_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED81]], ptr [[OUT]], align 1
+// CHECK-NEXT:    [[UNMASKEDLOAD72:%.*]] = load <4 x i8>, ptr [[F3]], align 1
+// CHECK-NEXT:    [[UNMASKEDLOAD73:%.*]] = load <4 x i8>, ptr [[F4]], align 1
+// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE47_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE53:%.*]] = shufflevector <4 x i8> [[UNMASKEDLOAD72]], <4 x i8> poison, <16 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison>
+// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE47_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE:%.*]] = shufflevector <4 x i8> [[UNMASKEDLOAD]], <4 x i8> poison, <16 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
+// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE:%.*]] = shufflevector <4 x i8> [[TMP0]], <4 x i8> poison, <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
+// CHECK-NEXT:    [[COND25_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED:%.*]] = select <16 x i1> <i1 false, i1 false, i1 false, i1 false, i1 true, i1 true, i1 true, i1 true, i1 poison, i1 poison, i1 poison, i1 poison, i1 poison, i1 poison, i1 poison, i1 poison>, <16 x i8> [[DOTRIPPLE_LS_INSTANCE47_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE]], <16 x i8> [[DOTRIPPLE_LS_INSTANCE]]
+// CHECK-NEXT:    [[COND25_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED70:%.*]] = select <16 x i1> <i1 false, i1 false, i1 false, i1 false, i1 false, i1 false, i1 false, i1 false, i1 true, i1 true, i1 true, i1 true, i1 poison, i1 poison, i1 poison, i1 poison>, <16 x i8> [[DOTRIPPLE_LS_INSTANCE47_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE53]], <16 x i8> [[COND25_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED]]
+// CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE47_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE63:%.*]] = shufflevector <4 x i8> [[UNMASKEDLOAD73]], <4 x i8> poison, <16 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 0, i32 1, i32 2, i32 3>
+// CHECK-NEXT:    [[COND25_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED71:%.*]] = shufflevector <16 x i8> [[COND25_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED70]], <16 x i8> [[DOTRIPPLE_LS_INSTANCE47_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE63]], <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10, i32 11, i32 28, i32 29, i32 30, i32 31>
+// CHECK-NEXT:    store <16 x i8> [[COND25_IN_RIPPLE_LS_INSTANCE_PH_RIPPLE_PHI_VECTORIZED71]], ptr [[OUT]], align 1
 // CHECK-NEXT:    ret void
 //
 void test_switch(uint8_t *f1, uint8_t *f2, uint8_t *f3, uint8_t *f4, uint8_t *out) {
