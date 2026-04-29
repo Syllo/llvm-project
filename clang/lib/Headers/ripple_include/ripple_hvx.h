@@ -46,9 +46,11 @@ __decl_f_vec_t(_Float16, f, 16, 256, 512);
 __decl_f_vec_t(float, f, 32, 32, 128);
 __decl_f_vec_t(float, f, 32, 64, 256);
 __decl_f_vec_t(float, f, 32, 128, 512);
+__decl_f_vec_t(float, f, 32, 256, 1024);
 __decl_f_vec_t(double, f, 64, 16, 128);
 __decl_f_vec_t(double, f, 64, 32, 256);
 __decl_f_vec_t(double, f, 64, 64, 512);
+__decl_f_vec_t(double, f, 64, 128, 1024);
 
 #undef __decl_f_vec_t
 
@@ -71,6 +73,11 @@ __decl_int_vec_t(8, 512, 512);
 __decl_int_vec_t(16, 256, 512);
 __decl_int_vec_t(32, 128, 512);
 __decl_int_vec_t(64, 64, 512);
+// Vector octet
+__decl_int_vec_t(8, 1024, 1024);
+__decl_int_vec_t(16, 512, 1024);
+__decl_int_vec_t(32, 256, 1024);
+__decl_int_vec_t(64, 128, 1024);
 #undef __decl_int_vec_t
 
 
