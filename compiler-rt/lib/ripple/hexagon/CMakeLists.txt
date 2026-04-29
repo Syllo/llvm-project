@@ -59,7 +59,8 @@ set(RIPPLE_RT_SRC
   HVX_Dequantize
   HVX_Vavg
   HVX_Vmpy_Scalar
-  HVX_Vmpy_x32x16)
+  HVX_Vmpy_x32x16
+  HVX_Vlut)
 set(RIPPLE_RT_SRC_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(RIPPLE_RT_HEADER_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/header)
 
