@@ -14,8 +14,6 @@
 
 #ifdef __cplusplus
 extern "C" {
-#else
-extern {
 #endif
 
 /// \brief Bare truncation from fp32 to bf16:
@@ -32,6 +30,9 @@ __bf16 to_bf16_nan(float in);
 /// \brief most accurate fp32 --> bf16 conversion.
 /// Uses even rounding and is aware of NaN conversions.
 __bf16 to_bf16_round(float vin);
-}
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif // __has_bf16__
