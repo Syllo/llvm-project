@@ -961,6 +961,108 @@ Value *NDLoadStoreFactory::genUnstructuredLoad(LoadInst *Load, Value *Address,
   return GatheredVal;
 }
 
+static Value *getSplatScalar(Value *V) {
+  auto *Shuffle = dyn_cast<ShuffleVectorInst>(V);
+  if (!Shuffle || !Shuffle->isZeroEltSplat()) {
+    return nullptr;
+  }
+
+  auto *Insert = dyn_cast<InsertElementInst>(Shuffle->getOperand(0));
+  if (!Insert) {
+    return nullptr;
+  }
+
+  auto *Idx = dyn_cast<ConstantInt>(Insert->getOperand(2));
+  if (!Idx || !Idx->isZero()) {
+    return nullptr;
+  }
+
+  Value *Scalar = Insert->getOperand(1);
+  if (!Scalar->getType()->isPointerTy()) {
+    return nullptr;
+  }
+
+  return Scalar;
+}
+
+Value *NDLoadStoreFactory::canLoadWindowAndShuffle(LoadInst *Load,
+                                                   Value *Address,
+                                                   const TensorShape &ToShape) {
+  auto *GEP = dyn_cast<GetElementPtrInst>(Address);
+  if (!GEP || GEP->getNumIndices() != 1) {
+    return nullptr;
+  }
+
+  Value *Index = GEP->idx_begin()->get();
+  unsigned NumElementsToLoad = ToShape.flatShape();
+  SmallVector<int64_t> Indices;
+  if (auto *CDV = dyn_cast<ConstantDataVector>(Index)) {
+    for (unsigned Idx = 0; Idx < CDV->getNumElements(); ++Idx) {
+      Indices.push_back(CDV->getElementAsInteger(Idx));
+    }
+  } else if (auto *CV = dyn_cast<ConstantVector>(Index)) {
+    for (unsigned Idx = 0; Idx < CV->getNumOperands(); ++Idx) {
+      auto *C = dyn_cast<ConstantInt>(CV->getOperand(Idx));
+      if (!C) {
+        return nullptr;
+      }
+      Indices.push_back(C->getSExtValue());
+    }
+  } else {
+    return nullptr;
+  }
+
+  if (Indices.empty() || Indices.size() != NumElementsToLoad) {
+    return nullptr;
+  }
+
+  // Calculate the min and max value in the vector of indices
+  int64_t Min = *llvm::min_element(Indices);
+  int64_t Max = *llvm::max_element(Indices);
+
+  if ((Max - Min + 1) > NumElementsToLoad) {
+    return nullptr;
+  }
+
+  // Reconstruct a scalar window base pointer at the minimum index.
+  // Vector loads require a scalar `ptr` base, not a `<N x ptr>` vector.
+  // If the original GEP base has already been vectorized/splatted.
+  // i.e if base is %.splat = vector(%A) which results in <8 x ptr>
+  // [%A, %A, %A, %A, %A, %A, %A, %A].
+  // Then recover that scalar pointer; otherwise, return
+  Value *BasePtr = GEP->getPointerOperand();
+  if (!BasePtr->getType()->isPointerTy()) {
+    BasePtr = getSplatScalar(BasePtr);
+    if (!BasePtr) {
+      return nullptr;
+    }
+  }
+
+  // Rebuild a scalar GEP at the minimum index to form the contiguous window
+  // base
+  auto *IndexVecTy = cast<VectorType>(Index->getType());
+  Type *IndexElementTy = IndexVecTy->getElementType();
+  Value *MinIndex = ConstantInt::get(IndexElementTy, Min);
+  Value *WindowBase =
+      IrBuilder.CreateGEP(GEP->getSourceElementType(), BasePtr, MinIndex);
+
+  // Load the contiguous window as a vector starting from the minimum address.
+  Type *ElementTy = Load->getType();
+  Type *VecTy =
+      VectorType::get(ElementTy, NumElementsToLoad, /*scalable=*/false);
+  LoadInst *WindowLoad = IrBuilder.CreateLoad(VecTy, WindowBase);
+  WindowLoad->setAlignment(Load->getAlign());
+
+  // Shuffle the contiguous window back into the original irregular access
+  // order.
+  SmallVector<int> ShuffleMask;
+  for (int64_t Idx : Indices) {
+    ShuffleMask.push_back(static_cast<int>(Idx - Min));
+  }
+  Value *Poison = PoisonValue::get(VecTy);
+  return IrBuilder.CreateShuffleVector(WindowLoad, Poison, ShuffleMask);
+}
+
 Value *NDLoadStoreFactory::genLoadNoSplat(LoadInst *Load,
                                           LinearSeries &AddressSeries,
                                           Value *DefaultAddress,
@@ -985,6 +1087,11 @@ Value *NDLoadStoreFactory::genLoadNoSplat(LoadInst *Load,
     // TODO: Take ripple_aligned() into account.
     VectorLoad->setAlignment(Load->getAlign());
     return VectorLoad;
+  } else if (Value *shuffleLoad =
+                 canLoadWindowAndShuffle(Load, DefaultAddress, ToShape)) {
+    MyRipple.setRippleShape(shuffleLoad, ToShape);
+    shuffleLoad->takeName(Load);
+    return shuffleLoad;
   } else {
     return genUnstructuredLoad(Load, DefaultAddress, ToShape);
   }
