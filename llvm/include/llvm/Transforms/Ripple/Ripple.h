@@ -1154,7 +1154,11 @@ public:
   Error createLinearSeries();
 
   /// @brief Simplify linear series for better code generation
-  Error simplifyLinearSeries();
+  /// @param[out] WaitingForSpecialization set to true if re-inferring a shape
+  /// during simplification requested a new specialization; when this happens
+  /// the caller must abort and wait for the specialization to be processed
+  /// rather than proceed to code generation.
+  Error simplifyLinearSeries(bool &WaitingForSpecialization);
 
   /// @brief Transform the function!
   /// @return the set of analysis that are preserved
@@ -1809,7 +1813,10 @@ private:
 
   /// @brief Simplifies the instructions in the function. This never creates new
   /// instructions (only constants). Returns true if simplifications were made.
-  bool simplifyFunction();
+  /// @param[out] WaitingForSpecialization set to true if re-inferring a user's
+  /// shape after a simplification requested a new specialization; the caller
+  /// must then abort and wait for that specialization rather than continue.
+  bool simplifyFunction(bool &WaitingForSpecialization);
 
   /// @brief Returns the set of basic blocks ]from, to] by doing a depth-first
   /// search starting at @p from and stopping when encountering @p to. @p to

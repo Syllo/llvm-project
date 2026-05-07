@@ -1843,7 +1843,8 @@ Error Ripple::createLinearSeries() {
   return Error::success();
 }
 
-Error Ripple::simplifyLinearSeries() {
+Error Ripple::simplifyLinearSeries(bool &WaitingForSpecialization) {
+  WaitingForSpecialization = false;
   // Simplify and cleanup slopes
   simplifySlopes();
 
@@ -1851,8 +1852,12 @@ Error Ripple::simplifyLinearSeries() {
   if (Error E = replaceRippleGetSize())
     return E;
 
-  // Iterate while simplification occurs
-  while (simplifyFunction())
+  // Iterate while simplification occurs. simplifyFunction may re-infer shapes
+  // of users after folding an operand; if that re-inference requests a new
+  // specialization we must stop and propagate the signal so run() aborts and
+  // waits rather than proceeding to code generation with a placeholder shape.
+  while (simplifyFunction(WaitingForSpecialization) &&
+         !WaitingForSpecialization)
     ;
 
   assert(allInstructionsHaveRippleShapes() &&
@@ -2190,8 +2195,20 @@ PreservedAnalyses Ripple::run() {
   if (Error e = createLinearSeries())
     llvm_unreachable("compiler error: Linear Series creation failure");
 
-  if (Error e = simplifyLinearSeries())
+  if (Error e = simplifyLinearSeries(WaitingForSpecialization))
     llvm_unreachable("compiler error: Linear Series simplification failure");
+
+  // Simplification may fold an operand and, while re-inferring the shapes of
+  // its users, discover a call that needs a not-yet-available specialization
+  // (which it has already requested). We must not proceed to code generation
+  // with the placeholder shape: abort and let the module driver re-run this
+  // function once the specialization has been processed.
+  if (WaitingForSpecialization) {
+    LLVM_DEBUG(dbgs() << "Aborting waiting for specialization "
+                         "(requested during simplification)!\n");
+    PS = ProcessingStatus::WaitingForSpecialization;
+    return PreservedAnalyses::all();
+  }
 
   replaceDivCalls();
   assert(allInstructionsHaveRippleShapes() &&
@@ -7855,8 +7872,9 @@ bool Ripple::allInstructionsHaveRippleShapes() const {
   return true;
 }
 
-bool Ripple::simplifyFunction() {
+bool Ripple::simplifyFunction(bool &WaitingForSpecialization) {
   bool SimplifiedAny = false;
+  WaitingForSpecialization = false;
   for (auto &I : make_early_inc_range(instructions(F))) {
     Instruction *TryToSimplify = &I;
     // This process does not produce new instruction, it will fold instruction
@@ -7866,11 +7884,59 @@ bool Ripple::simplifyFunction() {
       LLVM_DEBUG(dbgs() << "Simplified " << *TryToSimplify << " with "
                         << *Simplified << "\n");
 
+      // Snapshot user instructions before RAUW: their shapes were derived
+      // from TryToSimplify's operand shape and may need to be re-inferred
+      // now that the operand is being replaced (e.g. a vector-shaped value
+      // simplifying to a scalar constant). Exclude TryToSimplify itself
+      // (self-referencing PHIs would otherwise put it in the queue and we
+      // would dereference it after it has been erased).
+      std::queue<Instruction *> ReinferQueue;
+      for (User *U : TryToSimplify->users())
+        if (auto *UI = dyn_cast<Instruction>(U))
+          if (UI != TryToSimplify &&
+              domTree.isReachableFromEntry(UI->getParent()))
+            ReinferQueue.push(UI);
+
       // Replace TryToSimplify by Simplified
       invalidateRippleDataFor(TryToSimplify);
       auto TryToSimplifyIt = TryToSimplify->getIterator();
       ReplaceInstWithValue(TryToSimplifyIt, Simplified);
       SimplifiedAny = true;
+
+      // Re-propagate shapes and linear series through the users
+      // (transitively) so that each user's data reflects its now-current
+      // operands.
+      while (!ReinferQueue.empty()) {
+        Instruction *UI = ReinferQueue.front();
+        ReinferQueue.pop();
+        auto NewShape = inferShapeFromOperands(UI, /*AllowPartialPhi*/ false,
+                                               WaitingForSpecialization);
+        if (!NewShape)
+          // Should have a valid shape post simplification.
+          report_fatal_error("[Ripple] Compiler error during shape inference "
+                             "during simplification pass.");
+
+        // Re-inference discovered a call whose specialization is not ready and
+        // requested it (see inferShapeFromOperands). We cannot proceed to code
+        // generation with the placeholder shape: bail out so that run() aborts
+        // and this function is re-processed once the specialization exists.
+        if (WaitingForSpecialization)
+          return SimplifiedAny;
+        bool ShapeChanged = setRippleShape(UI, *NewShape);
+
+        // If the shape changed, the cached linear series was computed against
+        // the old shape and is stale; re-derive it.
+        bool LSChanged = false;
+        if (ShapeChanged) {
+          auto CSBefore = getCachedSeries(UI);
+          clearValidSerie(UI);
+          auto CSAfter = getLinearSeriesFor(UI);
+          LSChanged = CSBefore.getState() != CSAfter.getState();
+        }
+
+        if (ShapeChanged || LSChanged)
+          revisitUserInstructions(UI, ReinferQueue);
+      }
     }
   }
   return SimplifiedAny;
