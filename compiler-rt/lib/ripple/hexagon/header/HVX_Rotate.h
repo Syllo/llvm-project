@@ -16,8 +16,6 @@
 
 #ifdef __cplusplus
 extern "C" {
-#else
-extern {
 #endif
 
 #define _decl_hvx_rotate(ct, t) ct hvx_rotate_to_lower_##t(ct x, int32_t r)
@@ -41,7 +39,9 @@ _decl_hvx_rotate(double, f64);
 
 #undef _decl_hvx_rotate
 
-} // extern "C" / extern
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #ifndef __cplusplus
 
