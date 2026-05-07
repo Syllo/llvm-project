@@ -52,7 +52,7 @@ set(RIPPLE_RT_SRC
   HVX_Scatter_Gather
   HVX_Rotate
   HVX_Bfloat
-  HVX_Vdeal
+  HVX_VectorPair
   HVX_Narrow_Shift
   HVX_Splice
   HVX_Quantize
