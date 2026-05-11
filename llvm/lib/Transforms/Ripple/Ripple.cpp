@@ -1922,6 +1922,16 @@ void Ripple::padToTargetSIMDWidth() {
                         << *NewC << "\n";);
       return NewC;
     }
+    if (auto *CFP = dyn_cast<ConstantFP>(V)) {
+      auto *NewVType =
+          VectorType::get(VType->getScalarType(), PaddedLength, false);
+      return ConstantFP::get(NewVType, CFP->getValue());
+    }
+    if (auto *CInt = dyn_cast<ConstantInt>(V)) {
+      auto *NewVType =
+          VectorType::get(VType->getScalarType(), PaddedLength, false);
+      return ConstantInt::get(NewVType, CInt->getValue());
+    }
     if (isa<PoisonValue>(V)) {
       auto *NewVType =
           VectorType::get(VType->getScalarType(), PaddedLength, false);

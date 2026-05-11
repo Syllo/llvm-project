@@ -50,6 +50,9 @@ using namespace llvm;
 llvm::cl::opt<bool> OnlySESE("ripple-run-only-sese", llvm::cl::init(false),
                              cl::ReallyHidden,
                              llvm::cl::desc("Run ripple SESE only (testing)"));
+llvm::cl::opt<bool> OnlyRipple(
+    "ripple-run-only-ripple-passes", llvm::cl::init(false), cl::ReallyHidden,
+    llvm::cl::desc("Run ripple passes only, no post-processing (testing)"));
 
 PreservedAnalyses RippleModulePass::run(Module &M, ModuleAnalysisManager &MAM) {
   FunctionAnalysisManager &FAM =
@@ -263,7 +266,9 @@ PreservedAnalyses RippleModulePass::run(Module &M, ModuleAnalysisManager &MAM) {
 
   FunctionPassManager PostProcessPasses;
   PostProcessPasses.addPass(RippleFPExtFPTruncPass());
-  PostProcessPasses.addPass(InstCombinePass());
+  if (!OnlyRipple) {
+    PostProcessPasses.addPass(InstCombinePass());
+  }
   for (auto &F : M) {
     Ripple::eraseFunctionSpecializationRelatedMetadata(F);
     if (!F.isDeclaration()) {
