@@ -5,14 +5,14 @@
 #include "ripple_test.h"
 
 // CHECK-LABEL: define dso_local void @test1(
-// CHECK-SAME: ptr{{.*}}[[MAX:%.*]], ptr{{.*}}[[MIN:%.*]], ptr{{.*}}[[REALMAX:%.*]], ptr{{.*}}[[REALMIN:%.*]]){{.*}}{
+// CHECK-SAME: ptr noundef writeonly captures(none) initializes((0, 4)) [[MAX:%.*]], ptr noundef writeonly captures(none) initializes((0, 4)) [[MIN:%.*]], ptr noundef writeonly captures(none) initializes((0, 4)) [[REALMAX:%.*]], ptr noundef writeonly captures(none) initializes((0, 4)) [[REALMIN:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[DOTRIPPLE_REDUCTION:%.*]] = tail call reassoc float @llvm.vector.reduce.fmax.v3f32(<3 x float> <float 0x40091EB860000000, float 0x40191EB860000000, float 0x4022D70A40000000>)
-// CHECK-NEXT:    store float [[DOTRIPPLE_REDUCTION]], ptr [[MAX]], align 4, !tbaa [[TBAA3:![0-9]+]]
-// CHECK-NEXT:    [[DOTRIPPLE_REDUCTION5:%.*]] = tail call reassoc float @llvm.vector.reduce.fmin.v3f32(<3 x float> <float 0x40091EB860000000, float 0x40191EB860000000, float 0x4022D70A40000000>)
-// CHECK-NEXT:    store float [[DOTRIPPLE_REDUCTION5]], ptr [[MIN]], align 4, !tbaa [[TBAA3]]
-// CHECK-NEXT:    store float 0x4022D70A40000000, ptr [[REALMAX]], align 4, !tbaa [[TBAA3]]
-// CHECK-NEXT:    store float 0x40091EB860000000, ptr [[REALMIN]], align 4, !tbaa [[TBAA3]]
+// CHECK-NEXT:    [[DOTRIPPLE_REDUCTION:%.*]] = tail call reassoc float @llvm.vector.reduce.fmax.v3f32(<3 x float> <float 3.140000e+00, float 6.280000e+00, float 9.420000e+00>)
+// CHECK-NEXT:    store float [[DOTRIPPLE_REDUCTION]], ptr [[MAX]], align 4, !tbaa [[TBAA6:![0-9]+]]
+// CHECK-NEXT:    [[DOTRIPPLE_REDUCTION5:%.*]] = tail call reassoc float @llvm.vector.reduce.fmin.v3f32(<3 x float> <float 3.140000e+00, float 6.280000e+00, float 9.420000e+00>)
+// CHECK-NEXT:    store float [[DOTRIPPLE_REDUCTION5]], ptr [[MIN]], align 4, !tbaa [[TBAA6]]
+// CHECK-NEXT:    store float 9.420000e+00, ptr [[REALMAX]], align 4, !tbaa [[TBAA6]]
+// CHECK-NEXT:    store float 3.140000e+00, ptr [[REALMIN]], align 4, !tbaa [[TBAA6]]
 // CHECK-NEXT:    ret void
 //
 void test1(float *max, float *min, float *realMax, float *realMin) {
@@ -37,17 +37,17 @@ extern float sqrtf(float);
 // CHECK-LABEL: define dso_local range(i32 0, 2) i32 @testNan(
 // CHECK-SAME: ptr{{.*}}[[MAX:%.*]], ptr{{.*}}[[MIN:%.*]], ptr{{.*}}[[REALMAX:%.*]], ptr{{.*}}[[REALMIN:%.*]]){{.*}}{
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[DOTRIPPLE_REDUCTION:%.*]] = tail call fast float @llvm.vector.reduce.fmax.v3f32(<3 x float> <float 0x7FF8000000000000, float 0x40191EB860000000, float 0x4022D70A40000000>)
-// CHECK-NEXT:    store float [[DOTRIPPLE_REDUCTION]], ptr [[MAX]], align 4, !tbaa [[TBAA3]]
-// CHECK-NEXT:    [[DOTRIPPLE_REDUCTION12:%.*]] = tail call fast float @llvm.vector.reduce.fmin.v3f32(<3 x float> <float 0x7FF8000000000000, float 0x40191EB860000000, float 0x4022D70A40000000>)
-// CHECK-NEXT:    store float [[DOTRIPPLE_REDUCTION12]], ptr [[MIN]], align 4, !tbaa [[TBAA3]]
-// CHECK-NEXT:    store float 0x4022D70A40000000, ptr [[REALMAX]], align 4, !tbaa [[TBAA3]]
-// CHECK-NEXT:    store float 0x40191EB860000000, ptr [[REALMIN]], align 4, !tbaa [[TBAA3]]
-// CHECK-NEXT:    [[TMP0:%.*]] = load float, ptr [[MAX]], align 4, !tbaa [[TBAA3]]
-// CHECK-NEXT:    [[TMP1:%.*]] = load float, ptr [[REALMAX]], align 4, !tbaa [[TBAA3]]
+// CHECK-NEXT:    [[DOTRIPPLE_REDUCTION:%.*]] = tail call fast float @llvm.vector.reduce.fmax.v3f32(<3 x float> <float +qnan, float 6.280000e+00, float 9.420000e+00>)
+// CHECK-NEXT:    store float [[DOTRIPPLE_REDUCTION]], ptr [[MAX]], align 4, !tbaa [[TBAA6]]
+// CHECK-NEXT:    [[DOTRIPPLE_REDUCTION12:%.*]] = tail call fast float @llvm.vector.reduce.fmin.v3f32(<3 x float> <float +qnan, float 6.280000e+00, float 9.420000e+00>)
+// CHECK-NEXT:    store float [[DOTRIPPLE_REDUCTION12]], ptr [[MIN]], align 4, !tbaa [[TBAA6]]
+// CHECK-NEXT:    store float 9.420000e+00, ptr [[REALMAX]], align 4, !tbaa [[TBAA6]]
+// CHECK-NEXT:    store float 6.280000e+00, ptr [[REALMIN]], align 4, !tbaa [[TBAA6]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load float, ptr [[MAX]], align 4, !tbaa [[TBAA6]]
+// CHECK-NEXT:    [[TMP1:%.*]] = load float, ptr [[REALMAX]], align 4, !tbaa [[TBAA6]]
 // CHECK-NEXT:    [[CMP:%.*]] = fcmp fast oeq float [[TMP0]], [[TMP1]]
-// CHECK-NEXT:    [[TMP2:%.*]] = load float, ptr [[MIN]], align 4, !tbaa [[TBAA3]]
-// CHECK-NEXT:    [[CMP3:%.*]] = fcmp fast oeq float [[TMP2]], 0x40191EB860000000
+// CHECK-NEXT:    [[TMP2:%.*]] = load float, ptr [[MIN]], align 4, !tbaa [[TBAA6]]
+// CHECK-NEXT:    [[CMP3:%.*]] = fcmp fast oeq float [[TMP2]], 6.280000e+00
 // CHECK-NEXT:    [[AND10:%.*]] = and i1 [[CMP]], [[CMP3]]
 // CHECK-NEXT:    [[AND:%.*]] = zext i1 [[AND10]] to i32
 // CHECK-NEXT:    ret i32 [[AND]]
