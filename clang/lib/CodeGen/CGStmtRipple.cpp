@@ -444,9 +444,9 @@ RValue CodeGenFunction::emitRippleBuiltin(const CallExpr *E,
         Builder.CreateCall(F, {BlockShape, Mask, ReductionEl});
     return RValue::get(Result);
   }
-  /// Broadcast-specific Builtins End
-  /// --------------------------------------------------------------------------------------------
-  /// Stack-specific Builtins Begin
+    /// Broadcast-specific Builtins End
+    /// --------------------------------------------------------------------------------------------
+    /// Stack-specific Builtins Begin
 
     CASE_RIPPLE_ALL_INT_FLOAT_BUILTIN(stack) {
       Value *BlockShape = EmitScalarExpr(E->getArg(0));
@@ -460,7 +460,8 @@ RValue CodeGenFunction::emitRippleBuiltin(const CallExpr *E,
         // assert all elements have the same type;
         auto Arg = EmitScalarExpr(E->getArg(i));
         if (BaseTy != (Arg->getType())) {
-          CGM.Error(Loc, "All arguments to ripple.stack must have the same type");
+          CGM.Error(Loc,
+                    "All arguments to ripple.stack must have the same type");
           return RValue::get(llvm::PoisonValue::get(intrinsicsReturnType()));
         }
 
@@ -474,9 +475,24 @@ RValue CodeGenFunction::emitRippleBuiltin(const CallExpr *E,
       return RValue::get(Result);
     }
 
-  /// Stack-specific Builtins End
-  /// --------------------------------------------------------------------------------------------
-  /// Slicing-specific Builtins Begin
+    /// Stack-specific Builtins End
+    /// --------------------------------------------------------------------------------------------
+    /// Reshape-specific Builtins Begin
+
+    CASE_RIPPLE_ALL_INT_FLOAT_BUILTIN(reshape) {
+      Value *BlockShape = EmitScalarExpr(E->getArg(0));
+      Value *ReshapeEl = EmitScalarExpr(E->getArg(1));
+
+      auto *BaseTy = ReshapeEl->getType();
+      llvm::Function *F =
+          CGM.getIntrinsic(llvm::Intrinsic::ripple_reshape, BaseTy);
+      llvm::Value *Result = Builder.CreateCall(F, {BlockShape, ReshapeEl});
+      return RValue::get(Result);
+    }
+
+    /// Reshape-specific Builtins End
+    /// --------------------------------------------------------------------------------------------
+    /// Slicing-specific Builtins Begin
 
 #define RIPPLE_SLICE_MAX_ARGS 11
     CASE_RIPPLE_ALL_INT_FLOAT_BUILTIN(slice)
