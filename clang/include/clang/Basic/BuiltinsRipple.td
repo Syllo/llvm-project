@@ -201,3 +201,9 @@ def RippleStack : Builtin, RippleAllTypesTemplate {
   let Attributes = [NoThrow, CustomTypeChecking];
   let Prototype = "T(void*, T, ...)";
 }
+
+def RippleReshape : Builtin, RippleAllTypesTemplate {
+  let Spellings = ["__builtin_ripple_reshape_"];
+  let Attributes = [NoThrow, CustomTypeChecking];
+  let Prototype = "T(void *, T)";
+}
