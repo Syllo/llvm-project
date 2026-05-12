@@ -53,6 +53,23 @@ def int_ripple_stack : DefaultAttrsIntrinsic<[llvm_any_ty], [llvm_ptr_ty, LLVMMa
 def int_ripple_reshape : DefaultAttrsIntrinsic<[llvm_any_ty], [llvm_ptr_ty, LLVMMatchType<0>],
                             [IntrNoMem, IntrWillReturn]>;
 
+def int_ripple_reinterp_i8  : DefaultAttrsIntrinsic<[llvm_i8_ty],  [llvm_ptr_ty, llvm_anyint_ty],
+                               [IntrNoMem, IntrWillReturn]>;
+def int_ripple_reinterp_u8  : DefaultAttrsIntrinsic<[llvm_i8_ty],  [llvm_ptr_ty, llvm_anyint_ty],
+                               [IntrNoMem, IntrWillReturn]>;
+def int_ripple_reinterp_i16 : DefaultAttrsIntrinsic<[llvm_i16_ty], [llvm_ptr_ty, llvm_anyint_ty],
+                               [IntrNoMem, IntrWillReturn]>;
+def int_ripple_reinterp_u16 : DefaultAttrsIntrinsic<[llvm_i16_ty], [llvm_ptr_ty, llvm_anyint_ty],
+                               [IntrNoMem, IntrWillReturn]>;
+def int_ripple_reinterp_i32 : DefaultAttrsIntrinsic<[llvm_i32_ty], [llvm_ptr_ty, llvm_anyint_ty],
+                               [IntrNoMem, IntrWillReturn]>;
+def int_ripple_reinterp_u32 : DefaultAttrsIntrinsic<[llvm_i32_ty], [llvm_ptr_ty, llvm_anyint_ty],
+                               [IntrNoMem, IntrWillReturn]>;
+def int_ripple_reinterp_i64 : DefaultAttrsIntrinsic<[llvm_i64_ty], [llvm_ptr_ty, llvm_anyint_ty],
+                               [IntrNoMem, IntrWillReturn]>;
+def int_ripple_reinterp_u64 : DefaultAttrsIntrinsic<[llvm_i64_ty], [llvm_ptr_ty, llvm_anyint_ty],
+                               [IntrNoMem, IntrWillReturn]>;
+
 // RIpple tensor reduction operator;
 // The first argument is a bitset to represent which dimensions are being
 // reduced, e.g., 0x1 is a reduction on dimension 0, 0x2 dimension 1, 0x3 on

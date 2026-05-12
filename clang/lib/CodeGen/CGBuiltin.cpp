@@ -7117,6 +7117,14 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     CASE_RIPPLE_ALL_INT_FLOAT_BUILTIN(stack)
 
     CASE_RIPPLE_ALL_INT_FLOAT_BUILTIN(reshape)
+    CASE_RIPPLE_ALL_INT_BUILTIN(reinterp_i8)
+    CASE_RIPPLE_ALL_INT_BUILTIN(reinterp_u8)
+    CASE_RIPPLE_ALL_INT_BUILTIN(reinterp_i16)
+    CASE_RIPPLE_ALL_INT_BUILTIN(reinterp_u16)
+    CASE_RIPPLE_ALL_INT_BUILTIN(reinterp_i32)
+    CASE_RIPPLE_ALL_INT_BUILTIN(reinterp_u32)
+    CASE_RIPPLE_ALL_INT_BUILTIN(reinterp_i64)
+    CASE_RIPPLE_ALL_INT_BUILTIN(reinterp_u64)
     CASE_RIPPLE_ALL_INT_FLOAT_BUILTIN(shuffle)
   case Builtin::BI__builtin_ripple_shuffle_p:
 

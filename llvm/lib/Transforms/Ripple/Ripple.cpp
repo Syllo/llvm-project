@@ -1934,6 +1934,14 @@ IntrinsicInst *Ripple::rippleReshapeIntrinsics(Instruction *I) {
   return intrinsicWithId(I, {Intrinsic::ripple_reshape});
 }
 
+IntrinsicInst *Ripple::rippleReinterpIntrinsics(Instruction *I) {
+  return intrinsicWithId(
+      I, {Intrinsic::ripple_reinterp_i8,  Intrinsic::ripple_reinterp_u8,
+          Intrinsic::ripple_reinterp_i16, Intrinsic::ripple_reinterp_u16,
+          Intrinsic::ripple_reinterp_i32, Intrinsic::ripple_reinterp_u32,
+          Intrinsic::ripple_reinterp_i64, Intrinsic::ripple_reinterp_u64});
+}
+
 IntrinsicInst *Ripple::rippleReduceIntrinsics(Instruction *I) {
   return intrinsicWithId(
       I, {Intrinsic::ripple_reduce_add, Intrinsic::ripple_reduce_mul,
@@ -3802,6 +3810,37 @@ void Ripple::genVectorInstructions() {
     setReplacementFor(rippleReshape, BitCast, toShape);
   };
 
+#define processRippleReinterp(TY_L, TY_S) \
+  auto processRippleReinterp##TY_S = [&](IntrinsicInst *rippleReinterp, \
+                                      const TensorShape &toShape) -> void { \
+    irBuilder.SetInsertPoint(rippleReinterp); \
+    auto [ReinterpVal, FromShape] = \
+        getTensorUse(rippleReinterp->getArgOperandUse(1)); \
+    /* Bitcast from <srcN x srcTy> to <dstN x TY_L> where dstN is chosen \
+       so that the total bit width is preserved: \
+         dstN = srcN * sizeof(srcTy) / sizeof(TY_L) */ \
+    unsigned SrcElemBits = \
+        ReinterpVal->getType()->getScalarSizeInBits(); \
+    unsigned DstElemBits = (TY_L)->getPrimitiveSizeInBits(); \
+    unsigned DstN = \
+        (FromShape->flatShape() * SrcElemBits) / DstElemBits; \
+    Type *DstVecTy = VectorType::get(TY_L, DstN, /*Scalable=*/false); \
+    Value *BitCast = irBuilder.CreateBitCast( \
+        ReinterpVal, DstVecTy, \
+        tensorizedName(rippleReinterp->getName(), toShape)); \
+    setReplacementFor(rippleReinterp, BitCast, toShape); \
+  };
+
+  processRippleReinterp(irBuilder.getInt8Ty(),  i8)
+  processRippleReinterp(irBuilder.getInt8Ty(),  u8)
+  processRippleReinterp(irBuilder.getInt16Ty(), i16)
+  processRippleReinterp(irBuilder.getInt16Ty(), u16)
+  processRippleReinterp(irBuilder.getInt32Ty(), i32)
+  processRippleReinterp(irBuilder.getInt32Ty(), u32)
+  processRippleReinterp(irBuilder.getInt64Ty(), i64)
+  processRippleReinterp(irBuilder.getInt64Ty(), u64)
+#undef processRippleReinterp
+
   auto processRippleReductions = [&](IntrinsicInst *rippleReduction,
                                      const TensorShape &toShape) -> void {
     auto rippleToVPReduce = [](Intrinsic::ID rippleReduction) -> Intrinsic::ID {
@@ -4657,6 +4696,18 @@ void Ripple::genVectorInstructions() {
       processRippleStack(rippleStack, toShape);
     } else if (IntrinsicInst *rippleReshape = rippleReshapeIntrinsics(call)) {
       processRippleReshape(rippleReshape, toShape);
+    } else if (IntrinsicInst *rippleReinterp = rippleReinterpIntrinsics(call)) {
+      switch (rippleReinterp->getIntrinsicID()) {
+      case Intrinsic::ripple_reinterp_i8:  processRippleReinterpi8(rippleReinterp,  toShape); break;
+      case Intrinsic::ripple_reinterp_u8:  processRippleReinterpu8(rippleReinterp,  toShape); break;
+      case Intrinsic::ripple_reinterp_i16: processRippleReinterpi16(rippleReinterp, toShape); break;
+      case Intrinsic::ripple_reinterp_u16: processRippleReinterpu16(rippleReinterp, toShape); break;
+      case Intrinsic::ripple_reinterp_i32: processRippleReinterpi32(rippleReinterp, toShape); break;
+      case Intrinsic::ripple_reinterp_u32: processRippleReinterpu32(rippleReinterp, toShape); break;
+      case Intrinsic::ripple_reinterp_i64: processRippleReinterpi64(rippleReinterp, toShape); break;
+      case Intrinsic::ripple_reinterp_u64: processRippleReinterpu64(rippleReinterp, toShape); break;
+      default: llvm_unreachable("Not a Ripple reinterp instruction");
+      }
     } else if (IntrinsicInst *rippleReduction = rippleReduceIntrinsics(call)) {
       processRippleReductions(rippleReduction, toShape);
     } else if (IntrinsicInst *rippleSlice = rippleSliceIntrinsic(call)) {
@@ -7412,6 +7463,12 @@ Ripple::inferShapeFromOperands(const Instruction *I, bool AllowPartialPhi,
 
     auto NewShape = setShapeToTensorShape(ShapeII);
     return NewShape;
+  } else if (const IntrinsicInst *RippleReinterp = rippleReinterpIntrinsics(I)) {
+    auto *ShapeII = getBlockShapeIntrinsic(RippleReinterp->getArgOperandUse(0));
+    assert(ShapeII);
+
+    auto NewShape = setShapeToTensorShape(ShapeII);
+    return NewShape;
   } else if (const IntrinsicInst *RippleRed = rippleReduceIntrinsics(I)) {
     Value *ReducedValue = RippleRed->getArgOperand(1);
     return computeRippleShapeForBitsetIntrinsic(
@@ -8048,6 +8105,61 @@ Error Ripple::checkRippleReshapeIntrinsics(IntrinsicInst *I) {
   return Error::success();
 }
 
+Error Ripple::checkRippleReinterpIntrinsics(IntrinsicInst *I) {
+  auto *ShapeII = getBlockShapeIntrinsic(I->getArgOperandUse(0));
+  assert(ShapeII);
+
+  auto Shape = setShapeToTensorShape(ShapeII);
+  auto OldShape = getRippleShape(I->getArgOperand(1));
+
+  auto FlatShape = Shape.flatShape();
+  auto FlatOldShape = OldShape.flatShape();
+
+  int8_t BitSize;
+  switch (I->getIntrinsicID()) {
+    case Intrinsic::ripple_reinterp_i8:
+    case Intrinsic::ripple_reinterp_u8:
+      BitSize = 8;
+      break;
+
+    case Intrinsic::ripple_reinterp_i16:
+    case Intrinsic::ripple_reinterp_u16:
+      BitSize = 16;
+      break;
+
+    case Intrinsic::ripple_reinterp_i32:
+    case Intrinsic::ripple_reinterp_u32:
+      BitSize = 32;
+      break;
+
+    case Intrinsic::ripple_reinterp_i64:
+    case Intrinsic::ripple_reinterp_u64:
+      BitSize = 64;
+      break;
+
+    default:
+      llvm_unreachable("non ripple_reinterp intrinsic provided.");
+  }
+
+  int8_t OldBitSize = I->getArgOperand(1)->getType()->getScalarSizeInBits();
+
+  if (FlatShape * BitSize != FlatOldShape * OldBitSize) {
+    std::string ErrMsg;
+    {
+      raw_string_ostream RSO(ErrMsg);
+      RSO << "the provided reinterp flat shape do not match the flat shape "
+          << "of the existing tensor provided. ";
+    }
+    DiagnosticInfoRippleWithLoc DI(DS_Error, F, sanitizeRippleLocation(I),
+                                   ErrMsg);
+    F.getContext().diagnose(DI);
+    return createStringError(inconvertibleErrorCode(),
+                             "Ripple reinterp non-matching flat dimensions");
+  }
+
+  return Error::success();
+}
+
 Error Ripple::checkRippleReductionIntrinsics(IntrinsicInst *I) {
   // The relevant checks and warnings are already processed by
   // computeRippleReductionShape during shape-propagation
@@ -8594,6 +8706,9 @@ Error Ripple::checkRippleSemantics() {
     } else if (IntrinsicInst *RippleReshapeI = rippleReshapeIntrinsics(&I)) {
       AllErrors = llvm::joinErrors(
           std::move(AllErrors), checkRippleReshapeIntrinsics(RippleReshapeI));
+    } else if (IntrinsicInst *RippleReinterpI = rippleReinterpIntrinsics(&I)) {
+      AllErrors = llvm::joinErrors(
+        std::move(AllErrors), checkRippleReinterpIntrinsics(RippleReinterpI));
     } else if (IntrinsicInst *RippleRedI = rippleReduceIntrinsics(&I)) {
       AllErrors = llvm::joinErrors(std::move(AllErrors),
                                    checkRippleReductionIntrinsics(RippleRedI));
