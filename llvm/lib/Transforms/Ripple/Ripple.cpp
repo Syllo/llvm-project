@@ -1913,6 +1913,10 @@ IntrinsicInst *Ripple::rippleStackIntrinsics(Instruction *I) {
   return intrinsicWithId(I, {Intrinsic::ripple_stack});
 }
 
+IntrinsicInst *Ripple::rippleReshapeIntrinsics(Instruction *I) {
+  return intrinsicWithId(I, {Intrinsic::ripple_reshape});
+}
+
 IntrinsicInst *Ripple::rippleReduceIntrinsics(Instruction *I) {
   return intrinsicWithId(
       I, {Intrinsic::ripple_reduce_add, Intrinsic::ripple_reduce_mul,
@@ -1938,9 +1942,10 @@ IntrinsicInst *Ripple::rippleSliceIntrinsic(Instruction *I) {
 }
 
 IntrinsicInst *Ripple::rippleIntrinsicsWithBlockShapeOperand(Instruction *I) {
-  return intrinsicWithId(
-      I, {Intrinsic::ripple_broadcast, Intrinsic::ripple_stack,
-          Intrinsic::ripple_block_getsize, Intrinsic::ripple_block_index});
+  return intrinsicWithId(I, {Intrinsic::ripple_broadcast,
+                             Intrinsic::ripple_stack, Intrinsic::ripple_reshape,
+                             Intrinsic::ripple_block_getsize,
+                             Intrinsic::ripple_block_index});
 }
 
 PreservedAnalyses Ripple::cleanupRippleSingleLane(ProcessingStatus Status) {
@@ -3633,6 +3638,25 @@ void Ripple::genVectorInstructions() {
     setReplacementFor(rippleStack, NewVectorI, toShape);
   };
 
+  auto processRippleReshape = [&](IntrinsicInst *rippleReshape,
+                                  const TensorShape &toShape) -> void {
+    irBuilder.SetInsertPoint(rippleReshape);
+
+    auto [ReshapedVal, FromShape] =
+        getTensorUse(rippleReshape->getArgOperandUse(1));
+
+    Type *ElemTy = ReshapedVal->getType()->getScalarType();
+    Type *DstVecTy =
+        VectorType::get(ElemTy, toShape.flatShape(), /*Scalable=*/false);
+
+    // Emit a bitcast to reinterpret the flat vector under the new shape.
+    Value *BitCast = irBuilder.CreateBitCast(
+        ReshapedVal, DstVecTy,
+        tensorizedName(rippleReshape->getName(), toShape));
+
+    setReplacementFor(rippleReshape, BitCast, toShape);
+  };
+
   auto processRippleReductions = [&](IntrinsicInst *rippleReduction,
                                      const TensorShape &toShape) -> void {
     auto rippleToVPReduce = [](Intrinsic::ID rippleReduction) -> Intrinsic::ID {
@@ -4481,6 +4505,8 @@ void Ripple::genVectorInstructions() {
       processRippleBroadcast(RippleBroadcast, toShape);
     } else if (IntrinsicInst *rippleStack = rippleStackIntrinsics(call)) {
       processRippleStack(rippleStack, toShape);
+    } else if (IntrinsicInst *rippleReshape = rippleReshapeIntrinsics(call)) {
+      processRippleReshape(rippleReshape, toShape);
     } else if (IntrinsicInst *rippleReduction = rippleReduceIntrinsics(call)) {
       processRippleReductions(rippleReduction, toShape);
     } else if (IntrinsicInst *rippleSlice = rippleSliceIntrinsic(call)) {
@@ -7230,6 +7256,12 @@ Ripple::inferShapeFromOperands(const Instruction *I, bool AllowPartialPhi,
 
     auto IndexShape = setShapeToTensorShape(ShapeII);
     return IndexShape;
+  } else if (const IntrinsicInst *RippleReshape = rippleReshapeIntrinsics(I)) {
+    auto *ShapeII = getBlockShapeIntrinsic(RippleReshape->getArgOperandUse(0));
+    assert(ShapeII);
+
+    auto NewShape = setShapeToTensorShape(ShapeII);
+    return NewShape;
   } else if (const IntrinsicInst *RippleRed = rippleReduceIntrinsics(I)) {
     Value *ReducedValue = RippleRed->getArgOperand(1);
     return computeRippleShapeForBitsetIntrinsic(
@@ -7788,6 +7820,35 @@ Error Ripple::checkRippleStackIntrinsics(IntrinsicInst *I) {
   return Error::success();
 }
 
+Error Ripple::checkRippleReshapeIntrinsics(IntrinsicInst *I) {
+  if (I->getIntrinsicID() == Intrinsic::ripple_reshape) {
+    auto *ShapeII = getBlockShapeIntrinsic(I->getArgOperandUse(0));
+    assert(ShapeII);
+
+    auto Shape = setShapeToTensorShape(ShapeII);
+    auto OldShape = getRippleShape(I->getArgOperand(1));
+
+    auto FlatShape = Shape.flatShape();
+    auto FlatOldShape = OldShape.flatShape();
+
+    if (FlatShape != FlatOldShape) {
+      std::string ErrMsg;
+      {
+        raw_string_ostream RSO(ErrMsg);
+        RSO << "the provided reshape flat shape do not match the flat shape "
+            << "of the existing tensor provided. ";
+      }
+      DiagnosticInfoRippleWithLoc DI(DS_Error, F, sanitizeRippleLocation(I),
+                                     ErrMsg);
+      F.getContext().diagnose(DI);
+      return createStringError(inconvertibleErrorCode(),
+                               "Ripple reshape non-matching flat dimensions");
+    }
+  }
+
+  return Error::success();
+}
+
 Error Ripple::checkRippleReductionIntrinsics(IntrinsicInst *I) {
   // The relevant checks and warnings are already processed by
   // computeRippleReductionShape during shape-propagation
@@ -8331,6 +8392,9 @@ Error Ripple::checkRippleSemantics() {
     } else if (IntrinsicInst *RippleStackI = rippleStackIntrinsics(&I)) {
       AllErrors = llvm::joinErrors(std::move(AllErrors),
                                    checkRippleStackIntrinsics(RippleStackI));
+    } else if (IntrinsicInst *RippleReshapeI = rippleReshapeIntrinsics(&I)) {
+      AllErrors = llvm::joinErrors(
+          std::move(AllErrors), checkRippleReshapeIntrinsics(RippleReshapeI));
     } else if (IntrinsicInst *RippleRedI = rippleReduceIntrinsics(&I)) {
       AllErrors = llvm::joinErrors(std::move(AllErrors),
                                    checkRippleReductionIntrinsics(RippleRedI));
