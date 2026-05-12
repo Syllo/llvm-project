@@ -47,12 +47,12 @@ void test_five(int x, int y, int z) {
 }
 
 //CHECK: TranslationUnitDecl {{.*}} <<invalid sloc>> <invalid sloc>
-//CHECK: |-RecordDecl {{.*}} <{{.*}}ast-dump-ripple-parallel.c:6:9, col:16> col:16 struct ripple_block_shape
+//CHECK: |-RecordDecl {{.*}} <{{.*}}ast-dump-ripple-parallel.c:6:9, col:16> col:16 struct ripple_block_shape external-linkage
 //CHECK-NEXT: |-TypedefDecl {{.*}} <col:1, col:36> col:36 referenced ripple_block_t 'struct ripple_block_shape *'
 //CHECK-NEXT: | `-PointerType {{.*}} 'struct ripple_block_shape *'
 //CHECK-NEXT: |   `-RecordType {{.*}} 'struct ripple_block_shape' owns_tag struct
 //CHECK-NEXT: |     `-Record {{.*}} 'ripple_block_shape'
-//CHECK-NEXT: |-FunctionDecl {{.*}} <line:8:1, line:13:1> line:8:6 test_one 'void (int)'
+//CHECK-NEXT: |-FunctionDecl {{.*}} <line:8:1, line:13:1> line:8:6 test_one 'void (int)' external-linkage
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <col:15, col:19> col:19 used x 'int'
 //CHECK-NEXT: | `-CompoundStmt {{.*}} <col:22, line:13:1>
 //CHECK-NEXT: |   |-DeclStmt {{.*}} <line:9:3, col:51>
@@ -153,7 +153,7 @@ void test_five(int x, int y, int z) {
 //CHECK-NEXT: |     |   `-DeclRefExpr {{.*}} <col:8> 'int' lvalue Var {{.*}} 'ripple.iv.seq.exit.val' 'int'
 //CHECK-NEXT: |     |-<<<NULL>>>
 //CHECK-NEXT: |     `-NullStmt {{.*}} <line:12:5>
-//CHECK-NEXT: |-FunctionDecl {{.*}} <line:4:20> col:20 implicit used __builtin_ripple_set_shape 'void *(__size_t, __size_t, __size_t, __size_t, __size_t, __size_t, __size_t, __size_t, __size_t, __size_t, __size_t)' extern
+//CHECK-NEXT: |-FunctionDecl {{.*}} <line:4:20> col:20 implicit used __builtin_ripple_set_shape 'void *(__size_t, __size_t, __size_t, __size_t, __size_t, __size_t, __size_t, __size_t, __size_t, __size_t, __size_t)' extern external-linkage
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <<invalid sloc>> <invalid sloc> '__size_t':'unsigned long'
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <<invalid sloc>> <invalid sloc> '__size_t':'unsigned long'
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <<invalid sloc>> <invalid sloc> '__size_t':'unsigned long'
@@ -167,17 +167,17 @@ void test_five(int x, int y, int z) {
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <<invalid sloc>> <invalid sloc> '__size_t':'unsigned long'
 //CHECK-NEXT: | |-BuiltinAttr {{.*}} <<invalid sloc>> Implicit {{[0-9]+}}
 //CHECK-NEXT: | `-NoThrowAttr {{.*}} <col:20> Implicit
-//CHECK-NEXT: |-FunctionDecl {{.*}} <line:10:1> col:1 implicit used __builtin_ripple_get_index '__size_t (void *, __size_t)' extern
+//CHECK-NEXT: |-FunctionDecl {{.*}} <line:10:1> col:1 implicit used __builtin_ripple_get_index '__size_t (void *, __size_t)' extern external-linkage
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <<invalid sloc>> <invalid sloc> 'void *'
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <<invalid sloc>> <invalid sloc> '__size_t':'unsigned long'
 //CHECK-NEXT: | |-BuiltinAttr {{.*}} <<invalid sloc>> Implicit {{[0-9]+}}
 //CHECK-NEXT: | `-NoThrowAttr {{.*}} <col:1> Implicit
-//CHECK-NEXT: |-FunctionDecl {{.*}} <col:1> col:1 implicit used __builtin_ripple_get_size '__size_t (void *, __size_t)' extern
+//CHECK-NEXT: |-FunctionDecl {{.*}} <col:1> col:1 implicit used __builtin_ripple_get_size '__size_t (void *, __size_t)' extern external-linkage
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <<invalid sloc>> <invalid sloc> 'void *'
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <<invalid sloc>> <invalid sloc> '__size_t':'unsigned long'
 //CHECK-NEXT: | |-BuiltinAttr {{.*}} <<invalid sloc>> Implicit {{[0-9]+}}
 //CHECK-NEXT: | `-NoThrowAttr {{.*}} <col:1> Implicit
-//CHECK-NEXT: |-FunctionDecl {{.*}} <line:15:1, line:21:1> line:15:6 test_two 'void (int, int)'
+//CHECK-NEXT: |-FunctionDecl {{.*}} <line:15:1, line:21:1> line:15:6 test_two 'void (int, int)' external-linkage
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <col:15, col:19> col:19 used x 'int'
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <col:22, col:26> col:26 used y 'int'
 //CHECK-NEXT: | `-CompoundStmt {{.*}} <col:29, line:21:1>
@@ -315,7 +315,7 @@ void test_five(int x, int y, int z) {
 //CHECK-NEXT: |       |-UnaryOperator {{.*}} <col:28, col:29> 'int' postfix '++'
 //CHECK-NEXT: |       | `-DeclRefExpr {{.*}} <col:28> 'int' lvalue Var {{.*}} 'i' 'int'
 //CHECK-NEXT: |       `-NullStmt {{.*}} <line:20:7>
-//CHECK-NEXT: |-FunctionDecl {{.*}} <line:23:1, line:30:1> line:23:6 test_three 'void (int, int)'
+//CHECK-NEXT: |-FunctionDecl {{.*}} <line:23:1, line:30:1> line:23:6 test_three 'void (int, int)' external-linkage
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <col:17, col:21> col:21 used x 'int'
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <col:24, col:28> col:28 used y 'int'
 //CHECK-NEXT: | `-CompoundStmt {{.*}} <col:31, line:30:1>
@@ -618,7 +618,7 @@ void test_five(int x, int y, int z) {
 //CHECK-NEXT: |       |   `-DeclRefExpr {{.*}} <col:10> 'int' lvalue Var {{.*}} 'ripple.iv.seq.exit.val' 'int'
 //CHECK-NEXT: |       |-<<<NULL>>>
 //CHECK-NEXT: |       `-NullStmt {{.*}} <line:29:7>
-//CHECK-NEXT: |-FunctionDecl {{.*}} <line:32:1, line:38:1> line:32:6 test_four 'void (int, int)'
+//CHECK-NEXT: |-FunctionDecl {{.*}} <line:32:1, line:38:1> line:32:6 test_four 'void (int, int)' external-linkage
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <col:16, col:20> col:20 used x 'int'
 //CHECK-NEXT: | |-ParmVarDecl {{.*}} <col:23, col:27> col:27 used y 'int'
 //CHECK-NEXT: | `-CompoundStmt {{.*}} <col:30, line:38:1>
@@ -732,7 +732,7 @@ void test_five(int x, int y, int z) {
 //CHECK-NEXT: |       |   `-DeclRefExpr {{.*}} <col:10> 'int' lvalue Var {{.*}} 'ripple.iv.seq.exit.val' 'int'
 //CHECK-NEXT: |       |-<<<NULL>>>
 //CHECK-NEXT: |       `-NullStmt {{.*}} <line:37:7>
-//CHECK-NEXT: `-FunctionDecl {{.*}} <line:40:1, line:47:1> line:40:6 test_five 'void (int, int, int)'
+//CHECK-NEXT: `-FunctionDecl {{.*}} <line:40:1, line:47:1> line:40:6 test_five 'void (int, int, int)' external-linkage
 //CHECK-NEXT:   |-ParmVarDecl {{.*}} <col:16, col:20> col:20 used x 'int'
 //CHECK-NEXT:   |-ParmVarDecl {{.*}} <col:23, col:27> col:27 used y 'int'
 //CHECK-NEXT:   |-ParmVarDecl {{.*}} <col:30, col:34> col:34 used z 'int'
