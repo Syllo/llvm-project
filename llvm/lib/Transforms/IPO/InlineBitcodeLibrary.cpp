@@ -139,8 +139,10 @@ PreservedAnalyses InlineBitcodeLibraryPass::run(Module &M,
         getBitcodeModule(M.getContext(), BitcodePath);
     if (!BCModule)
       continue;
-    // Collect the names of the ripple library functions in the bitcode
-    DenseSet<StringRef> FunctionsInBitcode;
+    // Collect the names of the ripple library functions in the bitcode.
+    // Use std::string (owned copies) because BCModule is destroyed by
+    // linkInModule below, which would leave StringRefs dangling.
+    SmallVector<std::string> FunctionsInBitcode;
     for (auto &F : *BCModule) {
       if (!F.isDeclaration() && F.getName().starts_with(RipplePrefix)) {
         if (!isInlineViable(F).isSuccess())
@@ -149,7 +151,7 @@ PreservedAnalyses InlineBitcodeLibraryPass::run(Module &M,
               "external ripple function '" + F.getName() +
                   "' is not viable for inlining"));
         else
-          FunctionsInBitcode.insert(F.getName());
+          FunctionsInBitcode.push_back(F.getName().str());
       }
     }
     // Link the bitcode
