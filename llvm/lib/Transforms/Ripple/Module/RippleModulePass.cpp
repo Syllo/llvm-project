@@ -25,7 +25,6 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/PassInstrumentation.h"
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
@@ -58,10 +57,6 @@ PreservedAnalyses RippleModulePass::run(Module &M, ModuleAnalysisManager &MAM) {
   FunctionAnalysisManager &FAM =
       MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
 
-  // Request PassInstrumentation from analysis manager, will use it to run
-  // instrumenting callbacks for the passes later.
-  PassInstrumentation PI = MAM.getResult<PassInstrumentationAnalysis>(M);
-
   Ripple::ProcessingStatus PS;
   DenseSet<AssertingVH<Function>> SpecializationsPendingProcessing;
   DenseSet<AssertingVH<Function>> SpecializationsAvailable;
@@ -78,20 +73,13 @@ PreservedAnalyses RippleModulePass::run(Module &M, ModuleAnalysisManager &MAM) {
   auto runRipplePassOnFunction = [&](Function *F) -> void {
     LLVM_DEBUG(dbgs() << "Running ripple module pass on " << F->getName()
                       << "\n");
-    // Check the PassInstrumentation's BeforePass callbacks before running
-    // the pass, skip its execution completely if asked to (callback returns
-    // false).
-    if (!PI.runBeforePass<Function>(FPM, *F))
-      return;
-
+    // PassInstrumentation callbacks are driven by FPM for each contained pass.
     PreservedAnalyses PassPA = FPM.run(*F, FAM);
 
     // We know that the function pass couldn't have invalidated any other
     // function's analyses (that's the contract of a function pass), so
     // directly handle the function analysis manager's invalidation here.
     FAM.invalidate(*F, PassPA);
-
-    PI.runAfterPass(FPM, F, PassPA);
 
     // Then intersect the preserved set so that invalidation of module
     // analyses will eventually occur when the module pass completes.
@@ -102,9 +90,10 @@ PreservedAnalyses RippleModulePass::run(Module &M, ModuleAnalysisManager &MAM) {
   PreProcessPasses.addPass(RippleFPExtFPTruncRevertPass());
   for (auto &F : M) {
     if (!F.isDeclaration()) {
+      // PassInstrumentation callbacks are driven by PreProcessPasses for each
+      // contained pass.
       PreservedAnalyses PassPA = PreProcessPasses.run(F, FAM);
       FAM.invalidate(F, PassPA);
-      PI.runAfterPass(PreProcessPasses, F, PassPA);
       PA.intersect(std::move(PassPA));
     }
   }
@@ -272,9 +261,10 @@ PreservedAnalyses RippleModulePass::run(Module &M, ModuleAnalysisManager &MAM) {
   for (auto &F : M) {
     Ripple::eraseFunctionSpecializationRelatedMetadata(F);
     if (!F.isDeclaration()) {
+      // PassInstrumentation callbacks are driven by PostProcessPasses for each
+      // contained pass.
       PreservedAnalyses PassPA = PostProcessPasses.run(F, FAM);
       FAM.invalidate(F, PassPA);
-      PI.runAfterPass(PostProcessPasses, F, PassPA);
       PA.intersect(std::move(PassPA));
     }
   }
