@@ -492,6 +492,31 @@ RValue CodeGenFunction::emitRippleBuiltin(const CallExpr *E,
 
     /// Reshape-specific Builtins End
     /// --------------------------------------------------------------------------------------------
+    /// Reinterp-specific Builtins Begin
+
+#define RIPPLE_REINTERP_CASE(Suffix)                                         \
+  CASE_RIPPLE_ALL_INT_BUILTIN(reinterp_##Suffix) {                           \
+    Value *BlockShape = EmitScalarExpr(E->getArg(0));                        \
+    Value *FromEl = EmitScalarExpr(E->getArg(1));                            \
+    llvm::Function *F = CGM.getIntrinsic(                                    \
+        llvm::Intrinsic::ripple_reinterp_##Suffix, FromEl->getType());       \
+    llvm::Value *Result = Builder.CreateCall(F, {BlockShape, FromEl});       \
+    return RValue::get(Result);                                             \
+  }
+
+    RIPPLE_REINTERP_CASE(i8)
+    RIPPLE_REINTERP_CASE(u8)
+    RIPPLE_REINTERP_CASE(i16)
+    RIPPLE_REINTERP_CASE(u16)
+    RIPPLE_REINTERP_CASE(i32)
+    RIPPLE_REINTERP_CASE(u32)
+    RIPPLE_REINTERP_CASE(i64)
+    RIPPLE_REINTERP_CASE(u64)
+
+#undef RIPPLE_REINTERP_CASE
+
+    /// Reinterp-specific Builtins End
+    /// --------------------------------------------------------------------------------------------
     /// Slicing-specific Builtins Begin
 
 #define RIPPLE_SLICE_MAX_ARGS 11
