@@ -52,8 +52,7 @@ PreservedAnalyses RippleFPExtFPTruncPass::run(Function &F,
         auto IIt = I.getIterator();
         ReplaceInstWithValue(IIt, NewInst);
       }
-    }
-    if (auto *FPTrunc = dyn_cast<FPTruncInst>(&I)) {
+    } else if (auto *FPTrunc = dyn_cast<FPTruncInst>(&I)) {
       if (FPTrunc->getType()->getScalarType()->isBFloatTy()) {
         IRBuilder<> Builder(FPTrunc);
         auto *NewInst = Builder.CreateIntrinsic(
