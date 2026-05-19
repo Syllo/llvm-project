@@ -1237,6 +1237,12 @@ public:
   /// @brief Load declarations from libraries available as bitcode
   void loadRippleLibDeclarations();
 
+  /// @brief Register every function in the current module that carries the
+  /// "ripple-vector-candidate" string function attribute as a replacement
+  /// candidate. This is the eventual replacement for
+  /// loadRippleLibDeclarations().
+  void registerInModuleRippleCandidates();
+
   /// @brief Analyze the TensorShape from point of view of the target machine.
   /// If we know that the back end is unable to support proposed shape fail
   /// verification.
