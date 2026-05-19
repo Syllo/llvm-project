@@ -2037,8 +2037,14 @@ PreservedAnalyses Ripple::run() {
     return cleanupRippleSingleLane(Status);
   };
 
-  // Look for external Ripple declarations
-  // This is required by propagateShapes and checkRippleSemantics
+  // Register Ripple replacement candidates that live in the current module
+  // (functions carrying the "ripple-vector-candidate" string function
+  // attribute). This is required by propagateShapes and checkRippleSemantics.
+  registerInModuleRippleCandidates();
+
+  // TODO: Remove this once the ripple headers have been migrated to use
+  // the "ripple-vector-candidate" function attribute. Until then,
+  // -ripple-lib= still works for backward compatibility.
   loadRippleLibDeclarations();
 
   // Propagate vector shapes from instructions to users
@@ -9033,6 +9039,22 @@ void Ripple::registerExternalRippleFunction(
   // The function has not already been registered
   if (Lookup == ExternalRippleFunctions.end())
     ExternalRippleFunctions.push_back(std::move(ExternFun));
+}
+
+void Ripple::registerInModuleRippleCandidates() {
+  Module &Mod = *F.getParent();
+  for (Function &Fun : Mod) {
+    if (!Fun.hasFnAttribute("ripple-vector-candidate"))
+      continue;
+    // The function name still encodes signature/options for
+    // ExternalRippleFunction::createExternalFunction. The naming-convention
+    // requirement may be relaxed in a later patch.
+    if (!ExternalRippleFunction::usesRippleNamingConvention(&Fun))
+      continue;
+    LLVM_DEBUG(dbgs() << "In-module ripple candidate: " << Fun << "\n");
+    registerExternalRippleFunction(
+        ExternalRippleFunction::createExternalFunction(&Fun, tensorRank()));
+  }
 }
 
 void Ripple::loadRippleLibDeclarations() {
