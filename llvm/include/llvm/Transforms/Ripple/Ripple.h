@@ -656,14 +656,15 @@ private:
   Value *genUnstructuredLoad(LoadInst *Load, Value *Address,
                              const TensorShape &ToShape);
 
-  /// @brief Replace a masked gather with a contiguous vector load followed
-  /// by a shuffle when the accessed addresses fit within a bounded
-  /// window.
-  /// @param Load the original unstructured load instruction to be replaced by
-  /// load and shuffle from @p Address
-  /// @param ToShape the expected shape of the input tensor type.
-  Value *canLoadWindowAndShuffle(LoadInst *Load, Value *Address,
-                                 const TensorShape &ToShape);
+  /// @brief Emit a contiguous vector load followed by a shuffle when the
+  /// accessed addresses fit within a bounded window. Returns the shuffled
+  /// result (with its Ripple shape already set), or nullptr if the
+  /// optimization does not apply.
+  /// @param Load the original load instruction whose alignment is used as
+  ///        a template
+  /// @param ToShape the expected shape of the output tensor type.
+  Value *genWindowLoadShuffle(LoadInst *Load, Value *Address,
+                              const TensorShape &ToShape);
 
   /// @brief Applies mask @p mask to @p NdLoadStore, a n-d load or store.
   /// If \pNdLoadStore is already masked, use the and-combination of its
