@@ -85,14 +85,15 @@ void ew_larger(size_t size, _Float16 *input, _Float16 *output) {
 
 
 // CHECK-LABEL: ew_multidim
-// CHECK: br label %[[FOR_BODY:[a-zA-Z0-9_.]+]]
+// CHECK: br i1 %{{.*}}, label %[[FOR_BODY:[a-zA-Z0-9_.]+]], label %[[FOR_END:[a-zA-Z0-9_.]+]]
 // CHECK: [[FOR_BODY]]:
-// CHECK: br i1 %{{.*}}, label %[[FOR_BODY]], label %[[FOR_END:[a-zA-Z0-9_.]+]]
+// CHECK: br i1 %{{.*}}, label %[[FOR_BODY]], label %[[FOR_END]]
 // CHECK: [[FOR_END]]:
-// CHECK: %[[Slice1:[a-zA-Z0-9_.]+]] = shufflevector <128 x half> %[[Load:[a-zA-Z0-9_.]+]]
+// CHECK: %[[Load:[a-zA-Z0-9_.]+]] ={{.*}}load
+// CHECK-NEXT: %[[Slice1:[a-zA-Z0-9_.]+]] = shufflevector <128 x half> %[[Load]], <128 x half> poison, <64 x i32>
 // CHECK-NEXT: store <64 x half> %[[Slice1]], ptr %[[ArgOnStack1:[a-zA-Z0-9_.]+]]
 // CHECK-NEXT: %[[LoadRet1:[a-zA-Z0-9_.]+]] = tail call <64 x half> @ripple_ew_pure_cosf16(ptr nonnull %[[ArgOnStack1]])
-// CHECK-NEXT: %[[Slice2:[a-zA-Z0-9_.]+]] = shufflevector <128 x half> %[[Load]]
+// CHECK-NEXT: %[[Slice2:[a-zA-Z0-9_.]+]] = shufflevector <128 x half> %[[Load]], <128 x half> poison, <64 x i32>
 // CHECK-NEXT: store <64 x half> %[[Slice2]], ptr %[[ArgOnStack2:[a-zA-Z0-9_.]+]]
 // CHECK-NEXT: %[[LoadRet2:[a-zA-Z0-9_.]+]] = tail call <64 x half> @ripple_ew_pure_cosf16(ptr nonnull %[[ArgOnStack2]])
 // CHECK-NEXT: %[[FuseFinal:[a-zA-Z0-9_.]+]] = shufflevector <64 x half> %[[LoadRet1]], <64 x half> %[[LoadRet2]]
@@ -104,8 +105,11 @@ void ew_multidim(size_t size, _Float16 *input, _Float16 *output) {
   size_t BlockSizeX = ripple_get_block_size(BS, 0);
   size_t BlockSizeY = ripple_get_block_size(BS, 1);
   size_t i;
-  for (i = 0; i + BlockSizeX + BlockSizeY < size; i += BlockSizeX + BlockSizeY)
-    output[i + BlockX + BlockY] = cosf16(input[i + BlockX + BlockY]);
-  if (i + BlockX + BlockY < size)
-    output[i + BlockX + BlockY] = cosf16(input[i + BlockX + BlockY]);
+  for (i = 0; i + BlockSizeX * BlockSizeY < size;
+       i += BlockSizeX * BlockSizeY)
+    output[i + BlockY * BlockSizeX + BlockX] =
+        cosf16(input[i + BlockY * BlockSizeX + BlockX]);
+  if (i + BlockY * BlockSizeX + BlockX < size)
+    output[i + BlockY * BlockSizeX + BlockX] =
+        cosf16(input[i + BlockY * BlockSizeX + BlockX]);
 }

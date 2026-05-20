@@ -961,33 +961,9 @@ Value *NDLoadStoreFactory::genUnstructuredLoad(LoadInst *Load, Value *Address,
   return GatheredVal;
 }
 
-static Value *getSplatScalar(Value *V) {
-  auto *Shuffle = dyn_cast<ShuffleVectorInst>(V);
-  if (!Shuffle || !Shuffle->isZeroEltSplat()) {
-    return nullptr;
-  }
-
-  auto *Insert = dyn_cast<InsertElementInst>(Shuffle->getOperand(0));
-  if (!Insert) {
-    return nullptr;
-  }
-
-  auto *Idx = dyn_cast<ConstantInt>(Insert->getOperand(2));
-  if (!Idx || !Idx->isZero()) {
-    return nullptr;
-  }
-
-  Value *Scalar = Insert->getOperand(1);
-  if (!Scalar->getType()->isPointerTy()) {
-    return nullptr;
-  }
-
-  return Scalar;
-}
-
-Value *NDLoadStoreFactory::canLoadWindowAndShuffle(LoadInst *Load,
-                                                   Value *Address,
-                                                   const TensorShape &ToShape) {
+Value *NDLoadStoreFactory::genWindowLoadShuffle(LoadInst *Load, Value *Address,
+                                                const TensorShape &ToShape) {
+  IrBuilder.SetInsertPoint(Load);
   auto *GEP = dyn_cast<GetElementPtrInst>(Address);
   if (!GEP || GEP->getNumIndices() != 1) {
     return nullptr;
@@ -998,7 +974,7 @@ Value *NDLoadStoreFactory::canLoadWindowAndShuffle(LoadInst *Load,
   SmallVector<int64_t> Indices;
   if (auto *CDV = dyn_cast<ConstantDataVector>(Index)) {
     for (unsigned Idx = 0; Idx < CDV->getNumElements(); ++Idx) {
-      Indices.push_back(CDV->getElementAsInteger(Idx));
+      Indices.push_back(CDV->getElementAsAPInt(Idx).getSExtValue());
     }
   } else if (auto *CV = dyn_cast<ConstantVector>(Index)) {
     for (unsigned Idx = 0; Idx < CV->getNumOperands(); ++Idx) {
@@ -1020,19 +996,19 @@ Value *NDLoadStoreFactory::canLoadWindowAndShuffle(LoadInst *Load,
   int64_t Min = *llvm::min_element(Indices);
   int64_t Max = *llvm::max_element(Indices);
 
-  if ((Max - Min + 1) > NumElementsToLoad) {
+  if (static_cast<uint64_t>(Max - Min) >= NumElementsToLoad)
     return nullptr;
-  }
+  unsigned WindowSize = static_cast<unsigned>(Max - Min) + 1;
 
   // Reconstruct a scalar window base pointer at the minimum index.
-  // Vector loads require a scalar `ptr` base, not a `<N x ptr>` vector.
-  // If the original GEP base has already been vectorized/splatted.
-  // i.e if base is %.splat = vector(%A) which results in <8 x ptr>
-  // [%A, %A, %A, %A, %A, %A, %A, %A].
-  // Then recover that scalar pointer; otherwise, return
+  // The vector load needs a scalar `ptr` base, so use the GEP's pointer
+  // operand directly when it is already scalar in IR (e.g. a loop GEP
+  // like `getelementptr T, ptr %input, i64 %iv`). When the operand is a
+  // splatted `<N x ptr>` (Ripple's broadcast of a scalar pointer), peel
+  // the splat back off via llvm::getSplatValue.
   Value *BasePtr = GEP->getPointerOperand();
   if (!BasePtr->getType()->isPointerTy()) {
-    BasePtr = getSplatScalar(BasePtr);
+    BasePtr = llvm::getSplatValue(BasePtr);
     if (!BasePtr) {
       return nullptr;
     }
@@ -1045,22 +1021,41 @@ Value *NDLoadStoreFactory::canLoadWindowAndShuffle(LoadInst *Load,
   Value *MinIndex = ConstantInt::get(IndexElementTy, Min);
   Value *WindowBase =
       IrBuilder.CreateGEP(GEP->getSourceElementType(), BasePtr, MinIndex);
+  MyRipple.setRippleShape(WindowBase, MyRipple.getRippleShape(BasePtr));
 
   // Load the contiguous window as a vector starting from the minimum address.
   Type *ElementTy = Load->getType();
   Type *VecTy =
       VectorType::get(ElementTy, NumElementsToLoad, /*scalable=*/false);
-  LoadInst *WindowLoad = IrBuilder.CreateLoad(VecTy, WindowBase);
-  WindowLoad->setAlignment(Load->getAlign());
+  Value *WindowLoad;
+  if (WindowSize == NumElementsToLoad) {
+    LoadInst *FullLoad = IrBuilder.CreateLoad(VecTy, WindowBase);
+    FullLoad->setAlignment(Load->getAlign());
+    WindowLoad = FullLoad;
+  } else {
+    SmallVector<Constant *> MaskBits;
+    Type *I1Ty = Type::getInt1Ty(IrBuilder.getContext());
+    for (uint64_t Lane = 0; Lane < NumElementsToLoad; ++Lane) {
+      MaskBits.push_back(ConstantInt::get(I1Ty, Lane < WindowSize));
+    }
+    Value *Mask = ConstantVector::get(MaskBits);
+    WindowLoad = IrBuilder.CreateMaskedLoad(VecTy, WindowBase, Load->getAlign(),
+                                            Mask, PoisonValue::get(VecTy));
+  }
+  MyRipple.setRippleShape(WindowLoad, ToShape);
 
   // Shuffle the contiguous window back into the original irregular access
-  // order.
+  // order. Lanes beyond `WindowSize` are masked-off / out-of-bounds and the
+  // shuffle mask never references them.
   SmallVector<int> ShuffleMask;
   for (int64_t Idx : Indices) {
     ShuffleMask.push_back(static_cast<int>(Idx - Min));
   }
   Value *Poison = PoisonValue::get(VecTy);
-  return IrBuilder.CreateShuffleVector(WindowLoad, Poison, ShuffleMask);
+  Value *Shuffled =
+      IrBuilder.CreateShuffleVector(WindowLoad, Poison, ShuffleMask);
+  MyRipple.setRippleShape(Shuffled, ToShape);
+  return Shuffled;
 }
 
 Value *NDLoadStoreFactory::genLoadNoSplat(LoadInst *Load,
@@ -1088,8 +1083,7 @@ Value *NDLoadStoreFactory::genLoadNoSplat(LoadInst *Load,
     VectorLoad->setAlignment(Load->getAlign());
     return VectorLoad;
   } else if (Value *shuffleLoad =
-                 canLoadWindowAndShuffle(Load, DefaultAddress, ToShape)) {
-    MyRipple.setRippleShape(shuffleLoad, ToShape);
+                 genWindowLoadShuffle(Load, DefaultAddress, ToShape)) {
     shuffleLoad->takeName(Load);
     return shuffleLoad;
   } else {
