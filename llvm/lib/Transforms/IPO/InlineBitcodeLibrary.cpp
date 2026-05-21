@@ -139,6 +139,14 @@ PreservedAnalyses InlineBitcodeLibraryPass::run(Module &M,
         getBitcodeModule(M.getContext(), BitcodePath);
     if (!BCModule)
       continue;
+    if (BCModule->getDataLayout() != M.getDataLayout()) {
+      M.getContext().diagnose(DiagnosticInfoInlineBitcodeLib(
+          DiagnosticSeverity::DS_Warning,
+          "the Ripple external library datalayout mismatches with the current "
+          "target datalayout; ignoring '" +
+              BitcodePath + "'"));
+      continue;
+    }
     // Collect the names of the ripple library functions in the bitcode.
     // Use std::string (owned copies) because BCModule is destroyed by
     // linkInModule below, which would leave StringRefs dangling.

@@ -29,8 +29,6 @@
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/MemoryLocation.h"
 #include "llvm/Analysis/VectorUtils.h"
-#include "llvm/AsmParser/Parser.h"
-#include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/CodeGen/ValueTypes.h"
@@ -70,16 +68,12 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/GenericDomTree.h"
-#include "llvm/Support/IOSandbox.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/ModRef.h"
 #include "llvm/Support/Regex.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TypeSize.h"
-#include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -2144,11 +2138,6 @@ PreservedAnalyses Ripple::run() {
   // (functions carrying the "ripple-vector-candidate" string function
   // attribute). This is required by propagateShapes and checkRippleSemantics.
   registerInModuleRippleCandidates();
-
-  // TODO: Remove this once the ripple headers have been migrated to use
-  // the "ripple-vector-candidate" function attribute. Until then,
-  // -ripple-lib= still works for backward compatibility.
-  loadRippleLibDeclarations();
 
   // Propagate vector shapes from instructions to users
   bool WaitingForSpecialization = false;
@@ -9221,105 +9210,6 @@ void Ripple::registerInModuleRippleCandidates() {
     LLVM_DEBUG(dbgs() << "In-module ripple candidate: " << Fun << "\n");
     registerExternalRippleFunction(
         ExternalRippleFunction::createExternalFunction(&Fun, tensorRank()));
-  }
-}
-
-void Ripple::loadRippleLibDeclarations() {
-  LLVMContext &Context = F.getContext();
-  auto &ThisModule = *F.getParent();
-  // TODO: Don't load libraries from the ripple pass!
-  auto BypassSandbox = sys::sandbox::scopedDisable();
-  auto &RealFS = *vfs::getRealFileSystem();
-  for (auto &Path : llvm::RippleCL::RippleLibs) {
-    if (Path.empty())
-      continue;
-
-    LLVM_DEBUG(dbgs() << "Loading ripple lib: " << Path << "\n");
-    auto BufferOrError = RealFS.getBufferForFile(Path);
-    if (!BufferOrError) {
-      // Report a warning and continue to next path
-      auto ErrCode = BufferOrError.getError();
-      Context.diagnose(
-          DiagnosticInfoRipple(DiagnosticSeverity::DS_Warning,
-                               "failed to load external Ripple library '" +
-                                   Path + "': " + ErrCode.message()));
-      continue;
-    }
-    // Parse the bitcode file
-    auto ModuleOrErr = getLazyBitcodeModule(
-        BufferOrError.get()->getMemBufferRef(), Context, true);
-    SMDiagnostic ParseDiag;
-    auto AssemblyModule = parseAssembly(BufferOrError.get()->getMemBufferRef(),
-                                        ParseDiag, Context);
-    const Module *OtherModule = nullptr;
-    if (ModuleOrErr) {
-      OtherModule = ModuleOrErr.get().get();
-    } else if (AssemblyModule) {
-      // We successfully loaded an assembly module, no need to report the
-      // failure of loading the library
-      consumeError(ModuleOrErr.takeError());
-      OtherModule = AssemblyModule.get();
-    } else {
-      // Report a warning and continue
-      std::string ErrMsg;
-      handleAllErrors(ModuleOrErr.takeError(),
-                      [&](const StringError &E) { ErrMsg = E.getMessage(); });
-      Context.diagnose(DiagnosticInfoRipple(
-          DiagnosticSeverity::DS_Warning,
-          "the Ripple external library '" + Path +
-              "' is neither a module nor LLVM bitcode. "
-              "Module load error: " +
-              ErrMsg + "; Bitcode load error: " + ParseDiag.getMessage()));
-      continue;
-    }
-
-    // The targets must match, otherwise we have a semantics problem
-    if (OtherModule->getDataLayout() != ThisModule.getDataLayout()) {
-      Context.diagnose(DiagnosticInfoRipple(
-          DiagnosticSeverity::DS_Warning,
-          "the Ripple external library datalayout mismatches with the current "
-          "target datalayout; ignoring '" +
-              Path + "'"));
-      continue;
-    }
-
-    // Now load the ripple functions declarations
-    for (const Function &Fun : *OtherModule)
-      if (ExternalRippleFunction::usesRippleNamingConvention(&Fun)) {
-        LLVM_DEBUG(dbgs() << "External module ripple function: " << Fun
-                          << "\n");
-        // Duplicate the declaration in this module
-        auto ExistingF = ThisModule.getOrInsertFunction(
-            Fun.getName(), Fun.getFunctionType(), Fun.getAttributes());
-        if (Function *ExistingFCallee =
-                dyn_cast<Function>(ExistingF.getCallee())) {
-
-          if (ExistingFCallee->getFunctionType() == Fun.getFunctionType()) {
-            LLVM_DEBUG(dbgs() << "Cloned function declaration"
-                              << *ExistingFCallee << "\n");
-            registerExternalRippleFunction(
-                ExternalRippleFunction::createExternalFunction(ExistingFCallee,
-                                                               tensorRank()));
-          } else {
-            std::string ErrStr;
-            raw_string_ostream OSS(ErrStr);
-            OSS << "A Ripple symbol with name \"" << Fun.getName()
-                << "\" is already defined in the current module with type \""
-                << *ExistingFCallee->getFunctionType()
-                << "\" and cannot be imported with type \""
-                << *Fun.getFunctionType() << "\" from the external library '"
-                << Path << "'";
-            OSS.flush();
-            Context.diagnose(
-                DiagnosticInfoRipple(DiagnosticSeverity::DS_Warning, ErrStr));
-            DiagnosticLocation DL(ExistingFCallee->getSubprogram());
-            if (DL.isValid())
-              Context.diagnose(DiagnosticInfoRippleWithLoc(
-                  DiagnosticSeverity::DS_Note, *ExistingFCallee, DL,
-                  "function declared here"));
-          }
-        }
-      }
   }
 }
 

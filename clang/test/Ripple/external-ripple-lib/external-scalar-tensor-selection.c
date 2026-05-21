@@ -1,48 +1,29 @@
 // REQUIRES: aarch64-registered-target
-// RUN: %clang -ffreestanding --target=aarch64-unknown-linux-gnu -S -O2 -emit-llvm %s -DCOMPILE_LIB=1 -o %t.ll
-// RUN: %clang -ffreestanding --target=aarch64-unknown-linux-gnu -S -O2 -emit-llvm -fenable-ripple -fripple-lib=%t.ll -mllvm -ripple-disable-link -o - %s | FileCheck %s
+// RUN: %clang --target=aarch64-unknown-linux-gnu -S -O2 -emit-llvm -fenable-ripple -o - %s | FileCheck %s
 
-#ifdef COMPILE_LIB
+#include "../ripple_test.h"
 
 typedef float v4f32 __attribute__((__vector_size__(16)))
 __attribute__((aligned(16)));
 typedef float v16f32 __attribute__((__vector_size__(64)))
 __attribute__((aligned(16)));
 
-extern v4f32 ripple_scalar_tensor1(int x) {
-  v4f32 v = {(float)x, (float)x * 2.f};
-  return v;
-}
-
-extern v4f32 ripple_uniform_t1x4f32_scalar_tensor2(float a, int b) {
-  v4f32 v = {a, (float)b};
-  return v;
-}
-
-extern v4f32 ripple_ret_t1x4f32_scalar_tensor3(float val) {
-  v4f32 v = {val, val * 2.f};
-  return v;
-}
-
-extern v16f32 ripple_ret_t4x4f32_scalar_tensor4(int a, float b, int c) {
-  v16f32 v = {(float)a, b, (float)c};
-  return v;
-}
-
-extern v16f32 ripple_pure_uniform_t4x4f32_scalar_tensor5(double d) {
-  v16f32 v = {(float)d, (float)d * 0.5f};
-  return v;
-}
-
-#else
-
-#include "../ripple_test.h"
-
 extern float scalar_tensor1(ripple_block_t BS, int x);
 extern float scalar_tensor2(ripple_block_t BS, float a, int b);
 extern float scalar_tensor3(ripple_block_t BS, float val);
 extern float scalar_tensor4(ripple_block_t BS, int a, float b, int c);
 extern float scalar_tensor5(ripple_block_t BS, double d);
+
+extern __attribute__((ripple_vector_candidate)) v4f32
+ripple_scalar_tensor1(int x);
+extern __attribute__((ripple_vector_candidate)) v4f32
+ripple_uniform_t1x4f32_scalar_tensor2(float a, int b);
+extern __attribute__((ripple_vector_candidate)) v4f32
+ripple_ret_t1x4f32_scalar_tensor3(float val);
+extern __attribute__((ripple_vector_candidate)) v16f32
+ripple_ret_t4x4f32_scalar_tensor4(int a, float b, int c);
+extern __attribute__((ripple_vector_candidate)) v16f32
+ripple_pure_uniform_t4x4f32_scalar_tensor5(double d);
 
 // CHECK-LABEL: define dso_local void @test_scalar_tensor_candidates(
 // CHECK-NEXT:  [[ENTRY:.*:]]
@@ -81,5 +62,3 @@ void test_scalar_tensor_candidates(float *restrict f, float *restrict f2, float 
   if (TwodRID < 10)
     f[TwodRID] += scalar_tensor5(BS, 9.81);
 }
-
-#endif // COMPILE_LIB

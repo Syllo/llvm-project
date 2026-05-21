@@ -1234,9 +1234,6 @@ public:
   /// TargetLibraryInfo &TLI)
   StringRef intrinsicToLibName(const IntrinsicInst *II) const;
 
-  /// @brief Load declarations from libraries available as bitcode
-  void loadRippleLibDeclarations();
-
   /// @brief Register every function in the current module that carries the
   /// "ripple-vector-candidate" string function attribute as a replacement
   /// candidate. This is the eventual replacement for

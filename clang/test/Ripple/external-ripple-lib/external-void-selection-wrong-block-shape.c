@@ -1,21 +1,21 @@
 // REQUIRES: aarch64-registered-target
-// RUN: %clang -ffreestanding --target=aarch64-unknown-linux-gnu -S -O2 -emit-llvm %s -DCOMPILE_LIB=1 -o %t.ll
-// RUN: %clang -ffreestanding --target=aarch64-unknown-linux-gnu -g -S -O2 -emit-llvm -fenable-ripple -fripple-lib=%t.ll -mllvm -ripple-disable-link %s -ferror-limit=0 2>%t.err; FileCheck %s --input-file=%t.err
-
-#ifdef COMPILE_LIB
+// RUN: %clang --target=aarch64-unknown-linux-gnu -g -S -O2 -emit-llvm -fenable-ripple %s -ferror-limit=0 2>%t.err; FileCheck %s --input-file=%t.err
 
 typedef float v4f32 __attribute__((__vector_size__(16)))
 __attribute__((aligned(16)));
 typedef float v16f32 __attribute__((__vector_size__(64)))
 __attribute__((aligned(16)));
 
-extern v4f32 ripple_externf1(void) { v4f32 v = {10.f, 12.f}; return v; }
-extern v4f32 ripple_uniform_t1x4f32_externf2(void) { v4f32 v = {10.f, 12.f}; return v; }
-extern v4f32 ripple_ret_t1x4f32_externf3(void) { v4f32 v = {10.f, 12.f}; return v; }
-extern v16f32 ripple_ret_t4x4f32_externf4(void) { v16f32 v = {8.f, 1.f}; return v; }
-extern v16f32 ripple_pure_uniform_t4x4f32_externf5(void) { v16f32 v = {8.f, 1.f}; return v; }
-
-#else
+extern __attribute__((ripple_vector_candidate)) v4f32
+ripple_externf1(void);
+extern __attribute__((ripple_vector_candidate)) v4f32
+ripple_uniform_t1x4f32_externf2(void);
+extern __attribute__((ripple_vector_candidate)) v4f32
+ripple_ret_t1x4f32_externf3(void);
+extern __attribute__((ripple_vector_candidate)) v16f32
+ripple_ret_t4x4f32_externf4(void);
+extern __attribute__((ripple_vector_candidate)) v16f32
+ripple_pure_uniform_t4x4f32_externf5(void);
 
 #include "../ripple_test.h"
 
@@ -201,5 +201,3 @@ void test6(float *restrict f, float *restrict f2, float *restrict f3) {
 // CHECK-NEXT:    35 |   f[RID] = externf1(WrongBS);
 // CHECK:      external-void-selection-wrong-block-shape.c:29:28: note: using this block with shape Tensor[8][2]
 // CHECK-NEXT:    29 |   ripple_block_t WrongBS = ripple_set_block_shape(0, 8, 2);
-
-#endif // COMPILE_LIB

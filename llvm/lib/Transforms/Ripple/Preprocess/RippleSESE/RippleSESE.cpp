@@ -141,7 +141,6 @@ getInstructionToRippleShape(
   R.initFuncRPOT();
 
   R.registerInModuleRippleCandidates();
-  R.loadRippleLibDeclarations();
 
   bool WaitingForSpecialization = false;
   if (Error E = R.propagateShapes(WaitingForSpecialization))

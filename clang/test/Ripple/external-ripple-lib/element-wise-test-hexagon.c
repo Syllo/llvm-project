@@ -1,6 +1,5 @@
 // REQUIRES: hexagon-registered-target
-// RUN: %clang --target=hexagon-unknown-elf -c -O2 -fenable-ripple -emit-llvm %S/external_library.c -o %t.rlib.bc
-// RUN: %clang --target=hexagon-unknown-elf -c -O2 -fenable-ripple -fripple-lib=%t.rlib.bc -emit-llvm -S -o - -mllvm -ripple-disable-link %s | FileCheck %s
+// RUN: %clang --target=hexagon-unknown-elf -c -O2 -fenable-ripple -emit-llvm -S -o - %s | FileCheck %s
 
 #include "external_library.h"
 #include "../ripple_test.h"
