@@ -1,25 +1,25 @@
 // REQUIRES: target=hexagon{{.*}} || target-aarch64 || target-x86_64
-// RUN: %clang -ffreestanding -g -S -O2 -emit-llvm %s -DCOMPILE_LIB=1 -o %t.ll
-// RUN: %clang -ffreestanding -fenable-ripple -fripple-lib=%t.ll -S -emit-llvm -O2 -ffast-math %s -o %t -Rpass=ripple -mllvm -ripple-disable-link 2> %t.err; FileCheck %s --input-file=%t.err --check-prefix=SUCCESS
-// RUN: %clang -ffreestanding -fenable-ripple -fripple-lib=%t.ll -S -emit-llvm -O2 -ffast-math %s -o %t -Rpass-missed=ripple -mllvm -ripple-disable-link 2> %t.err; FileCheck %s --input-file=%t.err --check-prefix=FAILURE
+// RUN: %clang -fenable-ripple -S -emit-llvm -O2 -ffast-math %s -o %t -Rpass=ripple 2> %t.err; FileCheck %s --input-file=%t.err --check-prefix=SUCCESS
+// RUN: %clang -fenable-ripple -S -emit-llvm -O2 -ffast-math %s -o %t -Rpass-missed=ripple 2> %t.err; FileCheck %s --input-file=%t.err --check-prefix=FAILURE
 // Checks that the remarks are generated on shape propagation failure
-#ifdef COMPILE_LIB
+
 
 
 typedef float f32t4 __attribute__((__vector_size__(16)))
 __attribute__((aligned(16)));
 
-extern inline f32t4 ripple_externf_exact(f32t4 A) { return (A / 2.f) + 42.f; }
-extern inline f32t4 ripple_ew_pure_externf_ew(f32t4 A, f32t4 B) {
-  return A + B / 2.f + 1.f;
-}
+extern __attribute__((ripple_vector_candidate, const)) f32t4
+ripple_externf_exact(f32t4 A);
+extern __attribute__((ripple_vector_candidate)) f32t4
+ripple_ew_pure_externf_ew(f32t4 A, f32t4 B);
 
-#else
 
 #include "ripple_test.h"
 
 float externf_ew(float, float);
 float externf_exact(float);
+
+
 __attribute__((noinline)) float promotable(float x, float y) {
   return x * x + y;
 }
@@ -49,7 +49,6 @@ void f(float *a, float *b, float *c, int *d) {
       a[ripple_id(BS, 0) + ripple_id(BS3, 1)] - c[ripple_id(BS, 0)];
 }
 
-#endif
 
 // SUCCESS:      optimization-remarks-on-failure.c:23:1: remark: function 'promotable' specialized for tensor operands {shape: (Tensor[32], Tensor[32]) -> Tensor[32]} [-Rpass=ripple]
 // SUCCESS-NEXT:    23 | __attribute__((noinline)) float promotable(float x, float y) {

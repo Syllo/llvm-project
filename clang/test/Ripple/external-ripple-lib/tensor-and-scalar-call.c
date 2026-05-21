@@ -1,25 +1,16 @@
 // REQUIRES: target-x86_64 || target=hexagon{{.*}}
-// RUN: %clang -ffreestanding -g -c -O2 -emit-llvm %s -DCOMPILE_LIB=1 -o %t.bc
-// RUN: %clang -ffreestanding -g -O2 -fenable-ripple -fripple-lib=%t.bc -emit-llvm -S %s -o - -mllvm -ripple-disable-link | FileCheck %s
-
-#ifdef COMPILE_LIB
-
-
-
-typedef float f32t32 __attribute__((__vector_size__(128)))
-__attribute__((aligned(128)));
-
-extern inline f32t32 ripple_pure_ew_add(f32t32 A) {
-  return (A + 2.f);
-}
-
-#else
+// RUN: %clang -g -O2 -fenable-ripple -emit-llvm -S %s -o - | FileCheck %s
 
 #include "../ripple_test.h"
 
 #define VEC 0
 
+typedef float f32t32 __attribute__((__vector_size__(128)))
+__attribute__((aligned(128)));
+
 extern float add(float);
+extern __attribute__((ripple_vector_candidate)) f32t32
+ripple_pure_ew_add(f32t32 A);
 
 // CHECK: call{{.*}}@ripple_pure_ew_add(
 // CHECK: call float @add(float
@@ -31,5 +22,3 @@ void check(size_t size, float *input, float *output) {
   size_t BlockSizeX = ripple_get_block_size(BS, 0);
   output[0] = ripple_reduceadd(0x1, add(input[BlockX])) + add(42.f);;
 }
-
-#endif

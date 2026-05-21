@@ -6,7 +6,7 @@
 
 #define VEC 0
 
-// CHECK: the Ripple external library '{{.*}}/clang/test/Ripple/external-ripple-lib/wrong-format-lib' is neither a module nor LLVM bitcode. Module load error: Invalid bitcode signature; Bitcode load error: expected top-level entity
+// CHECK: error: parsing bitcode file: Invalid bitcode signature
 
 void test(float *f) {
   ripple_block_t BS = ripple_set_block_shape(VEC, 64);

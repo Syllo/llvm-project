@@ -1,6 +1,5 @@
-// REQUIRES: target-x86_64 || target=hexagon{{.*}}
-// RUN: %clang -ffreestanding -fenable-ripple -g -c -O2 -emit-llvm %S/external_library.c -o %t.lib.bc
-// RUN: %clang -ffreestanding -Wall -Wextra -Wpedantic -Wripple -g -O2 -fenable-ripple -emit-llvm -S -o - -mllvm -ripple-lib=%t.lib.bc %s 2> %t; FileCheck %s --input-file=%t
+// REQUIRES: hexagon-registered-target
+// RUN: %clang -Wall -Wextra -Wpedantic -Wripple --target=hexagon-unknown-elf -g -O2 -fenable-ripple -emit-llvm -S -o - %s 2> %t; FileCheck %s --input-file=%t
 
 #include "external_library.h"
 #include "../ripple_test.h"
@@ -19,5 +18,9 @@ void missing_masked_version(size_t size, _Float16 *input, _Float16 *output) {
     output[i + BlockX] = add_and_half_ptr_has_no_mask_version(input[i + BlockX], input);
 }
 
-// CHECK: missing-masked-declaration.c:19:{{.*}}: call to an external ripple function (ripple_add_and_half_ptr_has_no_mask_version) requires masking but no maskable declaration is available
-// CHECK: missing-masked-declaration.c:11:{{.*}}: Ripple failed to vectorize this function
+// CHECK: missing-masked-declaration.c:18:26: error: call to an external ripple function (ripple_add_and_half_ptr_has_no_mask_version) requires masking but no maskable declaration is available
+// CHECK-NEXT:    18 |     output[i + BlockX] = add_and_half_ptr_has_no_mask_version(input[i + BlockX], input);
+// CHECK-NEXT:       |                          ^
+// CHECK: missing-masked-declaration.c:10:1: error: Ripple failed to vectorize this function
+// CHECK-NEXT:    10 | void missing_masked_version(size_t size, _Float16 *input, _Float16 *output) {
+// CHECK-NEXT:       | ^
