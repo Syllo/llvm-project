@@ -6,7 +6,7 @@
 
 #define VEC 0
 
-// CHECK: failed to load external Ripple library 'non-existent-ripple-lib-file.bc': No such file or directory
+// CHECK: error: reading bitcode file: non-existent-ripple-lib-file.bc{{.*}}No such file or directory
 
 void test(float *f) {
   ripple_block_t BS = ripple_set_block_shape(VEC, 64);

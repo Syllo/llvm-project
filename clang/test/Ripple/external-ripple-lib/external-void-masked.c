@@ -1,29 +1,19 @@
 // REQUIRES: target-x86_64 || target=hexagon{{.*}}
-// RUN: %clang -ffreestanding -g -c -O2 -emit-llvm %s -DCOMPILE_LIB=1 -o %t.rlib.bc
-// RUN: %clang -ffreestanding -g -O2 -fenable-ripple -fripple-lib=%t.rlib.bc -emit-llvm -S %s -o - -mllvm -ripple-disable-link | FileCheck %s
-
-#ifdef COMPILE_LIB
-
-typedef __INT32_TYPE__ int32_t;
-
-typedef int32_t i32t32 __attribute__((__vector_size__(128)))
-__attribute__((aligned(128)));
-
-extern inline void ripple_f(int32_t *a, int32_t *b, i32t32 c) {
-  *((i32t32 *)a) = c + *((i32t32 *)b);
-}
-
-extern inline void ripple_mask_f(int32_t *a, int32_t *b, i32t32 c, i32t32 d) {
-  *((i32t32 *)a) = c + d + *((i32t32 *)b);
-}
-
-#else
+// RUN: %clang -g -O2 -fenable-ripple -emit-llvm -S %s -o - | FileCheck %s
 
 #include "../ripple_test.h"
 
 #define VEC 0
 
+typedef int32_t i32t32 __attribute__((__vector_size__(128)))
+__attribute__((aligned(128)));
+
 extern void f(int32_t *, int32_t *, int32_t);
+
+extern __attribute__((ripple_vector_candidate)) void
+ripple_f(int32_t *a, int32_t *b, i32t32 c);
+extern __attribute__((ripple_vector_candidate)) void
+ripple_mask_f(int32_t *a, int32_t *b, i32t32 c, i32t32 d);
 
 // CHECK: @test
 // CHECK: call void @ripple_f
@@ -36,5 +26,3 @@ void test(size_t size, int32_t *input, int32_t *output) {
   for (int32_t i = 0; i < size; i++)
     f(input, output, i);
 }
-
-#endif

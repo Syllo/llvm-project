@@ -1,6 +1,5 @@
 // REQUIRES: x86-registered-target
-// RUN: %clang --target=x86_64-unknown-elf -g -c -O2 -fenable-ripple -emit-llvm %S/external_library.c -o external_library_masked_x86.bc
-// RUN: %clang --target=x86_64-unknown-elf -c -O2 -fenable-ripple -emit-llvm -S -o - -mllvm -ripple-lib=external_library_masked_x86.bc -mllvm -ripple-disable-link %s | FileCheck %s
+// RUN: %clang --target=x86_64-unknown-elf -c -O2 -fenable-ripple -emit-llvm -S -o - %s | FileCheck %s
 
 #include "external_library.h"
 #include "../ripple_test.h"
