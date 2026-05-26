@@ -35,6 +35,7 @@
 #include "clang/Basic/OperatorKinds.h"
 #include "clang/Basic/Specifiers.h"
 #include "clang/Lex/Preprocessor.h"
+#include "clang/Sema/ParsedAttr.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaOpenMP.h"
 #include "llvm/ADT/APInt.h"
@@ -2606,4 +2607,12 @@ void SemaRipple::ActOnRippleComputeConstruct(RippleComputeConstruct &S) {
     S.setInnerThreadLoops({delegateRippleParallelToInner(GuardedLoop),
                            delegateRippleParallelToInner(FullBlockLoop)});
   }
+}
+
+void SemaRipple::handleRippleVectorCandidateAttr(Decl *D,
+                                                 const ParsedAttr &AL) {
+  if (!getLangOpts().Ripple)
+    Diag(AL.getLoc(), diag::warn_ripple_vector_candidate_no_fenable_ripple);
+  D->addAttr(::new (getASTContext())
+                 RippleVectorCandidateAttr(getASTContext(), AL));
 }
