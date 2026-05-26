@@ -58,6 +58,7 @@
 #include "clang/Sema/SemaOpenMP.h"
 #include "clang/Sema/SemaPPC.h"
 #include "clang/Sema/SemaRISCV.h"
+#include "clang/Sema/SemaRipple.h"
 #include "clang/Sema/SemaSYCL.h"
 #include "clang/Sema/SemaSwift.h"
 #include "clang/Sema/SemaWasm.h"
@@ -7819,6 +7820,9 @@ ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D, const ParsedAttr &AL,
     break;
   case ParsedAttr::AT_NoBuiltin:
     handleNoBuiltinAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_RippleVectorCandidate:
+    S.Ripple().handleRippleVectorCandidateAttr(D, AL);
     break;
   case ParsedAttr::AT_CFIUncheckedCallee:
     handleCFIUncheckedCalleeAttr(S, D, AL);

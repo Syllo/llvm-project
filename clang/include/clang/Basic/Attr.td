@@ -2018,6 +2018,12 @@ def Flatten : InheritableAttr {
   let SimpleHandler = 1;
 }
 
+def RippleVectorCandidate : InheritableAttr {
+  let Spellings = [Clang<"ripple_vector_candidate">];
+  let Subjects = SubjectList<[Function], ErrorDiag>;
+  let Documentation = [RippleVectorCandidateDocs];
+}
+
 def Format : InheritableAttr {
   let Spellings = [GCC<"format">];
   let Args = [IdentifierArgument<"Type">, IntArgument<"FormatIdx">,

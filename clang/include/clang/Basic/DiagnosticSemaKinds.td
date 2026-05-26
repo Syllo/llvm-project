@@ -14328,6 +14328,10 @@ def err_ripple_non_matching_nested_options
     : Error<"non matching options of consecutive ripple parallel vector">;
 def err_ripple_thd_function_not_found
     : Error<"'%0' function declaration not found; include <ripple/thread.h>">;
+def warn_ripple_vector_candidate_no_fenable_ripple
+    : Warning<"'ripple_vector_candidate' attribute has no effect without "
+              "'-fenable-ripple'">,
+      InGroup<Ripple>;
 
 // AMDGCN builtins diagnostics
 def err_amdgcn_load_lds_size_invalid_value : Error<"invalid size value">;

@@ -28,6 +28,7 @@ class CallExpr;
 class Expr;
 class FunctionDecl;
 class IdentifierInfo;
+class ParsedAttr;
 class Sema;
 class Stmt;
 class ValueDecl;
@@ -63,6 +64,8 @@ public:
 
   // Checks that dimension indices are uniq
   void ActOnDuplicateDimensionIndex(const RippleComputeConstruct &S);
+
+  void handleRippleVectorCandidateAttr(Decl *D, const ParsedAttr &AL);
 
   /// Checks Ripple builtin calls
   bool CheckBuiltinFunctionCall(const FunctionDecl *FDecl, unsigned BuiltinID,

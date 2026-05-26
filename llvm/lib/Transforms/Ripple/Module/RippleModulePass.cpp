@@ -34,6 +34,7 @@
 #include "llvm/Transforms/Ripple/Preprocess/RippleFPExtFPTruncRevert.h"
 #include "llvm/Transforms/Ripple/Preprocess/RippleSESE.h"
 #include "llvm/Transforms/Ripple/Ripple.h"
+#include "llvm/Transforms/Utils/ModuleUtils.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -270,6 +271,27 @@ PreservedAnalyses RippleModulePass::run(Module &M, ModuleAnalysisManager &MAM) {
       FAM.invalidate(F, PassPA);
       PA.intersect(std::move(PassPA));
     }
+  }
+
+  // Drop ripple-vector-candidate functions from llvm.used / llvm.compiler.used.
+  // Clang appended them there so they would survive pre-ripple GlobalDCE; now
+  // that the ripple pass has run, candidates that were actually substituted
+  // remain alive through their call references, and unused ones become
+  // collectible.
+  SmallPtrSet<GlobalValue *, 16> RippleCandidates;
+  for (Function &F : M)
+    if (F.hasFnAttribute("ripple-vector-candidate"))
+      RippleCandidates.insert(&F);
+  if (!RippleCandidates.empty()) {
+    removeFromUsedLists(M, [&](Constant *C) {
+      auto *GV = dyn_cast<GlobalValue>(C->stripPointerCasts());
+      return GV && RippleCandidates.contains(GV);
+    });
+    // removeFromUsedLists updates @llvm.used / @llvm.compiler.used. Function
+    // bodies are untouched, so keep function analyses preserved.
+    PreservedAnalyses FunctionAnalysesOnly;
+    FunctionAnalysesOnly.preserveSet<AllAnalysesOn<Function>>();
+    PA.intersect(FunctionAnalysesOnly);
   }
 
   return PA;
