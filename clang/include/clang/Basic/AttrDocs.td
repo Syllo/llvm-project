@@ -4277,6 +4277,61 @@ callee is unavailable or if the callee has the ``noinline`` attribute.
   }];
 }
 
+def RippleVectorCandidateDocs : Documentation {
+  let Category = DocCatFunction;
+  let Content = [{
+The ``ripple_vector_candidate`` attribute marks a function as a candidate for
+replacement by the LLVM Ripple pass. When ripple is enabled
+(``-fenable-ripple``) and the marked function lives in the current
+translation unit, the Ripple pass may replace calls to its scalar form with
+a vectorized call to the marked function.
+
+Functions without this attribute are never considered as Ripple replacement
+candidates, even if their name matches the legacy ``ripple_`` prefix
+convention.
+
+The attribute is valid on both ``extern`` declarations and functions with
+internal linkage (``static`` or anonymous-namespace). The function visibility
+follows normal C/C++ rules: an ``extern`` candidate may be defined in another
+translation unit, while a ``static`` or anonymous-namespace candidate is
+local to the current one.
+
+.. code-block:: c
+
+  #include <ripple.h>
+  #include <stddef.h>
+
+  typedef float v32f32 __attribute__((__vector_size__(128)));
+
+  // Extern candidate — definition may live in a separate TU.
+  __attribute__((ripple_vector_candidate))
+  extern v32f32 ripple_ew_pure_myop(v32f32 a, v32f32 b);
+
+  // Static inline candidate — definition provided in the same TU (e.g. a header).
+  __attribute__((ripple_vector_candidate))
+  static inline v32f32 ripple_ew_pure_myadd(v32f32 a, v32f32 b) {
+    return a + b;
+  }
+
+  extern float myop(float a, float b);
+  extern float myadd(float a, float b);
+
+  // No ripple_vector_candidate declared for other_op.
+  extern float other_op(float a, float b);
+
+  void compute(float *out, float *a, float *b) {
+    ripple_block_t BS = ripple_set_block_shape(0, 32);
+    size_t i = ripple_id(BS, 0);
+    // The Ripple pass replaces this with ripple_ew_pure_myop.
+    out[i] = myop(a[i], b[i]);
+    // The Ripple pass replaces this with ripple_ew_pure_myadd.
+    out[i] += myadd(a[i], b[i]);
+    // No vector candidate: other_op is called once per element.
+    out[i] += other_op(a[i], b[i]);
+  }
+  }];
+}
+
 def FormatDocs : Documentation {
   let Category = DocCatFunction;
   let Content = [{

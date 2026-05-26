@@ -3639,6 +3639,16 @@ void CodeGenModule::SetFunctionAttributes(GlobalDecl GD, llvm::Function *F,
       F->addFnAttr("dontcall-warn", EA->getUserDiagnostic());
   }
 
+  // The "ripple_vector_candidate" attribute translates to the llvm function
+  // attribute interpreted by the ripple pass.
+  if (CodeGenOpts.EnableRipple && !IsIncompleteFunction &&
+      FD->getAttr<RippleVectorCandidateAttr>()) {
+    F->addFnAttr("ripple-vector-candidate");
+    // Pin against pre-ripple GlobalDCE so the ripple pass can discover this
+    // function as a candidate.
+    addUsedOrCompilerUsedGlobal(F);
+  }
+
   // If we plan on emitting this inline builtin, we can't treat it as a builtin.
   if (FD->isInlineBuiltinDeclaration()) {
     const FunctionDecl *FDBody;
@@ -4347,6 +4357,11 @@ bool CodeGenModule::MustBeEmitted(const ValueDecl *Global) {
   if (LangOpts.EmitAllDecls)
     return true;
 
+  // Ripple vector candidates must always be emitted so the ripple pass can
+  // discover them.
+  if (CodeGenOpts.EnableRipple && Global->hasAttr<RippleVectorCandidateAttr>())
+    return true;
+
   const auto *VD = dyn_cast<VarDecl>(Global);
   if (VD &&
       ((CodeGenOpts.KeepPersistentStorageVariables &&
@@ -4692,8 +4707,18 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
 
     // Forward declarations are emitted lazily on first use.
     if (!FD->doesThisDeclarationHaveABody()) {
+      // Ripple semantics require candidates to have fully concrete types:
+      // declarations are force-emitted eagerly so the pass can discover them,
+      // meaning we cannot rely on the lazy-emit guarantee that types are
+      // complete by the time of use.
+      bool EmitRippleCandidateDecl = CodeGenOpts.EnableRipple &&
+                                     FD->hasAttr<RippleVectorCandidateAttr>() &&
+                                     getTypes().isFuncTypeConvertible(
+                                         FD->getType()->castAs<FunctionType>());
+
       if (!FD->doesDeclarationForceExternallyVisibleDefinition() &&
-          (!FD->isMultiVersion() || !getTarget().getTriple().isAArch64()))
+          (!FD->isMultiVersion() || !getTarget().getTriple().isAArch64()) &&
+          !EmitRippleCandidateDecl)
         return;
 
       StringRef MangledName = getMangledName(GD);

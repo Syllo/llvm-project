@@ -140,6 +140,7 @@ getInstructionToRippleShape(
 
   R.initFuncRPOT();
 
+  R.registerInModuleRippleCandidates();
   R.loadRippleLibDeclarations();
 
   bool WaitingForSpecialization = false;
