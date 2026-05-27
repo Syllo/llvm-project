@@ -2,9 +2,9 @@
 // REQUIRES: target=hexagon{{.*}}
 // RUN: %clang -ffreestanding -S -Xclang -disable-llvm-passes -emit-llvm -fenable-ripple %s -o - -DUSING_PRAGMA=1 | FileCheck %s
 // RUN: %clang -ffreestanding -S -Xclang -disable-llvm-passes -emit-llvm -fenable-ripple %s -o - | FileCheck %s
-// Check that the ripple pass handles the transformation
 // RUN: %clang -ffreestanding -S -O2 -emit-llvm -fenable-ripple %s -Wall -Wextra -o - 2>&1 | FileCheck --check-prefix=NOWARN %s
 // RUN: %clang -xc++ -ffreestanding -S -O2 -emit-llvm -fenable-ripple %s -Wall -Wextra -o - 2>&1 | FileCheck --check-prefix=NOWARN %s
+// Check that the ripple pass handles the transformation
 
 #include "../ripple_test.h"
 
@@ -34,37 +34,37 @@
 // CHECK-NEXT:    [[RIPPLE_CHUNK_IDX:%.*]] = alloca i32, align 4
 // CHECK-NEXT:    [[RIPPLE_BLOCK_START_OFFSET:%.*]] = alloca i32, align 4
 // CHECK-NEXT:    [[RIPPLE_CHUNK_INNER_IDX:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_PAR_ORIGIN_LB24:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_PAR_BLOCK_SIZE25:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_LOOP_ITERS27:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_THREAD_CHUNK_SIZE30:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_CHUNK_COUNT31:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_PAR_INIT37:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_IV_SEQ_EXIT_VAL38:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_HAS_PARTIAL_CHUNK41:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_PAR_ORIGIN_LB22:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_PAR_BLOCK_SIZE23:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_LOOP_ITERS25:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_THREAD_CHUNK_SIZE28:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_CHUNK_COUNT29:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_PAR_INIT35:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_IV_SEQ_EXIT_VAL36:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_HAS_PARTIAL_CHUNK39:%.*]] = alloca i32, align 4
 // CHECK-NEXT:    [[IT:%.*]] = alloca [[STRUCT_RIPPLE_OPT_IT:%.*]], align 4
-// CHECK-NEXT:    [[RIPPLE_BLOCK_START_OFFSET50:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_CHUNK_INNER_IDX54:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_PAR_ORIGIN_LB111:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_PAR_BLOCK_SIZE112:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_LOOP_ITERS114:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_THREAD_CHUNK_SIZE117:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_CHUNK_COUNT118:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_PAR_INIT124:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_IV_SEQ_EXIT_VAL125:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_HAS_PARTIAL_CHUNK128:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[IT134:%.*]] = alloca [[STRUCT_RIPPLE_OPT_IT]], align 4
-// CHECK-NEXT:    [[RIPPLE_BLOCK_START_OFFSET140:%.*]] = alloca i32, align 4
-// CHECK-NEXT:    [[RIPPLE_CHUNK_INNER_IDX145:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_BLOCK_START_OFFSET48:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_CHUNK_INNER_IDX52:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_PAR_ORIGIN_LB109:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_PAR_BLOCK_SIZE110:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_LOOP_ITERS112:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_THREAD_CHUNK_SIZE115:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_CHUNK_COUNT116:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_PAR_INIT122:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_IV_SEQ_EXIT_VAL123:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_HAS_PARTIAL_CHUNK126:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[IT132:%.*]] = alloca [[STRUCT_RIPPLE_OPT_IT]], align 4
+// CHECK-NEXT:    [[RIPPLE_BLOCK_START_OFFSET138:%.*]] = alloca i32, align 4
+// CHECK-NEXT:    [[RIPPLE_CHUNK_INNER_IDX143:%.*]] = alloca i32, align 4
 // CHECK-NEXT:    store i32 [[CHUNK]], ptr [[CHUNK_ADDR]], align 4
 // CHECK-NEXT:    store i32 [[START]], ptr [[START_ADDR]], align 4
 // CHECK-NEXT:    store i64 [[END]], ptr [[END_ADDR]], align 8
 // CHECK-NEXT:    store ptr [[X]], ptr [[X_ADDR]], align 4
 // CHECK-NEXT:    store ptr [[Y]], ptr [[Y_ADDR]], align 4
 // CHECK-NEXT:    store ptr [[XPY]], ptr [[XPY_ADDR]], align 4
-// CHECK-NEXT:    [[CALL:%.*]] = call ptr @ripple_thd_init(i32 noundef 0, ptr noundef null) #[[ATTR2:[0-9]+]]
+// CHECK-NEXT:    [[CALL:%.*]] = call ptr @ripple_thd_init(i32 noundef 0, ptr noundef null, i32 noundef 1, i32 noundef 0, i32 noundef 1) #[[ATTR3:[0-9]+]]
 // CHECK-NEXT:    store ptr [[CALL]], ptr [[THREADBLOCKT]], align 4
-// CHECK-NEXT:    [[CALL1:%.*]] = call ptr @ripple_thd_init(i32 noundef 0, ptr noundef null) #[[ATTR2]]
+// CHECK-NEXT:    [[CALL1:%.*]] = call ptr @ripple_thd_init(i32 noundef 0, ptr noundef null, i32 noundef 1, i32 noundef 0, i32 noundef 1) #[[ATTR3]]
 // CHECK-NEXT:    store ptr [[CALL1]], ptr [[THREADBLOCKV]], align 4
 // CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_BEGIN:.*]]
 // CHECK:       [[RIPPLE_PAR_FOR_BEGIN]]:
@@ -73,7 +73,7 @@
 // CHECK-NEXT:    [[TMP1:%.*]] = load i32, ptr [[I]], align 4
 // CHECK-NEXT:    store i32 [[TMP1]], ptr [[RIPPLE_PAR_ORIGIN_LB]], align 4
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[THREADBLOCKT]], align 4
-// CHECK-NEXT:    [[CALL2:%.*]] = call i32 @ripple_thd_get_block_size(ptr noundef [[TMP2]], i32 noundef 0) #[[ATTR2]]
+// CHECK-NEXT:    [[CALL2:%.*]] = call i32 @ripple_thd_get_block_size(ptr noundef [[TMP2]], i32 noundef 0) #[[ATTR4:[0-9]+]]
 // CHECK-NEXT:    store i32 [[CALL2]], ptr [[RIPPLE_PAR_BLOCK_SIZE]], align 4
 // CHECK-NEXT:    [[TMP3:%.*]] = load i64, ptr [[END_ADDR]], align 8
 // CHECK-NEXT:    [[TMP4:%.*]] = load i32, ptr [[START_ADDR]], align 4
@@ -97,465 +97,461 @@
 // CHECK-NEXT:    [[ADD7:%.*]] = add nsw i32 [[DIV5]], [[CONV6]]
 // CHECK-NEXT:    store i32 [[ADD7]], ptr [[RIPPLE_CHUNK_COUNT]], align 4
 // CHECK-NEXT:    [[TMP10:%.*]] = load i32, ptr [[RIPPLE_PAR_ORIGIN_LB]], align 4
-// CHECK-NEXT:    [[TMP11:%.*]] = load ptr, ptr [[THREADBLOCKT]], align 4
-// CHECK-NEXT:    [[CALL8:%.*]] = call i32 @ripple_thd_id(ptr noundef [[TMP11]], i32 noundef 0) #[[ATTR2]]
-// CHECK-NEXT:    [[MUL:%.*]] = mul nsw i32 [[CALL8]], 1
-// CHECK-NEXT:    [[ADD9:%.*]] = add nsw i32 [[TMP10]], [[MUL]]
-// CHECK-NEXT:    store i32 [[ADD9]], ptr [[RIPPLE_PAR_INIT]], align 4
-// CHECK-NEXT:    [[TMP12:%.*]] = load i32, ptr [[RIPPLE_PAR_ORIGIN_LB]], align 4
+// CHECK-NEXT:    store i32 [[TMP10]], ptr [[RIPPLE_PAR_INIT]], align 4
+// CHECK-NEXT:    [[TMP11:%.*]] = load i32, ptr [[RIPPLE_PAR_ORIGIN_LB]], align 4
+// CHECK-NEXT:    [[TMP12:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS]], align 4
+// CHECK-NEXT:    [[MUL:%.*]] = mul nsw i32 [[TMP12]], 1
+// CHECK-NEXT:    [[ADD8:%.*]] = add nsw i32 [[TMP11]], [[MUL]]
+// CHECK-NEXT:    store i32 [[ADD8]], ptr [[RIPPLE_IV_SEQ_EXIT_VAL]], align 4
 // CHECK-NEXT:    [[TMP13:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS]], align 4
-// CHECK-NEXT:    [[MUL10:%.*]] = mul nsw i32 [[TMP13]], 1
-// CHECK-NEXT:    [[ADD11:%.*]] = add nsw i32 [[TMP12]], [[MUL10]]
-// CHECK-NEXT:    store i32 [[ADD11]], ptr [[RIPPLE_IV_SEQ_EXIT_VAL]], align 4
-// CHECK-NEXT:    [[TMP14:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS]], align 4
-// CHECK-NEXT:    [[TMP15:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE]], align 4
-// CHECK-NEXT:    [[REM12:%.*]] = srem i32 [[TMP14]], [[TMP15]]
-// CHECK-NEXT:    [[CMP13:%.*]] = icmp ne i32 [[REM12]], 0
-// CHECK-NEXT:    [[CONV14:%.*]] = zext i1 [[CMP13]] to i32
-// CHECK-NEXT:    store i32 [[CONV14]], ptr [[RIPPLE_HAS_PARTIAL_CHUNK]], align 4
-// CHECK-NEXT:    store i32 0, ptr [[RIPPLE_CHUNK_IDX]], align 4
+// CHECK-NEXT:    [[TMP14:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE]], align 4
+// CHECK-NEXT:    [[REM9:%.*]] = srem i32 [[TMP13]], [[TMP14]]
+// CHECK-NEXT:    [[CMP10:%.*]] = icmp ne i32 [[REM9]], 0
+// CHECK-NEXT:    [[CONV11:%.*]] = zext i1 [[CMP10]] to i32
+// CHECK-NEXT:    store i32 [[CONV11]], ptr [[RIPPLE_HAS_PARTIAL_CHUNK]], align 4
+// CHECK-NEXT:    [[TMP15:%.*]] = load ptr, ptr [[THREADBLOCKT]], align 4
+// CHECK-NEXT:    [[CALL12:%.*]] = call i32 @ripple_thd_id(ptr noundef [[TMP15]], i32 noundef 0) #[[ATTR4]]
+// CHECK-NEXT:    store i32 [[CALL12]], ptr [[RIPPLE_CHUNK_IDX]], align 4
 // CHECK-NEXT:    br label %[[FOR_COND:.*]]
 // CHECK:       [[FOR_COND]]:
 // CHECK-NEXT:    [[TMP16:%.*]] = load i32, ptr [[RIPPLE_CHUNK_IDX]], align 4
 // CHECK-NEXT:    [[TMP17:%.*]] = load i32, ptr [[RIPPLE_CHUNK_COUNT]], align 4
-// CHECK-NEXT:    [[CMP15:%.*]] = icmp slt i32 [[TMP16]], [[TMP17]]
-// CHECK-NEXT:    br i1 [[CMP15]], label %[[FOR_BODY:.*]], label %[[FOR_END204:.*]]
+// CHECK-NEXT:    [[CMP13:%.*]] = icmp slt i32 [[TMP16]], [[TMP17]]
+// CHECK-NEXT:    br i1 [[CMP13]], label %[[FOR_BODY:.*]], label %[[FOR_END202:.*]]
 // CHECK:       [[FOR_BODY]]:
 // CHECK-NEXT:    [[TMP18:%.*]] = load i32, ptr [[RIPPLE_PAR_INIT]], align 4
 // CHECK-NEXT:    [[TMP19:%.*]] = load i32, ptr [[RIPPLE_CHUNK_IDX]], align 4
 // CHECK-NEXT:    [[TMP20:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE]], align 4
-// CHECK-NEXT:    [[MUL17:%.*]] = mul nsw i32 [[TMP20]], 1
-// CHECK-NEXT:    [[MUL18:%.*]] = mul nsw i32 [[TMP19]], [[MUL17]]
-// CHECK-NEXT:    [[ADD19:%.*]] = add nsw i32 [[TMP18]], [[MUL18]]
-// CHECK-NEXT:    store i32 [[ADD19]], ptr [[RIPPLE_BLOCK_START_OFFSET]], align 4
+// CHECK-NEXT:    [[MUL15:%.*]] = mul nsw i32 [[TMP20]], 1
+// CHECK-NEXT:    [[MUL16:%.*]] = mul nsw i32 [[TMP19]], [[MUL15]]
+// CHECK-NEXT:    [[ADD17:%.*]] = add nsw i32 [[TMP18]], [[MUL16]]
+// CHECK-NEXT:    store i32 [[ADD17]], ptr [[RIPPLE_BLOCK_START_OFFSET]], align 4
 // CHECK-NEXT:    [[TMP21:%.*]] = load i32, ptr [[RIPPLE_HAS_PARTIAL_CHUNK]], align 4
 // CHECK-NEXT:    [[TMP22:%.*]] = load i32, ptr [[RIPPLE_CHUNK_IDX]], align 4
 // CHECK-NEXT:    [[TMP23:%.*]] = load i32, ptr [[RIPPLE_CHUNK_COUNT]], align 4
-// CHECK-NEXT:    [[SUB20:%.*]] = sub nsw i32 [[TMP23]], 1
-// CHECK-NEXT:    [[CMP21:%.*]] = icmp eq i32 [[TMP22]], [[SUB20]]
-// CHECK-NEXT:    [[CONV22:%.*]] = zext i1 [[CMP21]] to i32
-// CHECK-NEXT:    [[AND:%.*]] = and i32 [[TMP21]], [[CONV22]]
+// CHECK-NEXT:    [[SUB18:%.*]] = sub nsw i32 [[TMP23]], 1
+// CHECK-NEXT:    [[CMP19:%.*]] = icmp eq i32 [[TMP22]], [[SUB18]]
+// CHECK-NEXT:    [[CONV20:%.*]] = zext i1 [[CMP19]] to i32
+// CHECK-NEXT:    [[AND:%.*]] = and i32 [[TMP21]], [[CONV20]]
 // CHECK-NEXT:    [[TOBOOL:%.*]] = icmp ne i32 [[AND]], 0
-// CHECK-NEXT:    br i1 [[TOBOOL]], label %[[IF_THEN:.*]], label %[[IF_ELSE109:.*]]
+// CHECK-NEXT:    br i1 [[TOBOOL]], label %[[IF_THEN:.*]], label %[[IF_ELSE107:.*]]
 // CHECK:       [[IF_THEN]]:
-// CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_BEGIN23:.*]]
-// CHECK:       [[RIPPLE_PAR_FOR_BEGIN23]]:
-// CHECK-NEXT:    store i32 0, ptr [[RIPPLE_PAR_ORIGIN_LB24]], align 4
+// CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_BEGIN21:.*]]
+// CHECK:       [[RIPPLE_PAR_FOR_BEGIN21]]:
+// CHECK-NEXT:    store i32 0, ptr [[RIPPLE_PAR_ORIGIN_LB22]], align 4
 // CHECK-NEXT:    [[TMP24:%.*]] = load ptr, ptr [[THREADBLOCKV]], align 4
-// CHECK-NEXT:    [[CALL26:%.*]] = call i32 @ripple_thd_get_block_size(ptr noundef [[TMP24]], i32 noundef 0) #[[ATTR2]]
-// CHECK-NEXT:    store i32 [[CALL26]], ptr [[RIPPLE_PAR_BLOCK_SIZE25]], align 4
+// CHECK-NEXT:    [[CALL24:%.*]] = call i32 @ripple_thd_get_block_size(ptr noundef [[TMP24]], i32 noundef 0) #[[ATTR4]]
+// CHECK-NEXT:    store i32 [[CALL24]], ptr [[RIPPLE_PAR_BLOCK_SIZE23]], align 4
 // CHECK-NEXT:    [[TMP25:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE]], align 4
-// CHECK-NEXT:    [[SUB28:%.*]] = sub nsw i32 [[TMP25]], 0
-// CHECK-NEXT:    [[DIV29:%.*]] = sdiv i32 [[SUB28]], 1
-// CHECK-NEXT:    store i32 [[DIV29]], ptr [[RIPPLE_LOOP_ITERS27]], align 4
-// CHECK-NEXT:    store i32 2, ptr [[RIPPLE_THREAD_CHUNK_SIZE30]], align 4
-// CHECK-NEXT:    [[TMP26:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS27]], align 4
-// CHECK-NEXT:    [[TMP27:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE30]], align 4
-// CHECK-NEXT:    [[DIV32:%.*]] = sdiv i32 [[TMP26]], [[TMP27]]
-// CHECK-NEXT:    [[TMP28:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS27]], align 4
-// CHECK-NEXT:    [[TMP29:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE30]], align 4
-// CHECK-NEXT:    [[REM33:%.*]] = srem i32 [[TMP28]], [[TMP29]]
-// CHECK-NEXT:    [[CMP34:%.*]] = icmp ne i32 [[REM33]], 0
-// CHECK-NEXT:    [[CONV35:%.*]] = zext i1 [[CMP34]] to i32
-// CHECK-NEXT:    [[ADD36:%.*]] = add nsw i32 [[DIV32]], [[CONV35]]
-// CHECK-NEXT:    store i32 [[ADD36]], ptr [[RIPPLE_CHUNK_COUNT31]], align 4
-// CHECK-NEXT:    [[TMP30:%.*]] = load i32, ptr [[RIPPLE_PAR_ORIGIN_LB24]], align 4
-// CHECK-NEXT:    store i32 [[TMP30]], ptr [[RIPPLE_PAR_INIT37]], align 4
-// CHECK-NEXT:    [[TMP31:%.*]] = load i32, ptr [[RIPPLE_PAR_ORIGIN_LB24]], align 4
-// CHECK-NEXT:    [[TMP32:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS27]], align 4
-// CHECK-NEXT:    [[MUL39:%.*]] = mul nsw i32 [[TMP32]], 1
-// CHECK-NEXT:    [[ADD40:%.*]] = add nsw i32 [[TMP31]], [[MUL39]]
-// CHECK-NEXT:    store i32 [[ADD40]], ptr [[RIPPLE_IV_SEQ_EXIT_VAL38]], align 4
-// CHECK-NEXT:    [[TMP33:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS27]], align 4
-// CHECK-NEXT:    [[TMP34:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE30]], align 4
-// CHECK-NEXT:    [[REM42:%.*]] = srem i32 [[TMP33]], [[TMP34]]
-// CHECK-NEXT:    [[CMP43:%.*]] = icmp ne i32 [[REM42]], 0
-// CHECK-NEXT:    [[CONV44:%.*]] = zext i1 [[CMP43]] to i32
-// CHECK-NEXT:    store i32 [[CONV44]], ptr [[RIPPLE_HAS_PARTIAL_CHUNK41]], align 4
+// CHECK-NEXT:    [[SUB26:%.*]] = sub nsw i32 [[TMP25]], 0
+// CHECK-NEXT:    [[DIV27:%.*]] = sdiv i32 [[SUB26]], 1
+// CHECK-NEXT:    store i32 [[DIV27]], ptr [[RIPPLE_LOOP_ITERS25]], align 4
+// CHECK-NEXT:    store i32 2, ptr [[RIPPLE_THREAD_CHUNK_SIZE28]], align 4
+// CHECK-NEXT:    [[TMP26:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS25]], align 4
+// CHECK-NEXT:    [[TMP27:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE28]], align 4
+// CHECK-NEXT:    [[DIV30:%.*]] = sdiv i32 [[TMP26]], [[TMP27]]
+// CHECK-NEXT:    [[TMP28:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS25]], align 4
+// CHECK-NEXT:    [[TMP29:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE28]], align 4
+// CHECK-NEXT:    [[REM31:%.*]] = srem i32 [[TMP28]], [[TMP29]]
+// CHECK-NEXT:    [[CMP32:%.*]] = icmp ne i32 [[REM31]], 0
+// CHECK-NEXT:    [[CONV33:%.*]] = zext i1 [[CMP32]] to i32
+// CHECK-NEXT:    [[ADD34:%.*]] = add nsw i32 [[DIV30]], [[CONV33]]
+// CHECK-NEXT:    store i32 [[ADD34]], ptr [[RIPPLE_CHUNK_COUNT29]], align 4
+// CHECK-NEXT:    [[TMP30:%.*]] = load i32, ptr [[RIPPLE_PAR_ORIGIN_LB22]], align 4
+// CHECK-NEXT:    store i32 [[TMP30]], ptr [[RIPPLE_PAR_INIT35]], align 4
+// CHECK-NEXT:    [[TMP31:%.*]] = load i32, ptr [[RIPPLE_PAR_ORIGIN_LB22]], align 4
+// CHECK-NEXT:    [[TMP32:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS25]], align 4
+// CHECK-NEXT:    [[MUL37:%.*]] = mul nsw i32 [[TMP32]], 1
+// CHECK-NEXT:    [[ADD38:%.*]] = add nsw i32 [[TMP31]], [[MUL37]]
+// CHECK-NEXT:    store i32 [[ADD38]], ptr [[RIPPLE_IV_SEQ_EXIT_VAL36]], align 4
+// CHECK-NEXT:    [[TMP33:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS25]], align 4
+// CHECK-NEXT:    [[TMP34:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE28]], align 4
+// CHECK-NEXT:    [[REM40:%.*]] = srem i32 [[TMP33]], [[TMP34]]
+// CHECK-NEXT:    [[CMP41:%.*]] = icmp ne i32 [[REM40]], 0
+// CHECK-NEXT:    [[CONV42:%.*]] = zext i1 [[CMP41]] to i32
+// CHECK-NEXT:    store i32 [[CONV42]], ptr [[RIPPLE_HAS_PARTIAL_CHUNK39]], align 4
 // CHECK-NEXT:    [[TMP35:%.*]] = load ptr, ptr [[THREADBLOCKV]], align 4
-// CHECK-NEXT:    [[TMP36:%.*]] = load i32, ptr [[RIPPLE_CHUNK_COUNT31]], align 4
-// CHECK-NEXT:    call void @ripple_it_serv_init(ptr noundef [[TMP35]], i32 noundef 0, i32 noundef 0, i32 noundef [[TMP36]], i32 noundef 1) #[[ATTR2]]
-// CHECK-NEXT:    br label %[[FOR_COND45:.*]]
-// CHECK:       [[FOR_COND45]]:
-// CHECK-NEXT:    br i1 true, label %[[FOR_BODY46:.*]], label %[[FOR_END108:.*]]
-// CHECK:       [[FOR_BODY46]]:
+// CHECK-NEXT:    [[TMP36:%.*]] = load i32, ptr [[RIPPLE_CHUNK_COUNT29]], align 4
+// CHECK-NEXT:    call void @ripple_it_serv_init(ptr noundef [[TMP35]], i32 noundef 0, i32 noundef 0, i32 noundef [[TMP36]], i32 noundef 1) #[[ATTR3]]
+// CHECK-NEXT:    br label %[[FOR_COND43:.*]]
+// CHECK:       [[FOR_COND43]]:
+// CHECK-NEXT:    br i1 true, label %[[FOR_BODY44:.*]], label %[[FOR_END106:.*]]
+// CHECK:       [[FOR_BODY44]]:
 // CHECK-NEXT:    [[TMP37:%.*]] = load ptr, ptr [[THREADBLOCKV]], align 4
-// CHECK-NEXT:    [[CALL47:%.*]] = call i64 @ripple_it_serv_next(ptr noundef [[TMP37]], i32 noundef 0) #[[ATTR2]]
-// CHECK-NEXT:    store i64 [[CALL47]], ptr [[IT]], align 4
+// CHECK-NEXT:    [[CALL45:%.*]] = call i64 @ripple_it_serv_next(ptr noundef [[TMP37]], i32 noundef 0) #[[ATTR3]]
+// CHECK-NEXT:    store i64 [[CALL45]], ptr [[IT]], align 4
 // CHECK-NEXT:    [[HAS_VALUE:%.*]] = getelementptr inbounds nuw [[STRUCT_RIPPLE_OPT_IT]], ptr [[IT]], i32 0, i32 1
 // CHECK-NEXT:    [[TMP38:%.*]] = load i32, ptr [[HAS_VALUE]], align 4
-// CHECK-NEXT:    [[TOBOOL48:%.*]] = icmp ne i32 [[TMP38]], 0
-// CHECK-NEXT:    br i1 [[TOBOOL48]], label %[[IF_END:.*]], label %[[IF_THEN49:.*]]
-// CHECK:       [[IF_THEN49]]:
+// CHECK-NEXT:    [[TOBOOL46:%.*]] = icmp ne i32 [[TMP38]], 0
+// CHECK-NEXT:    br i1 [[TOBOOL46]], label %[[IF_END:.*]], label %[[IF_THEN47:.*]]
+// CHECK:       [[IF_THEN47]]:
 // CHECK-NEXT:    [[TMP39:%.*]] = load ptr, ptr [[THREADBLOCKV]], align 4
-// CHECK-NEXT:    call void @ripple_it_serv_exit(ptr noundef [[TMP39]], i32 noundef 0, i32 noundef 0) #[[ATTR2]]
-// CHECK-NEXT:    [[TMP40:%.*]] = load i32, ptr [[RIPPLE_IV_SEQ_EXIT_VAL38]], align 4
+// CHECK-NEXT:    call void @ripple_it_serv_exit(ptr noundef [[TMP39]], i32 noundef 0, i32 noundef 0) #[[ATTR3]]
+// CHECK-NEXT:    [[TMP40:%.*]] = load i32, ptr [[RIPPLE_IV_SEQ_EXIT_VAL36]], align 4
 // CHECK-NEXT:    store i32 [[TMP40]], ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
-// CHECK-NEXT:    br label %[[FOR_END108]]
+// CHECK-NEXT:    br label %[[FOR_END106]]
 // CHECK:       [[IF_END]]:
-// CHECK-NEXT:    [[TMP41:%.*]] = load i32, ptr [[RIPPLE_PAR_INIT37]], align 4
+// CHECK-NEXT:    [[TMP41:%.*]] = load i32, ptr [[RIPPLE_PAR_INIT35]], align 4
 // CHECK-NEXT:    [[VALUE:%.*]] = getelementptr inbounds nuw [[STRUCT_RIPPLE_OPT_IT]], ptr [[IT]], i32 0, i32 0
 // CHECK-NEXT:    [[TMP42:%.*]] = load i32, ptr [[VALUE]], align 4
-// CHECK-NEXT:    [[TMP43:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE30]], align 4
-// CHECK-NEXT:    [[MUL51:%.*]] = mul nsw i32 [[TMP43]], 1
-// CHECK-NEXT:    [[MUL52:%.*]] = mul nsw i32 [[TMP42]], [[MUL51]]
-// CHECK-NEXT:    [[ADD53:%.*]] = add nsw i32 [[TMP41]], [[MUL52]]
-// CHECK-NEXT:    store i32 [[ADD53]], ptr [[RIPPLE_BLOCK_START_OFFSET50]], align 4
-// CHECK-NEXT:    [[TMP44:%.*]] = load i32, ptr [[RIPPLE_HAS_PARTIAL_CHUNK41]], align 4
-// CHECK-NEXT:    [[VALUE55:%.*]] = getelementptr inbounds nuw [[STRUCT_RIPPLE_OPT_IT]], ptr [[IT]], i32 0, i32 0
-// CHECK-NEXT:    [[TMP45:%.*]] = load i32, ptr [[VALUE55]], align 4
-// CHECK-NEXT:    [[TMP46:%.*]] = load i32, ptr [[RIPPLE_CHUNK_COUNT31]], align 4
-// CHECK-NEXT:    [[SUB56:%.*]] = sub nsw i32 [[TMP46]], 1
-// CHECK-NEXT:    [[CMP57:%.*]] = icmp eq i32 [[TMP45]], [[SUB56]]
-// CHECK-NEXT:    [[CONV58:%.*]] = zext i1 [[CMP57]] to i32
-// CHECK-NEXT:    [[AND59:%.*]] = and i32 [[TMP44]], [[CONV58]]
-// CHECK-NEXT:    [[TOBOOL60:%.*]] = icmp ne i32 [[AND59]], 0
-// CHECK-NEXT:    br i1 [[TOBOOL60]], label %[[IF_THEN61:.*]], label %[[IF_ELSE:.*]]
-// CHECK:       [[IF_THEN61]]:
-// CHECK-NEXT:    store i32 0, ptr [[RIPPLE_CHUNK_INNER_IDX54]], align 4
-// CHECK-NEXT:    br label %[[FOR_COND62:.*]]
-// CHECK:       [[FOR_COND62]]:
-// CHECK-NEXT:    [[TMP47:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX54]], align 4
-// CHECK-NEXT:    [[TMP48:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE30]], align 4
-// CHECK-NEXT:    [[CMP63:%.*]] = icmp slt i32 [[TMP47]], [[TMP48]]
-// CHECK-NEXT:    br i1 [[CMP63]], label %[[FOR_BODY65:.*]], label %[[FOR_END:.*]]
-// CHECK:       [[FOR_BODY65]]:
-// CHECK-NEXT:    [[TMP49:%.*]] = load i32, ptr [[RIPPLE_BLOCK_START_OFFSET50]], align 4
-// CHECK-NEXT:    [[TMP50:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX54]], align 4
-// CHECK-NEXT:    [[MUL66:%.*]] = mul nsw i32 [[TMP50]], 1
-// CHECK-NEXT:    [[ADD67:%.*]] = add nsw i32 [[TMP49]], [[MUL66]]
-// CHECK-NEXT:    store i32 [[ADD67]], ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
+// CHECK-NEXT:    [[TMP43:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE28]], align 4
+// CHECK-NEXT:    [[MUL49:%.*]] = mul nsw i32 [[TMP43]], 1
+// CHECK-NEXT:    [[MUL50:%.*]] = mul nsw i32 [[TMP42]], [[MUL49]]
+// CHECK-NEXT:    [[ADD51:%.*]] = add nsw i32 [[TMP41]], [[MUL50]]
+// CHECK-NEXT:    store i32 [[ADD51]], ptr [[RIPPLE_BLOCK_START_OFFSET48]], align 4
+// CHECK-NEXT:    [[TMP44:%.*]] = load i32, ptr [[RIPPLE_HAS_PARTIAL_CHUNK39]], align 4
+// CHECK-NEXT:    [[VALUE53:%.*]] = getelementptr inbounds nuw [[STRUCT_RIPPLE_OPT_IT]], ptr [[IT]], i32 0, i32 0
+// CHECK-NEXT:    [[TMP45:%.*]] = load i32, ptr [[VALUE53]], align 4
+// CHECK-NEXT:    [[TMP46:%.*]] = load i32, ptr [[RIPPLE_CHUNK_COUNT29]], align 4
+// CHECK-NEXT:    [[SUB54:%.*]] = sub nsw i32 [[TMP46]], 1
+// CHECK-NEXT:    [[CMP55:%.*]] = icmp eq i32 [[TMP45]], [[SUB54]]
+// CHECK-NEXT:    [[CONV56:%.*]] = zext i1 [[CMP55]] to i32
+// CHECK-NEXT:    [[AND57:%.*]] = and i32 [[TMP44]], [[CONV56]]
+// CHECK-NEXT:    [[TOBOOL58:%.*]] = icmp ne i32 [[AND57]], 0
+// CHECK-NEXT:    br i1 [[TOBOOL58]], label %[[IF_THEN59:.*]], label %[[IF_ELSE:.*]]
+// CHECK:       [[IF_THEN59]]:
+// CHECK-NEXT:    store i32 0, ptr [[RIPPLE_CHUNK_INNER_IDX52]], align 4
+// CHECK-NEXT:    br label %[[FOR_COND60:.*]]
+// CHECK:       [[FOR_COND60]]:
+// CHECK-NEXT:    [[TMP47:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX52]], align 4
+// CHECK-NEXT:    [[TMP48:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE28]], align 4
+// CHECK-NEXT:    [[CMP61:%.*]] = icmp slt i32 [[TMP47]], [[TMP48]]
+// CHECK-NEXT:    br i1 [[CMP61]], label %[[FOR_BODY63:.*]], label %[[FOR_END:.*]]
+// CHECK:       [[FOR_BODY63]]:
+// CHECK-NEXT:    [[TMP49:%.*]] = load i32, ptr [[RIPPLE_BLOCK_START_OFFSET48]], align 4
+// CHECK-NEXT:    [[TMP50:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX52]], align 4
+// CHECK-NEXT:    [[MUL64:%.*]] = mul nsw i32 [[TMP50]], 1
+// CHECK-NEXT:    [[ADD65:%.*]] = add nsw i32 [[TMP49]], [[MUL64]]
+// CHECK-NEXT:    store i32 [[ADD65]], ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
 // CHECK-NEXT:    [[TMP51:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
 // CHECK-NEXT:    [[TMP52:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE]], align 4
-// CHECK-NEXT:    [[CMP68:%.*]] = icmp slt i32 [[TMP51]], [[TMP52]]
-// CHECK-NEXT:    br i1 [[CMP68]], label %[[IF_END71:.*]], label %[[IF_THEN70:.*]]
-// CHECK:       [[IF_THEN70]]:
+// CHECK-NEXT:    [[CMP66:%.*]] = icmp slt i32 [[TMP51]], [[TMP52]]
+// CHECK-NEXT:    br i1 [[CMP66]], label %[[IF_END69:.*]], label %[[IF_THEN68:.*]]
+// CHECK:       [[IF_THEN68]]:
 // CHECK-NEXT:    br label %[[FOR_END]]
-// CHECK:       [[IF_END71]]:
+// CHECK:       [[IF_END69]]:
 // CHECK-NEXT:    [[TMP53:%.*]] = load i32, ptr [[RIPPLE_BLOCK_START_OFFSET]], align 4
 // CHECK-NEXT:    [[TMP54:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
-// CHECK-NEXT:    [[MUL72:%.*]] = mul nsw i32 [[TMP54]], 1
-// CHECK-NEXT:    [[ADD73:%.*]] = add nsw i32 [[TMP53]], [[MUL72]]
-// CHECK-NEXT:    store i32 [[ADD73]], ptr [[I]], align 4
+// CHECK-NEXT:    [[MUL70:%.*]] = mul nsw i32 [[TMP54]], 1
+// CHECK-NEXT:    [[ADD71:%.*]] = add nsw i32 [[TMP53]], [[MUL70]]
+// CHECK-NEXT:    store i32 [[ADD71]], ptr [[I]], align 4
 // CHECK-NEXT:    [[TMP55:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[CONV74:%.*]] = sext i32 [[TMP55]] to i64
+// CHECK-NEXT:    [[CONV72:%.*]] = sext i32 [[TMP55]] to i64
 // CHECK-NEXT:    [[TMP56:%.*]] = load i64, ptr [[END_ADDR]], align 8
-// CHECK-NEXT:    [[CMP75:%.*]] = icmp slt i64 [[CONV74]], [[TMP56]]
-// CHECK-NEXT:    br i1 [[CMP75]], label %[[IF_END78:.*]], label %[[IF_THEN77:.*]]
-// CHECK:       [[IF_THEN77]]:
+// CHECK-NEXT:    [[CMP73:%.*]] = icmp slt i64 [[CONV72]], [[TMP56]]
+// CHECK-NEXT:    br i1 [[CMP73]], label %[[IF_END76:.*]], label %[[IF_THEN75:.*]]
+// CHECK:       [[IF_THEN75]]:
 // CHECK-NEXT:    br label %[[FOR_END]]
-// CHECK:       [[IF_END78]]:
+// CHECK:       [[IF_END76]]:
 // CHECK-NEXT:    [[TMP57:%.*]] = load ptr, ptr [[X_ADDR]], align 4
 // CHECK-NEXT:    [[TMP58:%.*]] = load i32, ptr [[I]], align 4
 // CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds float, ptr [[TMP57]], i32 [[TMP58]]
 // CHECK-NEXT:    [[TMP59:%.*]] = load float, ptr [[ARRAYIDX]], align 4
 // CHECK-NEXT:    [[TMP60:%.*]] = load ptr, ptr [[Y_ADDR]], align 4
 // CHECK-NEXT:    [[TMP61:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[ARRAYIDX79:%.*]] = getelementptr inbounds float, ptr [[TMP60]], i32 [[TMP61]]
-// CHECK-NEXT:    [[TMP62:%.*]] = load float, ptr [[ARRAYIDX79]], align 4
-// CHECK-NEXT:    [[ADD80:%.*]] = fadd float [[TMP59]], [[TMP62]]
+// CHECK-NEXT:    [[ARRAYIDX77:%.*]] = getelementptr inbounds float, ptr [[TMP60]], i32 [[TMP61]]
+// CHECK-NEXT:    [[TMP62:%.*]] = load float, ptr [[ARRAYIDX77]], align 4
+// CHECK-NEXT:    [[ADD78:%.*]] = fadd float [[TMP59]], [[TMP62]]
 // CHECK-NEXT:    [[TMP63:%.*]] = load ptr, ptr [[XPY_ADDR]], align 4
 // CHECK-NEXT:    [[TMP64:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[ARRAYIDX81:%.*]] = getelementptr inbounds float, ptr [[TMP63]], i32 [[TMP64]]
-// CHECK-NEXT:    store float [[ADD80]], ptr [[ARRAYIDX81]], align 4
+// CHECK-NEXT:    [[ARRAYIDX79:%.*]] = getelementptr inbounds float, ptr [[TMP63]], i32 [[TMP64]]
+// CHECK-NEXT:    store float [[ADD78]], ptr [[ARRAYIDX79]], align 4
 // CHECK-NEXT:    br label %[[FOR_INC:.*]]
 // CHECK:       [[FOR_INC]]:
-// CHECK-NEXT:    [[TMP65:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX54]], align 4
-// CHECK-NEXT:    [[ADD82:%.*]] = add nsw i32 [[TMP65]], 1
-// CHECK-NEXT:    store i32 [[ADD82]], ptr [[RIPPLE_CHUNK_INNER_IDX54]], align 4
-// CHECK-NEXT:    br label %[[FOR_COND62]], !llvm.loop [[LOOP3:![0-9]+]]
+// CHECK-NEXT:    [[TMP65:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX52]], align 4
+// CHECK-NEXT:    [[ADD80:%.*]] = add nsw i32 [[TMP65]], 1
+// CHECK-NEXT:    store i32 [[ADD80]], ptr [[RIPPLE_CHUNK_INNER_IDX52]], align 4
+// CHECK-NEXT:    br label %[[FOR_COND60]], !llvm.loop [[LOOP2:![0-9]+]]
 // CHECK:       [[FOR_END]]:
-// CHECK-NEXT:    br label %[[IF_END103:.*]]
+// CHECK-NEXT:    br label %[[IF_END101:.*]]
 // CHECK:       [[IF_ELSE]]:
-// CHECK-NEXT:    store i32 0, ptr [[RIPPLE_CHUNK_INNER_IDX54]], align 4
-// CHECK-NEXT:    br label %[[FOR_COND83:.*]]
-// CHECK:       [[FOR_COND83]]:
-// CHECK-NEXT:    [[TMP66:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX54]], align 4
-// CHECK-NEXT:    [[TMP67:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE30]], align 4
-// CHECK-NEXT:    [[CMP84:%.*]] = icmp slt i32 [[TMP66]], [[TMP67]]
-// CHECK-NEXT:    br i1 [[CMP84]], label %[[FOR_BODY86:.*]], label %[[FOR_END102:.*]]
-// CHECK:       [[FOR_BODY86]]:
-// CHECK-NEXT:    [[TMP68:%.*]] = load i32, ptr [[RIPPLE_BLOCK_START_OFFSET50]], align 4
-// CHECK-NEXT:    [[TMP69:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX54]], align 4
-// CHECK-NEXT:    [[MUL87:%.*]] = mul nsw i32 [[TMP69]], 1
-// CHECK-NEXT:    [[ADD88:%.*]] = add nsw i32 [[TMP68]], [[MUL87]]
-// CHECK-NEXT:    store i32 [[ADD88]], ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
+// CHECK-NEXT:    store i32 0, ptr [[RIPPLE_CHUNK_INNER_IDX52]], align 4
+// CHECK-NEXT:    br label %[[FOR_COND81:.*]]
+// CHECK:       [[FOR_COND81]]:
+// CHECK-NEXT:    [[TMP66:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX52]], align 4
+// CHECK-NEXT:    [[TMP67:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE28]], align 4
+// CHECK-NEXT:    [[CMP82:%.*]] = icmp slt i32 [[TMP66]], [[TMP67]]
+// CHECK-NEXT:    br i1 [[CMP82]], label %[[FOR_BODY84:.*]], label %[[FOR_END100:.*]]
+// CHECK:       [[FOR_BODY84]]:
+// CHECK-NEXT:    [[TMP68:%.*]] = load i32, ptr [[RIPPLE_BLOCK_START_OFFSET48]], align 4
+// CHECK-NEXT:    [[TMP69:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX52]], align 4
+// CHECK-NEXT:    [[MUL85:%.*]] = mul nsw i32 [[TMP69]], 1
+// CHECK-NEXT:    [[ADD86:%.*]] = add nsw i32 [[TMP68]], [[MUL85]]
+// CHECK-NEXT:    store i32 [[ADD86]], ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
 // CHECK-NEXT:    [[TMP70:%.*]] = load i32, ptr [[RIPPLE_BLOCK_START_OFFSET]], align 4
 // CHECK-NEXT:    [[TMP71:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
-// CHECK-NEXT:    [[MUL89:%.*]] = mul nsw i32 [[TMP71]], 1
-// CHECK-NEXT:    [[ADD90:%.*]] = add nsw i32 [[TMP70]], [[MUL89]]
-// CHECK-NEXT:    store i32 [[ADD90]], ptr [[I]], align 4
+// CHECK-NEXT:    [[MUL87:%.*]] = mul nsw i32 [[TMP71]], 1
+// CHECK-NEXT:    [[ADD88:%.*]] = add nsw i32 [[TMP70]], [[MUL87]]
+// CHECK-NEXT:    store i32 [[ADD88]], ptr [[I]], align 4
 // CHECK-NEXT:    [[TMP72:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[CONV91:%.*]] = sext i32 [[TMP72]] to i64
+// CHECK-NEXT:    [[CONV89:%.*]] = sext i32 [[TMP72]] to i64
 // CHECK-NEXT:    [[TMP73:%.*]] = load i64, ptr [[END_ADDR]], align 8
-// CHECK-NEXT:    [[CMP92:%.*]] = icmp slt i64 [[CONV91]], [[TMP73]]
-// CHECK-NEXT:    br i1 [[CMP92]], label %[[IF_END95:.*]], label %[[IF_THEN94:.*]]
-// CHECK:       [[IF_THEN94]]:
-// CHECK-NEXT:    br label %[[FOR_END102]]
-// CHECK:       [[IF_END95]]:
+// CHECK-NEXT:    [[CMP90:%.*]] = icmp slt i64 [[CONV89]], [[TMP73]]
+// CHECK-NEXT:    br i1 [[CMP90]], label %[[IF_END93:.*]], label %[[IF_THEN92:.*]]
+// CHECK:       [[IF_THEN92]]:
+// CHECK-NEXT:    br label %[[FOR_END100]]
+// CHECK:       [[IF_END93]]:
 // CHECK-NEXT:    [[TMP74:%.*]] = load ptr, ptr [[X_ADDR]], align 4
 // CHECK-NEXT:    [[TMP75:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[ARRAYIDX96:%.*]] = getelementptr inbounds float, ptr [[TMP74]], i32 [[TMP75]]
-// CHECK-NEXT:    [[TMP76:%.*]] = load float, ptr [[ARRAYIDX96]], align 4
+// CHECK-NEXT:    [[ARRAYIDX94:%.*]] = getelementptr inbounds float, ptr [[TMP74]], i32 [[TMP75]]
+// CHECK-NEXT:    [[TMP76:%.*]] = load float, ptr [[ARRAYIDX94]], align 4
 // CHECK-NEXT:    [[TMP77:%.*]] = load ptr, ptr [[Y_ADDR]], align 4
 // CHECK-NEXT:    [[TMP78:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[ARRAYIDX97:%.*]] = getelementptr inbounds float, ptr [[TMP77]], i32 [[TMP78]]
-// CHECK-NEXT:    [[TMP79:%.*]] = load float, ptr [[ARRAYIDX97]], align 4
-// CHECK-NEXT:    [[ADD98:%.*]] = fadd float [[TMP76]], [[TMP79]]
+// CHECK-NEXT:    [[ARRAYIDX95:%.*]] = getelementptr inbounds float, ptr [[TMP77]], i32 [[TMP78]]
+// CHECK-NEXT:    [[TMP79:%.*]] = load float, ptr [[ARRAYIDX95]], align 4
+// CHECK-NEXT:    [[ADD96:%.*]] = fadd float [[TMP76]], [[TMP79]]
 // CHECK-NEXT:    [[TMP80:%.*]] = load ptr, ptr [[XPY_ADDR]], align 4
 // CHECK-NEXT:    [[TMP81:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[ARRAYIDX99:%.*]] = getelementptr inbounds float, ptr [[TMP80]], i32 [[TMP81]]
-// CHECK-NEXT:    store float [[ADD98]], ptr [[ARRAYIDX99]], align 4
-// CHECK-NEXT:    br label %[[FOR_INC100:.*]]
-// CHECK:       [[FOR_INC100]]:
-// CHECK-NEXT:    [[TMP82:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX54]], align 4
-// CHECK-NEXT:    [[ADD101:%.*]] = add nsw i32 [[TMP82]], 1
-// CHECK-NEXT:    store i32 [[ADD101]], ptr [[RIPPLE_CHUNK_INNER_IDX54]], align 4
-// CHECK-NEXT:    br label %[[FOR_COND83]], !llvm.loop [[LOOP5:![0-9]+]]
-// CHECK:       [[FOR_END102]]:
-// CHECK-NEXT:    br label %[[IF_END103]]
-// CHECK:       [[IF_END103]]:
-// CHECK-NEXT:    [[TMP83:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX54]], align 4
-// CHECK-NEXT:    [[TMP84:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE30]], align 4
-// CHECK-NEXT:    [[CMP104:%.*]] = icmp slt i32 [[TMP83]], [[TMP84]]
-// CHECK-NEXT:    br i1 [[CMP104]], label %[[IF_THEN106:.*]], label %[[IF_END107:.*]]
-// CHECK:       [[IF_THEN106]]:
+// CHECK-NEXT:    [[ARRAYIDX97:%.*]] = getelementptr inbounds float, ptr [[TMP80]], i32 [[TMP81]]
+// CHECK-NEXT:    store float [[ADD96]], ptr [[ARRAYIDX97]], align 4
+// CHECK-NEXT:    br label %[[FOR_INC98:.*]]
+// CHECK:       [[FOR_INC98]]:
+// CHECK-NEXT:    [[TMP82:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX52]], align 4
+// CHECK-NEXT:    [[ADD99:%.*]] = add nsw i32 [[TMP82]], 1
+// CHECK-NEXT:    store i32 [[ADD99]], ptr [[RIPPLE_CHUNK_INNER_IDX52]], align 4
+// CHECK-NEXT:    br label %[[FOR_COND81]], !llvm.loop [[LOOP4:![0-9]+]]
+// CHECK:       [[FOR_END100]]:
+// CHECK-NEXT:    br label %[[IF_END101]]
+// CHECK:       [[IF_END101]]:
+// CHECK-NEXT:    [[TMP83:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX52]], align 4
+// CHECK-NEXT:    [[TMP84:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE28]], align 4
+// CHECK-NEXT:    [[CMP102:%.*]] = icmp slt i32 [[TMP83]], [[TMP84]]
+// CHECK-NEXT:    br i1 [[CMP102]], label %[[IF_THEN104:.*]], label %[[IF_END105:.*]]
+// CHECK:       [[IF_THEN104]]:
 // CHECK-NEXT:    [[TMP85:%.*]] = load ptr, ptr [[THREADBLOCKV]], align 4
-// CHECK-NEXT:    call void @ripple_it_serv_exit(ptr noundef [[TMP85]], i32 noundef 0, i32 noundef 0) #[[ATTR2]]
-// CHECK-NEXT:    br label %[[FOR_END108]]
-// CHECK:       [[IF_END107]]:
-// CHECK-NEXT:    br label %[[FOR_COND45]]
-// CHECK:       [[FOR_END108]]:
+// CHECK-NEXT:    call void @ripple_it_serv_exit(ptr noundef [[TMP85]], i32 noundef 0, i32 noundef 0) #[[ATTR3]]
+// CHECK-NEXT:    br label %[[FOR_END106]]
+// CHECK:       [[IF_END105]]:
+// CHECK-NEXT:    br label %[[FOR_COND43]]
+// CHECK:       [[FOR_END106]]:
 // CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_END:.*]]
 // CHECK:       [[RIPPLE_PAR_FOR_END]]:
-// CHECK-NEXT:    br label %[[IF_END195:.*]]
-// CHECK:       [[IF_ELSE109]]:
-// CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_BEGIN110:.*]]
-// CHECK:       [[RIPPLE_PAR_FOR_BEGIN110]]:
-// CHECK-NEXT:    store i32 0, ptr [[RIPPLE_PAR_ORIGIN_LB111]], align 4
+// CHECK-NEXT:    br label %[[IF_END193:.*]]
+// CHECK:       [[IF_ELSE107]]:
+// CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_BEGIN108:.*]]
+// CHECK:       [[RIPPLE_PAR_FOR_BEGIN108]]:
+// CHECK-NEXT:    store i32 0, ptr [[RIPPLE_PAR_ORIGIN_LB109]], align 4
 // CHECK-NEXT:    [[TMP86:%.*]] = load ptr, ptr [[THREADBLOCKV]], align 4
-// CHECK-NEXT:    [[CALL113:%.*]] = call i32 @ripple_thd_get_block_size(ptr noundef [[TMP86]], i32 noundef 0) #[[ATTR2]]
-// CHECK-NEXT:    store i32 [[CALL113]], ptr [[RIPPLE_PAR_BLOCK_SIZE112]], align 4
+// CHECK-NEXT:    [[CALL111:%.*]] = call i32 @ripple_thd_get_block_size(ptr noundef [[TMP86]], i32 noundef 0) #[[ATTR4]]
+// CHECK-NEXT:    store i32 [[CALL111]], ptr [[RIPPLE_PAR_BLOCK_SIZE110]], align 4
 // CHECK-NEXT:    [[TMP87:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE]], align 4
-// CHECK-NEXT:    [[SUB115:%.*]] = sub nsw i32 [[TMP87]], 0
-// CHECK-NEXT:    [[DIV116:%.*]] = sdiv i32 [[SUB115]], 1
-// CHECK-NEXT:    store i32 [[DIV116]], ptr [[RIPPLE_LOOP_ITERS114]], align 4
-// CHECK-NEXT:    store i32 2, ptr [[RIPPLE_THREAD_CHUNK_SIZE117]], align 4
-// CHECK-NEXT:    [[TMP88:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS114]], align 4
-// CHECK-NEXT:    [[TMP89:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE117]], align 4
-// CHECK-NEXT:    [[DIV119:%.*]] = sdiv i32 [[TMP88]], [[TMP89]]
-// CHECK-NEXT:    [[TMP90:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS114]], align 4
-// CHECK-NEXT:    [[TMP91:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE117]], align 4
-// CHECK-NEXT:    [[REM120:%.*]] = srem i32 [[TMP90]], [[TMP91]]
-// CHECK-NEXT:    [[CMP121:%.*]] = icmp ne i32 [[REM120]], 0
-// CHECK-NEXT:    [[CONV122:%.*]] = zext i1 [[CMP121]] to i32
-// CHECK-NEXT:    [[ADD123:%.*]] = add nsw i32 [[DIV119]], [[CONV122]]
-// CHECK-NEXT:    store i32 [[ADD123]], ptr [[RIPPLE_CHUNK_COUNT118]], align 4
-// CHECK-NEXT:    [[TMP92:%.*]] = load i32, ptr [[RIPPLE_PAR_ORIGIN_LB111]], align 4
-// CHECK-NEXT:    store i32 [[TMP92]], ptr [[RIPPLE_PAR_INIT124]], align 4
-// CHECK-NEXT:    [[TMP93:%.*]] = load i32, ptr [[RIPPLE_PAR_ORIGIN_LB111]], align 4
-// CHECK-NEXT:    [[TMP94:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS114]], align 4
-// CHECK-NEXT:    [[MUL126:%.*]] = mul nsw i32 [[TMP94]], 1
-// CHECK-NEXT:    [[ADD127:%.*]] = add nsw i32 [[TMP93]], [[MUL126]]
-// CHECK-NEXT:    store i32 [[ADD127]], ptr [[RIPPLE_IV_SEQ_EXIT_VAL125]], align 4
-// CHECK-NEXT:    [[TMP95:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS114]], align 4
-// CHECK-NEXT:    [[TMP96:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE117]], align 4
-// CHECK-NEXT:    [[REM129:%.*]] = srem i32 [[TMP95]], [[TMP96]]
-// CHECK-NEXT:    [[CMP130:%.*]] = icmp ne i32 [[REM129]], 0
-// CHECK-NEXT:    [[CONV131:%.*]] = zext i1 [[CMP130]] to i32
-// CHECK-NEXT:    store i32 [[CONV131]], ptr [[RIPPLE_HAS_PARTIAL_CHUNK128]], align 4
+// CHECK-NEXT:    [[SUB113:%.*]] = sub nsw i32 [[TMP87]], 0
+// CHECK-NEXT:    [[DIV114:%.*]] = sdiv i32 [[SUB113]], 1
+// CHECK-NEXT:    store i32 [[DIV114]], ptr [[RIPPLE_LOOP_ITERS112]], align 4
+// CHECK-NEXT:    store i32 2, ptr [[RIPPLE_THREAD_CHUNK_SIZE115]], align 4
+// CHECK-NEXT:    [[TMP88:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS112]], align 4
+// CHECK-NEXT:    [[TMP89:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE115]], align 4
+// CHECK-NEXT:    [[DIV117:%.*]] = sdiv i32 [[TMP88]], [[TMP89]]
+// CHECK-NEXT:    [[TMP90:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS112]], align 4
+// CHECK-NEXT:    [[TMP91:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE115]], align 4
+// CHECK-NEXT:    [[REM118:%.*]] = srem i32 [[TMP90]], [[TMP91]]
+// CHECK-NEXT:    [[CMP119:%.*]] = icmp ne i32 [[REM118]], 0
+// CHECK-NEXT:    [[CONV120:%.*]] = zext i1 [[CMP119]] to i32
+// CHECK-NEXT:    [[ADD121:%.*]] = add nsw i32 [[DIV117]], [[CONV120]]
+// CHECK-NEXT:    store i32 [[ADD121]], ptr [[RIPPLE_CHUNK_COUNT116]], align 4
+// CHECK-NEXT:    [[TMP92:%.*]] = load i32, ptr [[RIPPLE_PAR_ORIGIN_LB109]], align 4
+// CHECK-NEXT:    store i32 [[TMP92]], ptr [[RIPPLE_PAR_INIT122]], align 4
+// CHECK-NEXT:    [[TMP93:%.*]] = load i32, ptr [[RIPPLE_PAR_ORIGIN_LB109]], align 4
+// CHECK-NEXT:    [[TMP94:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS112]], align 4
+// CHECK-NEXT:    [[MUL124:%.*]] = mul nsw i32 [[TMP94]], 1
+// CHECK-NEXT:    [[ADD125:%.*]] = add nsw i32 [[TMP93]], [[MUL124]]
+// CHECK-NEXT:    store i32 [[ADD125]], ptr [[RIPPLE_IV_SEQ_EXIT_VAL123]], align 4
+// CHECK-NEXT:    [[TMP95:%.*]] = load i32, ptr [[RIPPLE_LOOP_ITERS112]], align 4
+// CHECK-NEXT:    [[TMP96:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE115]], align 4
+// CHECK-NEXT:    [[REM127:%.*]] = srem i32 [[TMP95]], [[TMP96]]
+// CHECK-NEXT:    [[CMP128:%.*]] = icmp ne i32 [[REM127]], 0
+// CHECK-NEXT:    [[CONV129:%.*]] = zext i1 [[CMP128]] to i32
+// CHECK-NEXT:    store i32 [[CONV129]], ptr [[RIPPLE_HAS_PARTIAL_CHUNK126]], align 4
 // CHECK-NEXT:    [[TMP97:%.*]] = load ptr, ptr [[THREADBLOCKV]], align 4
-// CHECK-NEXT:    [[TMP98:%.*]] = load i32, ptr [[RIPPLE_CHUNK_COUNT118]], align 4
-// CHECK-NEXT:    call void @ripple_it_serv_init(ptr noundef [[TMP97]], i32 noundef 0, i32 noundef 0, i32 noundef [[TMP98]], i32 noundef 1) #[[ATTR2]]
-// CHECK-NEXT:    br label %[[FOR_COND132:.*]]
-// CHECK:       [[FOR_COND132]]:
-// CHECK-NEXT:    br i1 true, label %[[FOR_BODY133:.*]], label %[[FOR_END193:.*]]
-// CHECK:       [[FOR_BODY133]]:
+// CHECK-NEXT:    [[TMP98:%.*]] = load i32, ptr [[RIPPLE_CHUNK_COUNT116]], align 4
+// CHECK-NEXT:    call void @ripple_it_serv_init(ptr noundef [[TMP97]], i32 noundef 0, i32 noundef 0, i32 noundef [[TMP98]], i32 noundef 1) #[[ATTR3]]
+// CHECK-NEXT:    br label %[[FOR_COND130:.*]]
+// CHECK:       [[FOR_COND130]]:
+// CHECK-NEXT:    br i1 true, label %[[FOR_BODY131:.*]], label %[[FOR_END191:.*]]
+// CHECK:       [[FOR_BODY131]]:
 // CHECK-NEXT:    [[TMP99:%.*]] = load ptr, ptr [[THREADBLOCKV]], align 4
-// CHECK-NEXT:    [[CALL135:%.*]] = call i64 @ripple_it_serv_next(ptr noundef [[TMP99]], i32 noundef 0) #[[ATTR2]]
-// CHECK-NEXT:    store i64 [[CALL135]], ptr [[IT134]], align 4
-// CHECK-NEXT:    [[HAS_VALUE136:%.*]] = getelementptr inbounds nuw [[STRUCT_RIPPLE_OPT_IT]], ptr [[IT134]], i32 0, i32 1
-// CHECK-NEXT:    [[TMP100:%.*]] = load i32, ptr [[HAS_VALUE136]], align 4
-// CHECK-NEXT:    [[TOBOOL137:%.*]] = icmp ne i32 [[TMP100]], 0
-// CHECK-NEXT:    br i1 [[TOBOOL137]], label %[[IF_END139:.*]], label %[[IF_THEN138:.*]]
-// CHECK:       [[IF_THEN138]]:
+// CHECK-NEXT:    [[CALL133:%.*]] = call i64 @ripple_it_serv_next(ptr noundef [[TMP99]], i32 noundef 0) #[[ATTR3]]
+// CHECK-NEXT:    store i64 [[CALL133]], ptr [[IT132]], align 4
+// CHECK-NEXT:    [[HAS_VALUE134:%.*]] = getelementptr inbounds nuw [[STRUCT_RIPPLE_OPT_IT]], ptr [[IT132]], i32 0, i32 1
+// CHECK-NEXT:    [[TMP100:%.*]] = load i32, ptr [[HAS_VALUE134]], align 4
+// CHECK-NEXT:    [[TOBOOL135:%.*]] = icmp ne i32 [[TMP100]], 0
+// CHECK-NEXT:    br i1 [[TOBOOL135]], label %[[IF_END137:.*]], label %[[IF_THEN136:.*]]
+// CHECK:       [[IF_THEN136]]:
 // CHECK-NEXT:    [[TMP101:%.*]] = load ptr, ptr [[THREADBLOCKV]], align 4
-// CHECK-NEXT:    call void @ripple_it_serv_exit(ptr noundef [[TMP101]], i32 noundef 0, i32 noundef 0) #[[ATTR2]]
-// CHECK-NEXT:    [[TMP102:%.*]] = load i32, ptr [[RIPPLE_IV_SEQ_EXIT_VAL125]], align 4
+// CHECK-NEXT:    call void @ripple_it_serv_exit(ptr noundef [[TMP101]], i32 noundef 0, i32 noundef 0) #[[ATTR3]]
+// CHECK-NEXT:    [[TMP102:%.*]] = load i32, ptr [[RIPPLE_IV_SEQ_EXIT_VAL123]], align 4
 // CHECK-NEXT:    store i32 [[TMP102]], ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
-// CHECK-NEXT:    br label %[[FOR_END193]]
-// CHECK:       [[IF_END139]]:
-// CHECK-NEXT:    [[TMP103:%.*]] = load i32, ptr [[RIPPLE_PAR_INIT124]], align 4
-// CHECK-NEXT:    [[VALUE141:%.*]] = getelementptr inbounds nuw [[STRUCT_RIPPLE_OPT_IT]], ptr [[IT134]], i32 0, i32 0
-// CHECK-NEXT:    [[TMP104:%.*]] = load i32, ptr [[VALUE141]], align 4
-// CHECK-NEXT:    [[TMP105:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE117]], align 4
-// CHECK-NEXT:    [[MUL142:%.*]] = mul nsw i32 [[TMP105]], 1
-// CHECK-NEXT:    [[MUL143:%.*]] = mul nsw i32 [[TMP104]], [[MUL142]]
-// CHECK-NEXT:    [[ADD144:%.*]] = add nsw i32 [[TMP103]], [[MUL143]]
-// CHECK-NEXT:    store i32 [[ADD144]], ptr [[RIPPLE_BLOCK_START_OFFSET140]], align 4
-// CHECK-NEXT:    [[TMP106:%.*]] = load i32, ptr [[RIPPLE_HAS_PARTIAL_CHUNK128]], align 4
-// CHECK-NEXT:    [[VALUE146:%.*]] = getelementptr inbounds nuw [[STRUCT_RIPPLE_OPT_IT]], ptr [[IT134]], i32 0, i32 0
-// CHECK-NEXT:    [[TMP107:%.*]] = load i32, ptr [[VALUE146]], align 4
-// CHECK-NEXT:    [[TMP108:%.*]] = load i32, ptr [[RIPPLE_CHUNK_COUNT118]], align 4
-// CHECK-NEXT:    [[SUB147:%.*]] = sub nsw i32 [[TMP108]], 1
-// CHECK-NEXT:    [[CMP148:%.*]] = icmp eq i32 [[TMP107]], [[SUB147]]
-// CHECK-NEXT:    [[CONV149:%.*]] = zext i1 [[CMP148]] to i32
-// CHECK-NEXT:    [[AND150:%.*]] = and i32 [[TMP106]], [[CONV149]]
-// CHECK-NEXT:    [[TOBOOL151:%.*]] = icmp ne i32 [[AND150]], 0
-// CHECK-NEXT:    br i1 [[TOBOOL151]], label %[[IF_THEN152:.*]], label %[[IF_ELSE172:.*]]
-// CHECK:       [[IF_THEN152]]:
-// CHECK-NEXT:    store i32 0, ptr [[RIPPLE_CHUNK_INNER_IDX145]], align 4
-// CHECK-NEXT:    br label %[[FOR_COND153:.*]]
-// CHECK:       [[FOR_COND153]]:
-// CHECK-NEXT:    [[TMP109:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX145]], align 4
-// CHECK-NEXT:    [[TMP110:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE117]], align 4
-// CHECK-NEXT:    [[CMP154:%.*]] = icmp slt i32 [[TMP109]], [[TMP110]]
-// CHECK-NEXT:    br i1 [[CMP154]], label %[[FOR_BODY156:.*]], label %[[FOR_END171:.*]]
-// CHECK:       [[FOR_BODY156]]:
-// CHECK-NEXT:    [[TMP111:%.*]] = load i32, ptr [[RIPPLE_BLOCK_START_OFFSET140]], align 4
-// CHECK-NEXT:    [[TMP112:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX145]], align 4
-// CHECK-NEXT:    [[MUL157:%.*]] = mul nsw i32 [[TMP112]], 1
-// CHECK-NEXT:    [[ADD158:%.*]] = add nsw i32 [[TMP111]], [[MUL157]]
-// CHECK-NEXT:    store i32 [[ADD158]], ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
+// CHECK-NEXT:    br label %[[FOR_END191]]
+// CHECK:       [[IF_END137]]:
+// CHECK-NEXT:    [[TMP103:%.*]] = load i32, ptr [[RIPPLE_PAR_INIT122]], align 4
+// CHECK-NEXT:    [[VALUE139:%.*]] = getelementptr inbounds nuw [[STRUCT_RIPPLE_OPT_IT]], ptr [[IT132]], i32 0, i32 0
+// CHECK-NEXT:    [[TMP104:%.*]] = load i32, ptr [[VALUE139]], align 4
+// CHECK-NEXT:    [[TMP105:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE115]], align 4
+// CHECK-NEXT:    [[MUL140:%.*]] = mul nsw i32 [[TMP105]], 1
+// CHECK-NEXT:    [[MUL141:%.*]] = mul nsw i32 [[TMP104]], [[MUL140]]
+// CHECK-NEXT:    [[ADD142:%.*]] = add nsw i32 [[TMP103]], [[MUL141]]
+// CHECK-NEXT:    store i32 [[ADD142]], ptr [[RIPPLE_BLOCK_START_OFFSET138]], align 4
+// CHECK-NEXT:    [[TMP106:%.*]] = load i32, ptr [[RIPPLE_HAS_PARTIAL_CHUNK126]], align 4
+// CHECK-NEXT:    [[VALUE144:%.*]] = getelementptr inbounds nuw [[STRUCT_RIPPLE_OPT_IT]], ptr [[IT132]], i32 0, i32 0
+// CHECK-NEXT:    [[TMP107:%.*]] = load i32, ptr [[VALUE144]], align 4
+// CHECK-NEXT:    [[TMP108:%.*]] = load i32, ptr [[RIPPLE_CHUNK_COUNT116]], align 4
+// CHECK-NEXT:    [[SUB145:%.*]] = sub nsw i32 [[TMP108]], 1
+// CHECK-NEXT:    [[CMP146:%.*]] = icmp eq i32 [[TMP107]], [[SUB145]]
+// CHECK-NEXT:    [[CONV147:%.*]] = zext i1 [[CMP146]] to i32
+// CHECK-NEXT:    [[AND148:%.*]] = and i32 [[TMP106]], [[CONV147]]
+// CHECK-NEXT:    [[TOBOOL149:%.*]] = icmp ne i32 [[AND148]], 0
+// CHECK-NEXT:    br i1 [[TOBOOL149]], label %[[IF_THEN150:.*]], label %[[IF_ELSE170:.*]]
+// CHECK:       [[IF_THEN150]]:
+// CHECK-NEXT:    store i32 0, ptr [[RIPPLE_CHUNK_INNER_IDX143]], align 4
+// CHECK-NEXT:    br label %[[FOR_COND151:.*]]
+// CHECK:       [[FOR_COND151]]:
+// CHECK-NEXT:    [[TMP109:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX143]], align 4
+// CHECK-NEXT:    [[TMP110:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE115]], align 4
+// CHECK-NEXT:    [[CMP152:%.*]] = icmp slt i32 [[TMP109]], [[TMP110]]
+// CHECK-NEXT:    br i1 [[CMP152]], label %[[FOR_BODY154:.*]], label %[[FOR_END169:.*]]
+// CHECK:       [[FOR_BODY154]]:
+// CHECK-NEXT:    [[TMP111:%.*]] = load i32, ptr [[RIPPLE_BLOCK_START_OFFSET138]], align 4
+// CHECK-NEXT:    [[TMP112:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX143]], align 4
+// CHECK-NEXT:    [[MUL155:%.*]] = mul nsw i32 [[TMP112]], 1
+// CHECK-NEXT:    [[ADD156:%.*]] = add nsw i32 [[TMP111]], [[MUL155]]
+// CHECK-NEXT:    store i32 [[ADD156]], ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
 // CHECK-NEXT:    [[TMP113:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
 // CHECK-NEXT:    [[TMP114:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE]], align 4
-// CHECK-NEXT:    [[CMP159:%.*]] = icmp slt i32 [[TMP113]], [[TMP114]]
-// CHECK-NEXT:    br i1 [[CMP159]], label %[[IF_END162:.*]], label %[[IF_THEN161:.*]]
-// CHECK:       [[IF_THEN161]]:
-// CHECK-NEXT:    br label %[[FOR_END171]]
-// CHECK:       [[IF_END162]]:
+// CHECK-NEXT:    [[CMP157:%.*]] = icmp slt i32 [[TMP113]], [[TMP114]]
+// CHECK-NEXT:    br i1 [[CMP157]], label %[[IF_END160:.*]], label %[[IF_THEN159:.*]]
+// CHECK:       [[IF_THEN159]]:
+// CHECK-NEXT:    br label %[[FOR_END169]]
+// CHECK:       [[IF_END160]]:
 // CHECK-NEXT:    [[TMP115:%.*]] = load i32, ptr [[RIPPLE_BLOCK_START_OFFSET]], align 4
 // CHECK-NEXT:    [[TMP116:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
-// CHECK-NEXT:    [[MUL163:%.*]] = mul nsw i32 [[TMP116]], 1
-// CHECK-NEXT:    [[ADD164:%.*]] = add nsw i32 [[TMP115]], [[MUL163]]
-// CHECK-NEXT:    store i32 [[ADD164]], ptr [[I]], align 4
+// CHECK-NEXT:    [[MUL161:%.*]] = mul nsw i32 [[TMP116]], 1
+// CHECK-NEXT:    [[ADD162:%.*]] = add nsw i32 [[TMP115]], [[MUL161]]
+// CHECK-NEXT:    store i32 [[ADD162]], ptr [[I]], align 4
 // CHECK-NEXT:    [[TMP117:%.*]] = load ptr, ptr [[X_ADDR]], align 4
 // CHECK-NEXT:    [[TMP118:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[ARRAYIDX165:%.*]] = getelementptr inbounds float, ptr [[TMP117]], i32 [[TMP118]]
-// CHECK-NEXT:    [[TMP119:%.*]] = load float, ptr [[ARRAYIDX165]], align 4
+// CHECK-NEXT:    [[ARRAYIDX163:%.*]] = getelementptr inbounds float, ptr [[TMP117]], i32 [[TMP118]]
+// CHECK-NEXT:    [[TMP119:%.*]] = load float, ptr [[ARRAYIDX163]], align 4
 // CHECK-NEXT:    [[TMP120:%.*]] = load ptr, ptr [[Y_ADDR]], align 4
 // CHECK-NEXT:    [[TMP121:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[ARRAYIDX166:%.*]] = getelementptr inbounds float, ptr [[TMP120]], i32 [[TMP121]]
-// CHECK-NEXT:    [[TMP122:%.*]] = load float, ptr [[ARRAYIDX166]], align 4
-// CHECK-NEXT:    [[ADD167:%.*]] = fadd float [[TMP119]], [[TMP122]]
+// CHECK-NEXT:    [[ARRAYIDX164:%.*]] = getelementptr inbounds float, ptr [[TMP120]], i32 [[TMP121]]
+// CHECK-NEXT:    [[TMP122:%.*]] = load float, ptr [[ARRAYIDX164]], align 4
+// CHECK-NEXT:    [[ADD165:%.*]] = fadd float [[TMP119]], [[TMP122]]
 // CHECK-NEXT:    [[TMP123:%.*]] = load ptr, ptr [[XPY_ADDR]], align 4
 // CHECK-NEXT:    [[TMP124:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[ARRAYIDX168:%.*]] = getelementptr inbounds float, ptr [[TMP123]], i32 [[TMP124]]
-// CHECK-NEXT:    store float [[ADD167]], ptr [[ARRAYIDX168]], align 4
-// CHECK-NEXT:    br label %[[FOR_INC169:.*]]
-// CHECK:       [[FOR_INC169]]:
-// CHECK-NEXT:    [[TMP125:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX145]], align 4
-// CHECK-NEXT:    [[ADD170:%.*]] = add nsw i32 [[TMP125]], 1
-// CHECK-NEXT:    store i32 [[ADD170]], ptr [[RIPPLE_CHUNK_INNER_IDX145]], align 4
-// CHECK-NEXT:    br label %[[FOR_COND153]], !llvm.loop [[LOOP6:![0-9]+]]
-// CHECK:       [[FOR_END171]]:
-// CHECK-NEXT:    br label %[[IF_END188:.*]]
-// CHECK:       [[IF_ELSE172]]:
-// CHECK-NEXT:    store i32 0, ptr [[RIPPLE_CHUNK_INNER_IDX145]], align 4
-// CHECK-NEXT:    br label %[[FOR_COND173:.*]]
-// CHECK:       [[FOR_COND173]]:
-// CHECK-NEXT:    [[TMP126:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX145]], align 4
-// CHECK-NEXT:    [[TMP127:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE117]], align 4
-// CHECK-NEXT:    [[CMP174:%.*]] = icmp slt i32 [[TMP126]], [[TMP127]]
-// CHECK-NEXT:    br i1 [[CMP174]], label %[[FOR_BODY176:.*]], label %[[FOR_END187:.*]]
-// CHECK:       [[FOR_BODY176]]:
-// CHECK-NEXT:    [[TMP128:%.*]] = load i32, ptr [[RIPPLE_BLOCK_START_OFFSET140]], align 4
-// CHECK-NEXT:    [[TMP129:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX145]], align 4
-// CHECK-NEXT:    [[MUL177:%.*]] = mul nsw i32 [[TMP129]], 1
-// CHECK-NEXT:    [[ADD178:%.*]] = add nsw i32 [[TMP128]], [[MUL177]]
-// CHECK-NEXT:    store i32 [[ADD178]], ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
+// CHECK-NEXT:    [[ARRAYIDX166:%.*]] = getelementptr inbounds float, ptr [[TMP123]], i32 [[TMP124]]
+// CHECK-NEXT:    store float [[ADD165]], ptr [[ARRAYIDX166]], align 4
+// CHECK-NEXT:    br label %[[FOR_INC167:.*]]
+// CHECK:       [[FOR_INC167]]:
+// CHECK-NEXT:    [[TMP125:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX143]], align 4
+// CHECK-NEXT:    [[ADD168:%.*]] = add nsw i32 [[TMP125]], 1
+// CHECK-NEXT:    store i32 [[ADD168]], ptr [[RIPPLE_CHUNK_INNER_IDX143]], align 4
+// CHECK-NEXT:    br label %[[FOR_COND151]], !llvm.loop [[LOOP5:![0-9]+]]
+// CHECK:       [[FOR_END169]]:
+// CHECK-NEXT:    br label %[[IF_END186:.*]]
+// CHECK:       [[IF_ELSE170]]:
+// CHECK-NEXT:    store i32 0, ptr [[RIPPLE_CHUNK_INNER_IDX143]], align 4
+// CHECK-NEXT:    br label %[[FOR_COND171:.*]]
+// CHECK:       [[FOR_COND171]]:
+// CHECK-NEXT:    [[TMP126:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX143]], align 4
+// CHECK-NEXT:    [[TMP127:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE115]], align 4
+// CHECK-NEXT:    [[CMP172:%.*]] = icmp slt i32 [[TMP126]], [[TMP127]]
+// CHECK-NEXT:    br i1 [[CMP172]], label %[[FOR_BODY174:.*]], label %[[FOR_END185:.*]]
+// CHECK:       [[FOR_BODY174]]:
+// CHECK-NEXT:    [[TMP128:%.*]] = load i32, ptr [[RIPPLE_BLOCK_START_OFFSET138]], align 4
+// CHECK-NEXT:    [[TMP129:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX143]], align 4
+// CHECK-NEXT:    [[MUL175:%.*]] = mul nsw i32 [[TMP129]], 1
+// CHECK-NEXT:    [[ADD176:%.*]] = add nsw i32 [[TMP128]], [[MUL175]]
+// CHECK-NEXT:    store i32 [[ADD176]], ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
 // CHECK-NEXT:    [[TMP130:%.*]] = load i32, ptr [[RIPPLE_BLOCK_START_OFFSET]], align 4
 // CHECK-NEXT:    [[TMP131:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
-// CHECK-NEXT:    [[MUL179:%.*]] = mul nsw i32 [[TMP131]], 1
-// CHECK-NEXT:    [[ADD180:%.*]] = add nsw i32 [[TMP130]], [[MUL179]]
-// CHECK-NEXT:    store i32 [[ADD180]], ptr [[I]], align 4
+// CHECK-NEXT:    [[MUL177:%.*]] = mul nsw i32 [[TMP131]], 1
+// CHECK-NEXT:    [[ADD178:%.*]] = add nsw i32 [[TMP130]], [[MUL177]]
+// CHECK-NEXT:    store i32 [[ADD178]], ptr [[I]], align 4
 // CHECK-NEXT:    [[TMP132:%.*]] = load ptr, ptr [[X_ADDR]], align 4
 // CHECK-NEXT:    [[TMP133:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[ARRAYIDX181:%.*]] = getelementptr inbounds float, ptr [[TMP132]], i32 [[TMP133]]
-// CHECK-NEXT:    [[TMP134:%.*]] = load float, ptr [[ARRAYIDX181]], align 4
+// CHECK-NEXT:    [[ARRAYIDX179:%.*]] = getelementptr inbounds float, ptr [[TMP132]], i32 [[TMP133]]
+// CHECK-NEXT:    [[TMP134:%.*]] = load float, ptr [[ARRAYIDX179]], align 4
 // CHECK-NEXT:    [[TMP135:%.*]] = load ptr, ptr [[Y_ADDR]], align 4
 // CHECK-NEXT:    [[TMP136:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[ARRAYIDX182:%.*]] = getelementptr inbounds float, ptr [[TMP135]], i32 [[TMP136]]
-// CHECK-NEXT:    [[TMP137:%.*]] = load float, ptr [[ARRAYIDX182]], align 4
-// CHECK-NEXT:    [[ADD183:%.*]] = fadd float [[TMP134]], [[TMP137]]
+// CHECK-NEXT:    [[ARRAYIDX180:%.*]] = getelementptr inbounds float, ptr [[TMP135]], i32 [[TMP136]]
+// CHECK-NEXT:    [[TMP137:%.*]] = load float, ptr [[ARRAYIDX180]], align 4
+// CHECK-NEXT:    [[ADD181:%.*]] = fadd float [[TMP134]], [[TMP137]]
 // CHECK-NEXT:    [[TMP138:%.*]] = load ptr, ptr [[XPY_ADDR]], align 4
 // CHECK-NEXT:    [[TMP139:%.*]] = load i32, ptr [[I]], align 4
-// CHECK-NEXT:    [[ARRAYIDX184:%.*]] = getelementptr inbounds float, ptr [[TMP138]], i32 [[TMP139]]
-// CHECK-NEXT:    store float [[ADD183]], ptr [[ARRAYIDX184]], align 4
-// CHECK-NEXT:    br label %[[FOR_INC185:.*]]
-// CHECK:       [[FOR_INC185]]:
-// CHECK-NEXT:    [[TMP140:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX145]], align 4
-// CHECK-NEXT:    [[ADD186:%.*]] = add nsw i32 [[TMP140]], 1
-// CHECK-NEXT:    store i32 [[ADD186]], ptr [[RIPPLE_CHUNK_INNER_IDX145]], align 4
-// CHECK-NEXT:    br label %[[FOR_COND173]], !llvm.loop [[LOOP7:![0-9]+]]
-// CHECK:       [[FOR_END187]]:
-// CHECK-NEXT:    br label %[[IF_END188]]
-// CHECK:       [[IF_END188]]:
-// CHECK-NEXT:    [[TMP141:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX145]], align 4
-// CHECK-NEXT:    [[TMP142:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE117]], align 4
-// CHECK-NEXT:    [[CMP189:%.*]] = icmp slt i32 [[TMP141]], [[TMP142]]
-// CHECK-NEXT:    br i1 [[CMP189]], label %[[IF_THEN191:.*]], label %[[IF_END192:.*]]
-// CHECK:       [[IF_THEN191]]:
+// CHECK-NEXT:    [[ARRAYIDX182:%.*]] = getelementptr inbounds float, ptr [[TMP138]], i32 [[TMP139]]
+// CHECK-NEXT:    store float [[ADD181]], ptr [[ARRAYIDX182]], align 4
+// CHECK-NEXT:    br label %[[FOR_INC183:.*]]
+// CHECK:       [[FOR_INC183]]:
+// CHECK-NEXT:    [[TMP140:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX143]], align 4
+// CHECK-NEXT:    [[ADD184:%.*]] = add nsw i32 [[TMP140]], 1
+// CHECK-NEXT:    store i32 [[ADD184]], ptr [[RIPPLE_CHUNK_INNER_IDX143]], align 4
+// CHECK-NEXT:    br label %[[FOR_COND171]], !llvm.loop [[LOOP6:![0-9]+]]
+// CHECK:       [[FOR_END185]]:
+// CHECK-NEXT:    br label %[[IF_END186]]
+// CHECK:       [[IF_END186]]:
+// CHECK-NEXT:    [[TMP141:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX143]], align 4
+// CHECK-NEXT:    [[TMP142:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE115]], align 4
+// CHECK-NEXT:    [[CMP187:%.*]] = icmp slt i32 [[TMP141]], [[TMP142]]
+// CHECK-NEXT:    br i1 [[CMP187]], label %[[IF_THEN189:.*]], label %[[IF_END190:.*]]
+// CHECK:       [[IF_THEN189]]:
 // CHECK-NEXT:    [[TMP143:%.*]] = load ptr, ptr [[THREADBLOCKV]], align 4
-// CHECK-NEXT:    call void @ripple_it_serv_exit(ptr noundef [[TMP143]], i32 noundef 0, i32 noundef 0) #[[ATTR2]]
-// CHECK-NEXT:    br label %[[FOR_END193]]
-// CHECK:       [[IF_END192]]:
-// CHECK-NEXT:    br label %[[FOR_COND132]]
-// CHECK:       [[FOR_END193]]:
-// CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_END194:.*]]
-// CHECK:       [[RIPPLE_PAR_FOR_END194]]:
-// CHECK-NEXT:    br label %[[IF_END195]]
-// CHECK:       [[IF_END195]]:
+// CHECK-NEXT:    call void @ripple_it_serv_exit(ptr noundef [[TMP143]], i32 noundef 0, i32 noundef 0) #[[ATTR3]]
+// CHECK-NEXT:    br label %[[FOR_END191]]
+// CHECK:       [[IF_END190]]:
+// CHECK-NEXT:    br label %[[FOR_COND130]]
+// CHECK:       [[FOR_END191]]:
+// CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_END192:.*]]
+// CHECK:       [[RIPPLE_PAR_FOR_END192]]:
+// CHECK-NEXT:    br label %[[IF_END193]]
+// CHECK:       [[IF_END193]]:
 // CHECK-NEXT:    [[TMP144:%.*]] = load i32, ptr [[RIPPLE_CHUNK_INNER_IDX]], align 4
 // CHECK-NEXT:    [[TMP145:%.*]] = load i32, ptr [[RIPPLE_THREAD_CHUNK_SIZE]], align 4
-// CHECK-NEXT:    [[CMP196:%.*]] = icmp slt i32 [[TMP144]], [[TMP145]]
-// CHECK-NEXT:    br i1 [[CMP196]], label %[[IF_THEN198:.*]], label %[[IF_ELSE199:.*]]
-// CHECK:       [[IF_THEN198]]:
-// CHECK-NEXT:    br label %[[FOR_END204]]
-// CHECK:       [[IF_ELSE199]]:
+// CHECK-NEXT:    [[CMP194:%.*]] = icmp slt i32 [[TMP144]], [[TMP145]]
+// CHECK-NEXT:    br i1 [[CMP194]], label %[[IF_THEN196:.*]], label %[[IF_ELSE197:.*]]
+// CHECK:       [[IF_THEN196]]:
+// CHECK-NEXT:    br label %[[FOR_END202]]
+// CHECK:       [[IF_ELSE197]]:
 // CHECK-NEXT:    [[TMP146:%.*]] = load i32, ptr [[RIPPLE_IV_SEQ_EXIT_VAL]], align 4
 // CHECK-NEXT:    store i32 [[TMP146]], ptr [[I]], align 4
-// CHECK-NEXT:    br label %[[IF_END200:.*]]
-// CHECK:       [[IF_END200]]:
-// CHECK-NEXT:    br label %[[FOR_INC201:.*]]
-// CHECK:       [[FOR_INC201]]:
+// CHECK-NEXT:    br label %[[IF_END198:.*]]
+// CHECK:       [[IF_END198]]:
+// CHECK-NEXT:    br label %[[FOR_INC199:.*]]
+// CHECK:       [[FOR_INC199]]:
 // CHECK-NEXT:    [[TMP147:%.*]] = load ptr, ptr [[THREADBLOCKT]], align 4
-// CHECK-NEXT:    [[CALL202:%.*]] = call i32 @ripple_thd_get_block_size(ptr noundef [[TMP147]], i32 noundef 0) #[[ATTR2]]
+// CHECK-NEXT:    [[CALL200:%.*]] = call i32 @ripple_thd_get_block_size(ptr noundef [[TMP147]], i32 noundef 0) #[[ATTR4]]
 // CHECK-NEXT:    [[TMP148:%.*]] = load i32, ptr [[RIPPLE_CHUNK_IDX]], align 4
-// CHECK-NEXT:    [[ADD203:%.*]] = add nsw i32 [[TMP148]], [[CALL202]]
-// CHECK-NEXT:    store i32 [[ADD203]], ptr [[RIPPLE_CHUNK_IDX]], align 4
-// CHECK-NEXT:    br label %[[FOR_COND]], !llvm.loop [[LOOP8:![0-9]+]]
-// CHECK:       [[FOR_END204]]:
-// CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_END205:.*]]
-// CHECK:       [[RIPPLE_PAR_FOR_END205]]:
-// CHECK-NEXT:    [[TMP149:%.*]] = load ptr, ptr [[THREADBLOCKT]], align 4
-// CHECK-NEXT:    call void @ripple_thd_exit(ptr noundef [[TMP149]]) #[[ATTR2]]
-// CHECK-NEXT:    [[TMP150:%.*]] = load ptr, ptr [[THREADBLOCKV]], align 4
-// CHECK-NEXT:    call void @ripple_thd_exit(ptr noundef [[TMP150]]) #[[ATTR2]]
+// CHECK-NEXT:    [[ADD201:%.*]] = add nsw i32 [[TMP148]], [[CALL200]]
+// CHECK-NEXT:    store i32 [[ADD201]], ptr [[RIPPLE_CHUNK_IDX]], align 4
+// CHECK-NEXT:    br label %[[FOR_COND]], !llvm.loop [[LOOP7:![0-9]+]]
+// CHECK:       [[FOR_END202]]:
+// CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_END203:.*]]
+// CHECK:       [[RIPPLE_PAR_FOR_END203]]:
+// CHECK-NEXT:    call void @ripple_thd_exit(ptr noundef null) #[[ATTR3]]
+// CHECK-NEXT:    call void @ripple_thd_exit(ptr noundef null) #[[ATTR3]]
 // CHECK-NEXT:    ret void
 //
 void check(int Chunk, int32_t start, int64_t end, float *x,
            float *y, float *xpy) {
-  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL);
-  ripple_thd_block_t ThreadBlockV = ripple_thd_init(0, NULL);
+  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL, 1, 0, 1);
+  ripple_thd_block_t ThreadBlockV = ripple_thd_init(0, NULL, 1, 0, 1);
   #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlockT) Dims(0) ThreadChunk(Chunk)
   #pragma ripple parallel Block(ThreadBlockV) Dims(0) ThreadChunk(2) Schedule(dynamic)
   #else
-  ripple_parallel_thd_chunk(ThreadBlockT, Chunk, 0);
-  ripple_parallel_thd_chunk_dyn(ThreadBlockV, 2, 0);
+  ripple_thd_parallel(ThreadBlockT, Chunk, 0, 0);
+  ripple_thd_parallel_dyn(ThreadBlockV, 2, 0, 0);
   #endif
   for (int i = start; i < end; ++i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(ThreadBlockT);
-  ripple_thd_exit(ThreadBlockV);
+  ripple_thd_exit(NULL);
+  ripple_thd_exit(NULL);
 }
 
 //.
-// CHECK: [[LOOP3]] = distinct !{[[LOOP3]], [[META4:![0-9]+]]}
-// CHECK: [[META4]] = !{!"llvm.loop.mustprogress"}
-// CHECK: [[LOOP5]] = distinct !{[[LOOP5]], [[META4]]}
-// CHECK: [[LOOP6]] = distinct !{[[LOOP6]], [[META4]]}
-// CHECK: [[LOOP7]] = distinct !{[[LOOP7]], [[META4]]}
-// CHECK: [[LOOP8]] = distinct !{[[LOOP8]], [[META4]]}
+// CHECK: [[LOOP2]] = distinct !{[[LOOP2]], [[META3:![0-9]+]]}
+// CHECK: [[META3]] = !{!"llvm.loop.mustprogress"}
+// CHECK: [[LOOP4]] = distinct !{[[LOOP4]], [[META3]]}
+// CHECK: [[LOOP5]] = distinct !{[[LOOP5]], [[META3]]}
+// CHECK: [[LOOP6]] = distinct !{[[LOOP6]], [[META3]]}
+// CHECK: [[LOOP7]] = distinct !{[[LOOP7]], [[META3]]}
 //.

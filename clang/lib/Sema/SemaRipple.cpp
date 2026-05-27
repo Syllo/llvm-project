@@ -1358,10 +1358,10 @@ Expr *createRippleInit(Sema &SemaRef, ThreadScheduleKind ThreadSchedule,
                        LoopIterationSpace LIS, Expr *RippleIndex,
                        Expr *LoopInit) {
   SourceLocation Loc = LIS.InitSrcRange.getBegin();
-  Expr *Step = LIS.CounterStep;
   QualType T = RippleIndex->getType();
   Expr *RippleInit = nullptr;
-  if (ThreadSchedule != ThreadScheduleKind::Dynamic) {
+  Expr *Step = LIS.CounterStep;
+  if (ThreadSchedule == ThreadScheduleKind::NotThread) {
     Expr *SteppedIdx =
         SemaRef
             .CreateBuiltinBinOp(Loc, BinaryOperator::Opcode::BO_Mul,
@@ -2133,7 +2133,7 @@ buildInnerBlockLoop(Sema &SemaRef, SourceLocation Loc,
           InnerBidxInitStmt, InnerLoopInc.get(), UpdateLoopIV.get()};
 }
 
-/// Compute: begin + BlockIdx * CS * loop_step
+/// Compute: begin + BlockIdx * ChunkSize * loop_step
 ExprResult buildBlockStartIdx(Sema &SemaRef, SourceLocation Loc,
                               const LoopIterationSpace &LIS,
                               RippleComputeConstruct &S, Expr *BlockIdx) {
@@ -2145,11 +2145,69 @@ ExprResult buildBlockStartIdx(Sema &SemaRef, SourceLocation Loc,
                                     S.getRippleLowerBound(), Offset.get());
 }
 
+/// Generates a flat index from S's list of indices and from the
+/// block sizes associated with the indices.
+static Expr *flatIndex(Sema &SemaRef, RippleComputeConstruct &S,
+                       Expr *BlockShape) {
+  ASTContext &Context = SemaRef.getASTContext();
+  ArrayRef<uint64_t> DimIds = S.getDimensionIds();
+
+  if (DimIds.empty())
+    return nullptr;
+
+  auto makeDimExpr = [&](uint64_t DimId) -> Expr * {
+    return IntegerLiteral::Create(
+        Context, llvm::APInt(Context.getIntWidth(Context.UnsignedIntTy), DimId),
+        Context.UnsignedIntTy, SourceLocation());
+  };
+
+  if (DimIds.empty())
+    return nullptr;
+
+  // seed with last dim
+  Expr *LastDimExpr = makeDimExpr(DimIds.back());
+  Expr *IdArgs[] = {BlockShape, LastDimExpr};
+  ExprResult FlatIdxExpr =
+      rippleThreadAPICall(SemaRef, SourceLocation(), "ripple_thd_id", IdArgs);
+  if (FlatIdxExpr.isInvalid())
+    return nullptr;
+  Expr *FlatIdx = FlatIdxExpr.get();
+
+  // walk remaining dims in reverse
+  for (uint64_t DimId : llvm::reverse(DimIds.drop_back())) {
+    Expr *DimExpr = makeDimExpr(DimId);
+
+    Expr *SzArgs[] = {BlockShape, DimExpr};
+    ExprResult BlockSizeExpr = rippleThreadAPICall(
+        SemaRef, SourceLocation(), "ripple_thd_get_block_size", SzArgs);
+    if (BlockSizeExpr.isInvalid())
+      return nullptr;
+
+    FlatIdx = SemaRef
+                  .CreateBuiltinBinOp(SourceLocation(), BO_Mul, FlatIdx,
+                                      BlockSizeExpr.get())
+                  .get();
+
+    Expr *CurIdArgs[] = {BlockShape, DimExpr};
+    ExprResult CurIdxExpr = rippleThreadAPICall(SemaRef, SourceLocation(),
+                                                "ripple_thd_id", CurIdArgs);
+    if (CurIdxExpr.isInvalid())
+      return nullptr;
+
+    FlatIdx = SemaRef
+                  .CreateBuiltinBinOp(SourceLocation(), BO_Add, FlatIdx,
+                                      CurIdxExpr.get())
+                  .get();
+  }
+
+  return FlatIdx;
+}
+
 /// Build the multi-threaded loop nest for both static and dynamic scheduling.
 ///
 /// Static scheduling:
-///   for (Bidx = 0; Bidx < NB; Bidx += ripple_get_size()) {
-///     block_start_idx = begin + Bidx * CS * loop_step
+///   for (Bidx = ripple_thd_id(); Bidx < NB; Bidx += ripple_get__size(dim)) {
+///     BlockStartIdx = begin + Bidx * CS * loop_step
 ///     InnerBidx;
 ///     if (PartialLast & Bidx == NB - 1)
 ///       for (InnerBidx = 0; InnerBidx < CS; InnerBidx++) {
@@ -2203,8 +2261,6 @@ void CreateMultiThreadExpressions(Sema &SemaRef, const LoopIterationSpace &LIS,
 
   auto InductionVarType = S.getAssociatedLoopIters()->getType();
   unsigned BitW = SemaRef.Context.getIntWidth(InductionVarType);
-  auto *ZeroAsLiteral = IntegerLiteral::Create(
-      SemaRef.Context, llvm::APInt(BitW, 0), InductionVarType, Loc);
 
   // Outer-loop components filled in by the mode-specific block below.
   Stmt *OuterInit = nullptr;
@@ -2217,24 +2273,32 @@ void CreateMultiThreadExpressions(Sema &SemaRef, const LoopIterationSpace &LIS,
   // Hoisted for reuse in the post-inner-loop exit call (dynamic only).
   Expr *BlockShapeExpr = nullptr;
   Expr *DynZero = nullptr;
+  auto &Context = SemaRef.getASTContext();
 
+  QualType BSType = S.getBlockShape()->getType();
+  auto *BSRef =
+      buildDeclRefExpr(SemaRef, S.getBlockShape(), BSType, Loc, false);
+  BlockShapeExpr =
+      ImplicitCastExpr::Create(Context, BSRef->getType(), CK_LValueToRValue,
+                               BSRef, nullptr, VK_LValue, FPOptionsOverride());
   if (IsDynamic) {
-    auto &Context = SemaRef.getASTContext();
 
-    QualType BSType = S.getBlockShape()->getType();
-    auto *BSRef =
-        buildDeclRefExpr(SemaRef, S.getBlockShape(), BSType, Loc, false);
-    BlockShapeExpr = ImplicitCastExpr::Create(Context, BSRef->getType(),
-                                              CK_LValueToRValue, BSRef, nullptr,
-                                              VK_LValue, FPOptionsOverride());
-
+    ArrayRef<uint64_t> DimIds = S.getDimensionIds();
+    if (DimIds.size() != 1 || DimIds[0] != 0) {
+      SemaRef.Diag(S.getDimsRange().getBegin(),
+                   diag::err_ripple_loop_parallel_dyn_is_0);
+    }
+    Expr *RippleDim = IntegerLiteral::Create(
+        Context,
+        llvm::APInt(Context.getIntWidth(Context.UnsignedIntTy), DimIds[0]),
+        Context.UnsignedIntTy, SourceLocation());
     DynZero = SemaRef.ActOnIntegerConstant(Loc, 0).get();
     Expr *Zero = DynZero;
     Expr *One = SemaRef.ActOnIntegerConstant(Loc, 1).get();
 
-    // OuterInit = ripple_it_serv_init(BS, 0, 0, NB, 1)
-    Expr *ArgsInit[] = {BlockShapeExpr, Zero, Zero, S.getRippleParallelBlocks(),
-                        One};
+    // OuterInit = ripple_it_serv_init(BS, dim, 0, NB, 1)
+    Expr *ArgsInit[] = {BlockShapeExpr, RippleDim, Zero,
+                        S.getRippleParallelBlocks(), One};
     ExprResult CallInit =
         rippleThreadAPICall(SemaRef, Loc, "ripple_it_serv_init", ArgsInit);
     if (CallInit.isInvalid())
@@ -2245,8 +2309,8 @@ void CreateMultiThreadExpressions(Sema &SemaRef, const LoopIterationSpace &LIS,
     OuterCond = SemaRef.ActOnIntegerConstant(Loc, 1).get();
     // OuterInc = nullptr
 
-    // it = ripple_it_serv_next(BS, 0)
-    Expr *ArgsNext[] = {BlockShapeExpr, Zero};
+    // it = ripple_it_serv_next(BS, dim)
+    Expr *ArgsNext[] = {BlockShapeExpr, RippleDim};
     ExprResult CallNext =
         rippleThreadAPICall(SemaRef, Loc, "ripple_it_serv_next", ArgsNext);
     if (CallNext.isInvalid())
@@ -2256,7 +2320,7 @@ void CreateMultiThreadExpressions(Sema &SemaRef, const LoopIterationSpace &LIS,
         createDeclStmt(SemaRef, Loc, ItType, "it", CallNext.get());
     OuterBodyPrefix.push_back(ItDeclStmt);
 
-    // if (!it.has_value) { ripple_it_serv_exit(BS, 0, 0); break; }
+    // if (!it.has_value) { ripple_it_serv_exit(BS, dim, /*barrier*/0); break; }
     UnqualifiedId MemberName;
     MemberName.setIdentifier(&Context.Idents.get("has_value"), Loc);
     CXXScopeSpec SS;
@@ -2270,7 +2334,7 @@ void CreateMultiThreadExpressions(Sema &SemaRef, const LoopIterationSpace &LIS,
     if (NotHasValue.isInvalid())
       return;
 
-    Expr *ArgsExit[] = {BlockShapeExpr, Zero, Zero};
+    Expr *ArgsExit[] = {BlockShapeExpr, RippleDim, Zero};
     ExprResult CallExit =
         rippleThreadAPICall(SemaRef, Loc, "ripple_it_serv_exit", ArgsExit);
     if (CallExit.isInvalid())
@@ -2328,9 +2392,12 @@ void CreateMultiThreadExpressions(Sema &SemaRef, const LoopIterationSpace &LIS,
                                           SourceLocation(), ValueAccess.get())
                      .get();
   } else {
-    // OuterInit = Bidx = 0
-    auto [Bidx, BidxDeclStmt] = createDeclStmt(
-        SemaRef, Loc, InductionVarType, "ripple.chunk.idx", ZeroAsLiteral);
+    // OuterInit = Bidx = thread_id
+    Expr *ThdId = flatIndex(SemaRef, S, BlockShapeExpr);
+    if (ThdId == nullptr)
+      return;
+    auto [Bidx, BidxDeclStmt] = createDeclStmt(SemaRef, Loc, InductionVarType,
+                                               "ripple.chunk.idx", ThdId);
     OuterInit = BidxDeclStmt;
 
     // OuterCond = Bidx < NB
@@ -2345,7 +2412,7 @@ void CreateMultiThreadExpressions(Sema &SemaRef, const LoopIterationSpace &LIS,
     BlockIdx = Bidx;
   }
 
-  // BlockStartIdx = begin + BlockIdx * CS * loop_step
+  // BlockStartIdx = begin + Bidx * ChunkSize * loop_step
   ExprResult BlockStartIdxExpr =
       buildBlockStartIdx(SemaRef, Loc, LIS, S, BlockIdx);
   auto [BlockStartIdx, BlockStartIdxDeclStmt] =
@@ -2554,6 +2621,8 @@ void SemaRipple::ActOnRippleComputeConstruct(RippleComputeConstruct &S) {
   if (LIS.IsDeclStmtInit)
     S.setLoopIVOrigin(LIS.CounterVar);
 
+  // The lower bound only changes in the case of static thread scheduling.
+  // We define it while generating the loop.
   S.setRippleLowerBound(createRippleInit(SemaRef, S.getThreadScheduleKind(),
                                          LIS, RippleIdx,
                                          S.getOriginLowerBound()));

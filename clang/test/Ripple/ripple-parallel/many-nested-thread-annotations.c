@@ -2,25 +2,29 @@
 // REQUIRES: target=hexagon{{.*}} || target-x86_64 || target-aarch64
 // RUN: %clang -ffreestanding -S -Xclang -disable-llvm-passes -emit-llvm -fenable-ripple %s -o - | FileCheck %s
 
+// NOTE: This tests the front-end's ability to handle any combination
+//       of annotations. There may be stronger limits imposed by the runtime
+//      (e.g. the dyn dimension has to be 0)
+
 #include "../ripple_test.h"
 
 // CHECK-COUNT-10: {{^\s*}}ripple.par.for.begin{{[0-9]*}}:
 
 void check(int Chunk, int64_t N, int32_t start, int64_t end, float x[restrict N],
            float y[restrict N], float xpy[restrict N]) {
-  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL);
-  ripple_parallel_thd_chunk_dyn(ThreadBlockT, Chunk, 0);
-  ripple_parallel_thd_chunk(ThreadBlockT, Chunk, 0);
-  ripple_parallel_thd_chunk_dyn(ThreadBlockT, Chunk, 0);
-  ripple_parallel_thd_chunk_dyn(ThreadBlockT, Chunk, 0);
-  ripple_parallel_thd_chunk_dyn(ThreadBlockT, Chunk, 0);
-  ripple_parallel_thd_chunk(ThreadBlockT, Chunk, 0);
-  ripple_parallel_thd_chunk(ThreadBlockT, Chunk, 0);
-  ripple_parallel_thd_chunk(ThreadBlockT, Chunk, 0);
-  ripple_parallel_thd_chunk_dyn(ThreadBlockT, Chunk, 0);
-  ripple_parallel_thd_chunk(ThreadBlockT, Chunk, 0);
+  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL, 1, 0, 1);
+  ripple_thd_parallel_dyn(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
+  ripple_thd_parallel(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
+  ripple_thd_parallel_dyn(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
+  ripple_thd_parallel_dyn(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
+  ripple_thd_parallel_dyn(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
+  ripple_thd_parallel(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
+  ripple_thd_parallel(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
+  ripple_thd_parallel(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
+  ripple_thd_parallel_dyn(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
+  ripple_thd_parallel(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
   for (int i = start; i < end; ++i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(ThreadBlockT);
+  ripple_thd_exit(NULL);
 }
 
