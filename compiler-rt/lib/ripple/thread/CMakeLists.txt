@@ -6,16 +6,13 @@ message(NOTICE "RIPPLE THD INSTALL DIR is ${install_dir}")
 
 install(
   FILES
-  ${CMAKE_CURRENT_LIST_DIR}/header/ripple/ripple_thd.h
-  ${CMAKE_CURRENT_LIST_DIR}/header/ripple/__ripple_thd.h
-  ${CMAKE_CURRENT_LIST_DIR}/header/ripple/ripple_thd_barrier.h
-  ${CMAKE_CURRENT_LIST_DIR}/header/ripple/ripple_thd_it_serv.h
+  ${CMAKE_CURRENT_LIST_DIR}/header/ripple/ripple_thd_block.h
+  ${CMAKE_CURRENT_LIST_DIR}/header/ripple/ripple_thd_conventions.h
   COMPONENT compiler-rt-headers
   PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
   DESTINATION
   ${COMPILER_RT_INSTALL_INCLUDE_DIR}/ripple
 )
-
 
 # __________________________ Environment detection _____________________________
 
@@ -70,6 +67,16 @@ if(NOT "${HEXAGON_SDK_ROOT}" STREQUAL "")
   message(NOTICE "HEXAGON_TOOLS_ROOT=${HEXAGON_TOOLS_ROOT}")
 endif()
 
+set(HEXAGON_FLAGS
+    -O2
+    -Wall
+    -m${HEXAGON_ARCH_VERSION}
+    -mhvx
+    -Wno-gnu-include-next
+    -fenable-ripple
+    )
+
+
 # __________________________ QuRT-based thd lib ________________________________
 
 
@@ -83,6 +90,7 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
   set(RIPPLE_THD_QURT_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/qurt/ripple_thd_qurt.c"
     "${CMAKE_CURRENT_LIST_DIR}/ripple_thd_it_serv.c"
+    "${CMAKE_CURRENT_LIST_DIR}/ripple_thd.c"
   )
 
   # Include dirs needed to compile the sources
@@ -91,7 +99,6 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
     "${HEXAGON_QURT_INCLUDE_DIR}"
     "${HEXAGON_QURT_INCLUDE_DIR}/../posix"
     "${CMAKE_CURRENT_LIST_DIR}/header"
-    # This dependency is an artifact of the ripple_thd_it_serv implementation
   )
 
   # Static library
@@ -104,6 +111,10 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
   PRIVATE
     RIPPLE_THD_USE_QURT
   )
+  target_compile_options(ripple_thd_qurt_static
+  PRIVATE
+    ${HEXAGON_FLAGS}
+  )
   set_target_properties(ripple_thd_qurt_static PROPERTIES OUTPUT_NAME ripple_thd_qurt)
 
   # Shared (dynamic) library
@@ -115,6 +126,10 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
   target_compile_definitions(ripple_thd_qurt_shared
   PRIVATE
     RIPPLE_THD_USE_QURT
+  )
+  target_compile_options(ripple_thd_qurt_shared
+  PRIVATE
+    ${HEXAGON_FLAGS}
   )
   set_target_properties(ripple_thd_qurt_shared PROPERTIES OUTPUT_NAME ripple_thd_qurt)
 
@@ -142,7 +157,9 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
 
   # Sources
   set(RIPPLE_THD_QHPI_SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/qhpi/ripple_thd_qhpi.c"
     "${CMAKE_CURRENT_LIST_DIR}/ripple_thd_it_serv.c"
+    "${CMAKE_CURRENT_LIST_DIR}/ripple_thd.c"
   )
 
   # Include dirs needed to compile the sources
@@ -176,6 +193,10 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
   PRIVATE
     RIPPLE_THD_USE_QHPI
   )
+  target_compile_options(ripple_thd_qhpi_static
+  PRIVATE
+    ${HEXAGON_FLAGS}
+  )
   set_target_properties(ripple_thd_qhpi_static PROPERTIES OUTPUT_NAME ripple_thd_qhpi)
 
   # Shared (dynamic) library
@@ -195,11 +216,16 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
     message(NOTICE "Building QHPI-based ripple_thd without QHPI headers")
   endif()
 
+  target_compile_options(ripple_thd_qhpi_shared
+  PRIVATE
+    ${HEXAGON_FLAGS}
+  )
   set_target_properties(ripple_thd_qhpi_shared PROPERTIES OUTPUT_NAME ripple_thd_qhpi)
 
   # Install headers
   install(
     FILES
+    ${CMAKE_CURRENT_LIST_DIR}/header/ripple/ripple_thd_qhpi.h
     ${RIPPLE_THD_QHPI_EXPORT_HEADERS}
     COMPONENT compiler-rt-headers
     PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
@@ -217,4 +243,3 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
 else() # QuRT include dir doesn't exist
   message(NOTICE "Not building QuRT-based Ripple thd lib")
 endif()
-

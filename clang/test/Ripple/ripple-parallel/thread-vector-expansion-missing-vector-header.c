@@ -7,18 +7,18 @@
 
 void check(int Chunk, long N, int start, long end, float x[restrict N],
            float y[restrict N], float xpy[restrict N]) {
-  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL);
+  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL, 1, 0, 1);
   ripple_block_t BSV = ripple_set_block_shape(0, 4);
   #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlockT) Dims(0) ThreadChunk(Chunk)
   #pragma ripple parallel Block(BSV) Dims(0)
   #else
-  ripple_parallel_thread_chunk(BST, Chunk, 0);
+  ripple_thd_parallel(BST, Chunk, 0, 0);
   ripple_parallel(BSV, 0);
   #endif
   for (int i = start; i < end; ++i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(ThreadBlockT);
+  ripple_thd_exit(NULL);
 }
 
 // CHECK: thread-vector-expansion-missing-vector-header.c:11:3: error: unknown type name 'ripple_block_t'; did you mean 'ripple_thd_block_t'?
