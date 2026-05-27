@@ -8,13 +8,13 @@
 
 void check(int Chunk, int64_t N, int32_t start, int64_t end, float x[restrict N],
            float y[restrict N], float xpy[restrict N]) {
-  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL);
+  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL, 1, 0, 1);
   ripple_block_t BSV = ripple_set_block_shape(0, 16);
   #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlockT) Dims(0) ThreadChunk(Chunk)
   #pragma ripple parallel Block(BSV) Dims(0)
   #else
-  ripple_parallel_thd_chunk(ThreadBlockT, Chunk, 0);
+  ripple_thd_parallel(ThreadBlockT, Chunk, 0, 0);
   ripple_parallel(BSV, 0);
   #endif
   for (int i = start; i < end; ++i) {
@@ -26,13 +26,13 @@ void check(int Chunk, int64_t N, int32_t start, int64_t end, float x[restrict N]
 
 void check2(int Chunk, int64_t N, int32_t start, int64_t end, float x[restrict N],
             float y[restrict N], float xpy[restrict N]) {
-  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL);
+  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL, 1, 0, 1);
   ripple_block_t BSV = ripple_set_block_shape(0, 16);
   #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlockT) Dims(0) ThreadChunk(Chunk)
   #pragma ripple parallel Block(BSV) Dims(0) NoRemainder
   #else
-  ripple_parallel_thd_chunk(ThreadBlockT, Chunk, 0);
+  ripple_thd_parallel(ThreadBlockT, Chunk, 0, 0);
   ripple_parallel_full(BSV, 0);
   #endif
   for (int i = start; i < end; ++i) {
@@ -44,13 +44,13 @@ void check2(int Chunk, int64_t N, int32_t start, int64_t end, float x[restrict N
 
 void check3(int Chunk, int64_t N, int32_t start, int64_t end, float x[restrict N],
             float y[restrict N], float xpy[restrict N]) {
-  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL);
+  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL, 1, 0, 1);
   ripple_block_t BSV = ripple_set_block_shape(0, 16);
   #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlockT) Dims(0) ThreadChunk(Chunk)
   #pragma ripple parallel Block(BSV) Dims(0) BlockIndependent
   #else
-  ripple_parallel_thd_chunk(ThreadBlockT, Chunk, 0);
+  ripple_thd_parallel(ThreadBlockT, Chunk, 0, 0);
   ripple_parallel_peel(BSV, 0);
   #endif
   for (int i = start; i < end; ++i) {

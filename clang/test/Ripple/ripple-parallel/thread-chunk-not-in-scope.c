@@ -11,11 +11,11 @@ typedef float f32;
 
 void check(int Chunk, int N, int start, int end, f32 x[restrict N],
            f32 y[restrict N], f32 xpy[restrict N]) {
-  ripple_thd_block_t ThreadBlock = ripple_thd_init(0, NULL);
+  ripple_thd_block_t ThreadBlock = ripple_thd_init(0, NULL, 1, 0, 1);
   #pragma ripple parallel Block(ThreadBlock) Dims(0) ThreadChunk(chunk)
   for (int i = start; i < end; ++i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(ThreadBlock);
+  ripple_thd_exit(NULL);
 }
 
 // CHECK: thread-chunk-not-in-scope.c:15:66: error: use of undeclared identifier 'chunk'; did you mean 'Chunk'?

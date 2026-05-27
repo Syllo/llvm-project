@@ -555,19 +555,19 @@
 //
 void check(int Chunk, int32_t start, int64_t end, float *x,
            float *y, float *xpy) {
-  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL);
-  ripple_thd_block_t ThreadBlockV = ripple_thd_init(0, NULL);
+  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL, 1, 0, 1);
+  ripple_thd_block_t ThreadBlockV = ripple_thd_init(0, NULL, 1, 0, 1);
   #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlockT) Dims(0) ThreadChunk(Chunk)
   #pragma ripple parallel Block(ThreadBlockV) Dims(0) ThreadChunk(Chunk)
   #else
-  ripple_parallel_thd_chunk(ThreadBlockT, Chunk, 0);
-  ripple_parallel_thd_chunk(ThreadBlockV, Chunk, 0);
+  ripple_thd_parallel(ThreadBlockT, Chunk, 0, 0);
+  ripple_thd_parallel(ThreadBlockV, Chunk, 0, 0);
   #endif
   for (int i = start; i < end; ++i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(ThreadBlockT);
-  ripple_thd_exit(ThreadBlockV);
+  ripple_thd_exit(NULL);
+  ripple_thd_exit(NULL);
 }
 
 //.

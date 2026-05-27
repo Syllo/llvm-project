@@ -232,16 +232,16 @@
 //
 void check(int32_t start, int64_t end, float *x,
            float *y, float *xpy) {
-  ripple_thd_block_t ThreadBlock = ripple_thd_init(0, NULL);
+  ripple_thd_block_t ThreadBlock = ripple_thd_init(0, NULL, 1, 0, 1);
   long i;
 #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlock) Dims(0) Schedule(dynamic)
 #else
-  ripple_parallel_thd_dyn(ThreadBlock, 0);
+  ripple_thd_parallel_dyn(ThreadBlock, 1, RIPPLE_THD_PAR_DFT, 0);
 #endif
   for (i = start; i < end; ++i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(ThreadBlock);
+  ripple_thd_exit(NULL);
 }
 
 // CHECK-LABEL: define dso_local void @check2(
@@ -465,15 +465,15 @@ void check(int32_t start, int64_t end, float *x,
 //
 void check2(int32_t chunk, int32_t start, int32_t end, float *x,
            float *y, float *xpy) {
-  ripple_thd_block_t ThreadBlock = ripple_thd_init(0, NULL);
+  ripple_thd_block_t ThreadBlock = ripple_thd_init(0, NULL, 1, 0, 1);
 #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlock) Dims(0) ThreadChunk(chunk) Schedule(dynamic)
 #else
-  ripple_parallel_thd_chunk_dyn(ThreadBlock, chunk, 0);
+  ripple_thd_parallel_dyn(ThreadBlock, chunk, RIPPLE_THD_PAR_DFT, 0);
 #endif
   for (int32_t i = start; i < end; ++i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(ThreadBlock);
+  ripple_thd_exit(NULL);
 }
 
 // CHECK-LABEL: define dso_local void @check3(
@@ -695,15 +695,15 @@ void check2(int32_t chunk, int32_t start, int32_t end, float *x,
 //
 void check3(int32_t start, int32_t end, float *x,
            float *y, float *xpy) {
-  ripple_thd_block_t ThreadBlock = ripple_thd_init(0, NULL);
+  ripple_thd_block_t ThreadBlock = ripple_thd_init(0, NULL, 1, 0, 1);
 #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlock) Dims(0) ThreadChunk(22) Schedule(dynamic)
 #else
-  ripple_parallel_thd_chunk_dyn(ThreadBlock, 22, 0);
+  ripple_parallel_thd_chunk_dyn(ThreadBlock, 22, 0, 0);
 #endif
   for (int32_t i = end - 1; i >= start; --i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(ThreadBlock);
+  ripple_thd_exit(NULL);
 }
 //.
 // CHECK: [[LOOP5]] = distinct !{[[LOOP5]], [[META6:![0-9]+]]}

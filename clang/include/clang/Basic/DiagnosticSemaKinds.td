@@ -14314,6 +14314,8 @@ def err_ripple_loop_incr_not_compatible : Error<
 def ext_ripple_loop_not_canonical_init : ExtWarn<
   "initialization clause of Ripple for loop is not in canonical form "
   "('var = init' or 'T var = init')">, InGroup<Ripple>;
+def err_ripple_loop_parallel_dyn_is_0: Error<
+  "only thread block dimension allowed for ripple_thd_parallel_dyn is 0">;
 def err_ripple_duplicate_parallel_index : Error<
   "duplicate parallel dimension '%0' in pragma ripple parallel">;
 def err_ripple_stmt_depends_on_loop_counter : Error<
