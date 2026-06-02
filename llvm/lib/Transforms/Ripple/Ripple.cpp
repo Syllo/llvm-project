@@ -33,6 +33,8 @@
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/Demangle/Demangle.h"
+#include "llvm/Demangle/MicrosoftDemangle.h"
+#include "llvm/Demangle/MicrosoftDemangleNodes.h"
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/AttributeMask.h"
 #include "llvm/IR/Attributes.h"
@@ -8519,13 +8521,17 @@ Error Ripple::checkRippleExternCall(const CallInst *Call) {
     auto *CanonicalCalledFTy = ExternalRippleFunction::canonicalizeFunctionType(
         CalledF, /*MaskArgument*/ nullptr, BS);
     // Report an error that there exist an external ripple function w/ this name
-    // and argument types but we couldn't select it
+    // and argument types but we couldn't select it.  Parse the call name once
+    // up-front so the any_of below does not re-demangle for every candidate.
+    ExternalRippleFunction::SourceFunctionName CallName =
+        CalledF ? ExternalRippleFunction::SourceFunctionName::parse(CalledF)
+                : ExternalRippleFunction::SourceFunctionName{};
     if (CalledF && CalledF->isDeclaration() &&
         any_of(ExternalRippleFunctions,
-               [CalledF, CanonicalCalledFTy](
+               [&CallName, CanonicalCalledFTy](
                    std::unique_ptr<ExternalRippleFunction> &ExternFCandidate) {
                  return ExternFCandidate->matchesFunctionNameAndScalarPrototype(
-                     CalledF->getName(), CanonicalCalledFTy);
+                     CallName, CanonicalCalledFTy);
                })) {
       const auto &BlockShape = setShapeToTensorShape(BS);
       LLVM_DEBUG(dbgs() << "Block shape " << BlockShape);
@@ -9097,24 +9103,182 @@ Ripple::aliasesWithAlloca(const MemoryLocation &Loc,
   return {AliasResult::NoAlias, nullptr};
 }
 
-StringRef ExternalRippleFunction::removeRipplePrefix(const Function *Fun) {
-  return Fun->getName().split(RipplePrefix).second;
+namespace {
+
+using SourceFunctionName = ExternalRippleFunction::SourceFunctionName;
+
+/// Map a demangled decl-context to our namespace convention.  An anonymous
+/// namespace has internal linkage and is treated as global/local (empty), so
+/// an "(anonymous namespace)::foo" candidate matches an unqualified call.
+/// This is only name normalization for candidate matching; it does not alter
+/// function linkage or visibility in IR.
+/// Itanium uses the form "(anonymous namespace)"; MSVC uses backticks
+/// "`anonymous namespace'".  Both are stripped here.
+std::string normalizeNamespace(StringRef Ns) {
+  static constexpr StringRef ItaniumAnon = "(anonymous namespace)";
+  static constexpr StringRef MSVCAnon = "`anonymous namespace'";
+  if (Ns == ItaniumAnon || Ns == MSVCAnon)
+    return "";
+  // Strip a leading anonymous-namespace qualifier so e.g. "(anon)::ns" becomes
+  // "ns" — matches what the rest of the codebase produces for nested
+  // namespaces.
+  Ns.consume_front("(anonymous namespace)::");
+  Ns.consume_front("`anonymous namespace'::");
+  return Ns.str();
+}
+
+/// Decompose an Itanium (_Z...) symbol via the structured partial demangler.
+SourceFunctionName parseItanium(StringRef Name) {
+  // partialDemangle parses into an AST that may reference the input buffer,
+  // and the getFunction*Name accessors are called afterwards, so the mangled
+  // string must outlive every accessor call below.
+  std::string Mangled = Name.str();
+  ItaniumPartialDemangler D;
+  // partialDemangle returns true on error.  Non-function symbols (vtables,
+  // typeinfo, variables) have no function base name, so route them to the
+  // raw-name fallback before querying the getters.
+  if (D.partialDemangle(Mangled.c_str()) || !D.isFunction())
+    return {"", Name.str()};
+
+  auto demangleField =
+      [](const ItaniumPartialDemangler &D,
+         char *(ItaniumPartialDemangler::*Getter)(char *, size_t *) const) {
+        size_t N = 0;
+        char *Buf = (D.*Getter)(nullptr, &N);
+        std::string Result = Buf ? std::string(Buf) : std::string();
+        std::free(Buf);
+        return Result;
+      };
+
+  // getFunctionBaseName already strips trailing template arguments and the
+  // namespace ("ns::ripple_combine<int,long>" -> "ripple_combine"), and
+  // getFunctionDeclContextName returns the namespace ("ns", "a::b",
+  // "(anonymous namespace)", or a class name for members).
+  std::string Base =
+      demangleField(D, &ItaniumPartialDemangler::getFunctionBaseName);
+  std::string Ns =
+      demangleField(D, &ItaniumPartialDemangler::getFunctionDeclContextName);
+
+  // Defensive: if the base came back empty (should not happen for functions),
+  // fall back to the raw symbol rather than producing a degenerate name.
+  if (Base.empty())
+    return {"", Name.str()};
+  return {normalizeNamespace(Ns), std::move(Base)};
+}
+
+/// Render @p N as its source-level unqualified base name with any template
+/// argument list elided.  For NamedIdentifierNode we read the bare Name
+/// field directly — IdentifierNode stores the template arguments in a
+/// separate TemplateParams field, so the textual `Name` is the
+/// already-unqualified base name (e.g. "combine" for "combine<int, long>")
+/// without any string surgery. This mirrors what Itanium's
+/// getFunctionBaseName does by descending past NameWithTemplateArgs.
+///
+/// Special identifier subclasses (operator(), ctor/dtor, conversion
+/// operators, intrinsic / literal / vcall-thunk / static-guard names) can
+/// never carry the "ripple_" prefix, so we fall back to toString(): the
+/// rendered form will not start with "ripple_" and will simply not match a
+/// candidate.
+std::string renderIdentifierBaseName(ms_demangle::Node *N,
+                                     ms_demangle::OutputFlags Flags) {
+  if (auto *Named = llvm::dyn_cast<ms_demangle::NamedIdentifierNode>(N))
+    return std::string(Named->Name);
+  return N->toString(Flags);
+}
+
+/// Decompose an MSVC (?...) symbol via the structured MSVC demangler AST.
+/// We walk the parsed QualifiedNameNode rather than parsing the printed
+/// human-readable form, which avoids fragile string surgery around return
+/// types, calling conventions, template-argument lists and the MSVC-specific
+/// `anonymous namespace' marker.  Non-function symbols (vtables, variables,
+/// special tables) are filtered via isa<FunctionSymbolNode>.
+SourceFunctionName parseMSVC(StringRef Name) {
+  ms_demangle::Demangler MSDemangler;
+  std::string_view View(Name.data(), Name.size());
+  ms_demangle::SymbolNode *Sym = MSDemangler.parse(View);
+  if (MSDemangler.Error || !Sym)
+    return {"", Name.str()};
+
+  // Only function symbols carry a base name + namespace pair we want to
+  // match against ripple candidates.  Variables, vtables, RTTI etc. fall
+  // back to the raw symbol so they cannot accidentally match.
+  auto *Fn = llvm::dyn_cast<ms_demangle::FunctionSymbolNode>(Sym);
+  if (!Fn || !Fn->Name || !Fn->Name->Components ||
+      !Fn->Name->Components->Nodes || Fn->Name->Components->Count == 0)
+    return {"", Name.str()};
+
+  ms_demangle::NodeArrayNode &Components = *Fn->Name->Components;
+  size_t Count = Components.Count;
+
+  // Render each component without return types, calling conventions or
+  // access/variable/member type decorations — mirrors what the Itanium
+  // getFunctionBaseName / getFunctionDeclContextName accessors produce.
+  static constexpr ms_demangle::OutputFlags NoExtras = ms_demangle::OutputFlags(
+      ms_demangle::OF_NoCallingConvention | ms_demangle::OF_NoReturnType |
+      ms_demangle::OF_NoMemberType | ms_demangle::OF_NoAccessSpecifier |
+      ms_demangle::OF_NoVariableType);
+
+  // The last component is the unqualified identifier (possibly templated).
+  // Render it with the template-parameter list elided so that templates
+  // reduce to their base name — e.g. "combine<int, long>" -> "combine" —
+  // matching the structural unwrap Itanium's getFunctionBaseName performs.
+  ms_demangle::Node *BaseNode = Components.Nodes[Count - 1];
+  if (!BaseNode)
+    return {"", Name.str()};
+  std::string Base = renderIdentifierBaseName(BaseNode, NoExtras);
+  if (Base.empty())
+    return {"", Name.str()};
+
+  // Namespace components keep their template arguments (Itanium's
+  // getFunctionDeclContextName behaves the same: a member of "foo<int>"
+  // reports the qualifier as "foo<int>").  Join them with "::" by hand
+  // rather than re-printing the whole QualifiedNameNode, which would also
+  // include the unqualified base.
+  std::string Ns;
+  for (size_t I = 0; I + 1 < Count; ++I) {
+    ms_demangle::Node *Component = Components.Nodes[I];
+    if (!Component)
+      return {"", Name.str()};
+    if (!Ns.empty())
+      Ns += "::";
+    Ns += Component->toString(NoExtras);
+  }
+
+  return {normalizeNamespace(Ns), std::move(Base)};
+}
+
+} // end anonymous namespace
+
+ExternalRippleFunction::SourceFunctionName
+ExternalRippleFunction::SourceFunctionName::parse(StringRef Name) {
+  if (Name.starts_with("_Z"))
+    return parseItanium(Name);
+  if (Name.starts_with("?"))
+    return parseMSVC(Name);
+  // Not mangled: the LLVM name is already the source name.
+  return {"", Name.str()};
+}
+
+ExternalRippleFunction::SourceFunctionName
+ExternalRippleFunction::SourceFunctionName::parse(const Function *F) {
+  return parse(F->getName());
+}
+
+StringRef ExternalRippleFunction::removeRipplePrefix(StringRef Base) {
+  return Base.split(RipplePrefix).second;
 }
 
 bool ExternalRippleFunction::returnsVoid() const {
   return CanonicalizedType->getReturnType()->isVoidTy();
 }
 
-bool ExternalRippleFunction::usesRippleNamingConvention(const Function *F) {
-  return F->getName().starts_with(RipplePrefix);
-}
-
 std::unique_ptr<ExternalRippleFunction>
 ExternalRippleFunction::createExternalFunction(Function *F,
                                                unsigned TensorRank) {
-  if (!usesRippleNamingConvention(F))
+  SourceFunctionName SrcName = SourceFunctionName::parse(F);
+  if (!StringRef(SrcName.Base).starts_with(RipplePrefix))
     return nullptr;
-  auto Options_and_Basename = removeRipplePrefix(F);
+  StringRef Options_and_Basename = removeRipplePrefix(SrcName.Base);
   auto [SignatureAndBaseName, OptionList] = splitOptions(Options_and_Basename);
 
   SmallVector<ArgumentSignatureInfo> ArgumentSignatures;
@@ -9287,9 +9451,15 @@ ExternalRippleFunction::createExternalFunction(Function *F,
     }
   }
 
+  // The scalar function this candidate replaces shares the candidate's
+  // namespace (file-static / class member / etc.) but uses BaseNameOpt as its
+  // base name — i.e. the candidate's name with the ripple_ prefix and option
+  // list stripped.
+  SourceFunctionName ScalarName{std::move(SrcName.Namespace),
+                                BaseNameOpt.value().str()};
   auto NewExternalF =
       std::unique_ptr<ExternalRippleFunction>(new ExternalRippleFunction(
-          F, BaseNameOpt.value(), OptionList, TensorRank, ReturnSignature,
+          F, std::move(ScalarName), OptionList, TensorRank, ReturnSignature,
           ArgumentSignatures, IsUniformSignature));
 
   return NewExternalF;
@@ -9330,14 +9500,17 @@ FunctionType *ExternalRippleFunction::canonicalizeFunctionType(
 }
 
 bool ExternalRippleFunction::matchesFunctionNameAndScalarPrototype(
-    StringRef FName, const FunctionType *FType) const {
-  LLVM_DEBUG(dbgs() << "Checking '" << FName << "' prototype '" << *FType
+    const SourceFunctionName &CallName, const FunctionType *FType) const {
+  LLVM_DEBUG(dbgs() << "Checking '" << CallName.Base << "' (namespace '"
+                    << CallName.Namespace << "') prototype '" << *FType
                     << "' against " << getFunction()->getName()
                     << "'s scalar name '" << scalarFunctionName()
                     << "' prototype '" << *CanonicalizedType << "'\n");
 
-  // Either both are void or both return something
-  bool NameMatch = scalarFunctionName() == FName;
+  // A scalar call matches the candidate when both namespace and base name
+  // agree.  Anonymous-namespace candidates and C symbols both reduce to the
+  // empty namespace.
+  bool NameMatch = CallName == Scalar;
   LLVM_DEBUG(dbgs() << "Name matches: " << NameMatch << "\n");
 
   // Match return-ness and element types
@@ -9359,11 +9532,11 @@ bool ExternalRippleFunction::matchesFunctionNameAndScalarPrototype(
 }
 
 bool ExternalRippleFunction::matchesFunction(
-    StringRef FName, const FunctionType *FType,
+    const SourceFunctionName &CallName, const FunctionType *FType,
     ArrayRef<const TensorShape *> CallArgShapes,
     TensorShape *BlockShapeArgumentShape) const {
 
-  if (!matchesFunctionNameAndScalarPrototype(FName, FType))
+  if (!matchesFunctionNameAndScalarPrototype(CallName, FType))
     return false;
 
   // Check tensor shape
@@ -9491,9 +9664,13 @@ Ripple::findExternalRippleFunctionFor(const CallInst *Call,
   // Looking for existing matches
   ExternalRippleFunction *MaskedF = nullptr, *UnmaskedF = nullptr;
   TensorShape BlockShapeTShape = setShapeToTensorShape(BlockShapeAsFirstArg);
+  // Parse the call's source name once so the per-candidate match below does
+  // not re-demangle FunName for every candidate.
+  ExternalRippleFunction::SourceFunctionName CallName =
+      ExternalRippleFunction::SourceFunctionName::parse(FunName);
   for (auto &ExternalFunction : ExternalRippleFunctions) {
     if (ExternalFunction->matchesFunction(
-            FunName, FunType, CallArgShapes,
+            CallName, FunType, CallArgShapes,
             BlockShapeAsFirstArg ? &BlockShapeTShape : nullptr)) {
       if (ExternalFunction->isMaskable()) {
         MaskedF = MaskedF ? MaskedF : ExternalFunction.get();
@@ -9557,10 +9734,8 @@ void Ripple::registerInModuleRippleCandidates() {
     if (!Fun.hasFnAttribute("ripple-vector-candidate"))
       continue;
     // The function name still encodes signature/options for
-    // ExternalRippleFunction::createExternalFunction. The naming-convention
-    // requirement may be relaxed in a later patch.
-    if (!ExternalRippleFunction::usesRippleNamingConvention(&Fun))
-      continue;
+    // ExternalRippleFunction::createExternalFunction, which validates naming
+    // convention and returns nullptr if the candidate cannot be parsed.
     LLVM_DEBUG(dbgs() << "In-module ripple candidate: " << Fun << "\n");
     registerExternalRippleFunction(
         ExternalRippleFunction::createExternalFunction(&Fun, tensorRank()));
@@ -9802,12 +9977,12 @@ Ripple::getInstructionToRippleShape() const {
 }
 
 ExternalRippleFunction::ExternalRippleFunction(
-    Function *Fun, StringRef ScalarName,
+    Function *Fun, SourceFunctionName Scalar,
     const SmallVectorImpl<StringRef> &Options, size_t TensorRank,
     const std::optional<ReturnSignatureInfo> &ReturnSignature,
     const SmallVectorImpl<ArgumentSignatureInfo> &ArgumentSignatures,
     bool UniformSignature)
-    : F(Fun), ScalarName(ScalarName) {
+    : F(Fun), Scalar(std::move(Scalar)) {
 
   // 1D Shape from LLVM vector types
   auto ShapeFromType = [TensorRank](const Type *Ty) -> TensorShape::Shape {
