@@ -1,9 +1,41 @@
-// REQUIRES: hexagon-registered-target, has-ripple-hexagon-rtlib
-// RUN: %clang++ -g -S -fenable-ripple -ffreestanding -nostdinc -isystem %resource_dir/ripple_include -isystem %resource_dir --target=hexagon -mhvx -mv79 -emit-llvm %s -o - -mllvm -ripple-disable-link 2>&1 | FileCheck %s
+// UNSUPPORTED: cui
+// REQUIRES: hexagon-registered-target
+// RUN: %clang++ -g -S -fenable-ripple -ffreestanding -nostdinc -isystem %resource_dir/ripple_include -isystem %resource_dir --target=hexagon -mhvx -mv81 -emit-llvm %s -o - -mllvm -ripple-disable-link 2>&1 | FileCheck %s
 
 #include "ripple_test.h"
-#include <ripple_hvx.h>
-#include <ripple/HVX_Dequantize.h>
+#include "ripple_hvx_test_types.h"
+// HVX_Dequantize RT library declarations, inlined so this frontend test does
+// not depend on the compiler-rt headers or the Hexagon SDK.
+#ifndef RIPPLE_VECTOR_CANDIDATE
+#define RIPPLE_VECTOR_CANDIDATE __attribute__((ripple_vector_candidate))
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+__attribute__((always_inline)) extern uint32_t
+hvx_dequantize_u8_to_f32(const uint8_t vin, const int16_t zero_offset,
+                         const uint8_t from_qint8, const int32_t iscale,
+                         const int16_t exp_base);
+__attribute__((always_inline)) extern float
+hvx_dequantize_u16_to_f32_flat(const uint16_t vin, uint32_t offset,
+                               float scale);
+__attribute__((always_inline)) extern uint32_t
+hvx_dequantize_u16_to_f32(const uint16_t vin, uint16_t zero_offset,
+                          uint16_t from_qint16, int32_t iscale,
+                          int16_t exp_base);
+extern RIPPLE_VECTOR_CANDIDATE v128u32 ripple_pure_ew_hvx_dequantize_u8_to_f32(
+    v128u8 vin, const int16_t zero_offset, const uint8_t from_qint8,
+    const int32_t iscale, const int16_t exp_base);
+extern RIPPLE_VECTOR_CANDIDATE v64f32
+ripple_pure_hvx_dequantize_u16_to_f32_flat(const v64u16 vin, uint32_t offset,
+                                           float scale);
+extern RIPPLE_VECTOR_CANDIDATE v64u32 ripple_pure_hvx_dequantize_u16_to_f32(
+    const v64u16 vin, const uint16_t zero_offset, const uint16_t from_qint16,
+    const int32_t iscale, const int16_t exp_base);
+#ifdef __cplusplus
+}
+#endif
 
 
 extern "C" {
