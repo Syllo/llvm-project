@@ -1,8 +1,129 @@
-// REQUIRES: target=hexagon-{{.*}}, has-ripple-hexagon-rtlib
-// RUN: %clang++ -ffreestanding -g -S -fenable-ripple -mhvx -mv79 -emit-llvm -mllvm -ripple-disable-link %s -o - 2>&1 | FileCheck %s
+// UNSUPPORTED: cui
+// REQUIRES: hexagon-registered-target
+// RUN: %clang++ -g -S -fenable-ripple --target=hexagon -mhvx -mv81 -emit-llvm %s -o - -mllvm -ripple-disable-link 2>&1 | FileCheck %s
 
 #include "ripple_test.h"
-#include <ripple/HVX_Narrow_Shift.h>
+// HVX_Narrow_Shift RT library declarations, inlined so this frontend test does
+// not depend on the compiler-rt headers or the Hexagon SDK.
+#ifndef RIPPLE_VECTOR_CANDIDATE
+#define RIPPLE_VECTOR_CANDIDATE __attribute__((ripple_vector_candidate))
+#endif
+#include "ripple_hvx_test_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int32_t hvx_narsh_i32toi16(int32_t odd, int32_t even, uint32_t shift);
+int32_t hvx_narsh_sat_i32toi16(int32_t odd, int32_t even, uint32_t shift);
+int32_t hvx_narsh_rnd_sat_i32toi16(int32_t odd, int32_t even, uint32_t shift);
+int32_t hvx_narsh_i32toi16_noshuff(int32_t odd, int32_t even, uint32_t shift);
+int32_t hvx_narsh_sat_i32toi16_noshuff(int32_t odd, int32_t even,
+                                       uint32_t shift);
+int32_t hvx_narsh_rnd_sat_i32toi16_noshuff(int32_t odd, int32_t even,
+                                           uint32_t shift);
+
+uint32_t hvx_narsh_sat_i32tou16(int32_t odd, int32_t even, uint32_t shift);
+uint32_t hvx_narsh_rnd_sat_i32tou16(int32_t odd, int32_t even, uint32_t shift);
+uint32_t hvx_narsh_sat_i32tou16_noshuff(int32_t odd, int32_t even,
+                                        uint32_t shift);
+uint32_t hvx_narsh_rnd_sat_i32tou16_noshuff(int32_t odd, int32_t even,
+                                            uint32_t shift);
+
+uint32_t hvx_narsh_sat_u32tou16(uint32_t odd, uint32_t even, uint32_t shift);
+uint32_t hvx_narsh_rnd_sat_u32tou16(uint32_t odd, uint32_t even,
+                                    uint32_t shift);
+uint32_t hvx_narsh_sat_u32tou16_noshuff(uint32_t odd, uint32_t even,
+                                        uint32_t shift);
+uint32_t hvx_narsh_rnd_sat_u32tou16_noshuff(uint32_t odd, uint32_t even,
+                                            uint32_t shift);
+
+int16_t hvx_narsh_sat_i16toi8(int16_t odd, int16_t even, uint32_t shift);
+int16_t hvx_narsh_rnd_sat_i16toi8(int16_t odd, int16_t even, uint32_t shift);
+int16_t hvx_narsh_sat_i16toi8_noshuff(int16_t odd, int16_t even,
+                                      uint32_t shift);
+int16_t hvx_narsh_rnd_sat_i16toi8_noshuff(int16_t odd, int16_t even,
+                                          uint32_t shift);
+
+uint16_t hvx_narsh_sat_i16tou8(int16_t odd, int16_t even, uint32_t shift);
+uint16_t hvx_narsh_rnd_sat_i16tou8(int16_t odd, int16_t even, uint32_t shift);
+uint16_t hvx_narsh_sat_i16tou8_noshuff(int16_t odd, int16_t even,
+                                       uint32_t shift);
+uint16_t hvx_narsh_rnd_sat_i16tou8_noshuff(int16_t odd, int16_t even,
+                                           uint32_t shift);
+
+uint16_t hvx_narsh_sat_u16tou8(uint16_t odd, uint16_t even, uint32_t shift);
+uint16_t hvx_narsh_rnd_sat_u16tou8(uint16_t odd, uint16_t even, uint32_t shift);
+uint16_t hvx_narsh_sat_u16tou8_noshuff(uint16_t odd, uint16_t even,
+                                       uint32_t shift);
+uint16_t hvx_narsh_rnd_sat_u16tou8_noshuff(uint16_t odd, uint16_t even,
+                                           uint32_t shift);
+
+extern RIPPLE_VECTOR_CANDIDATE v32i32
+ripple_pure_hvx_narsh_i32toi16(v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v32i32 ripple_pure_hvx_narsh_sat_i32toi16(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v32i32 ripple_pure_hvx_narsh_rnd_sat_i32toi16(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v32i32 ripple_pure_hvx_narsh_i32toi16_noshuff(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v32i32
+ripple_pure_hvx_narsh_sat_i32toi16_noshuff(v32i32 Vec_Odd, v32i32 Vec_Even,
+                                           uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v32i32
+ripple_pure_hvx_narsh_rnd_sat_i32toi16_noshuff(v32i32 Vec_Odd, v32i32 Vec_Even,
+                                               uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v32u32 ripple_pure_hvx_narsh_sat_i32tou16(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v32u32 ripple_pure_hvx_narsh_rnd_sat_i32tou16(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v32u32
+ripple_pure_hvx_narsh_sat_i32tou16_noshuff(v32i32 Vec_Odd, v32i32 Vec_Even,
+                                           uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v32u32
+ripple_pure_hvx_narsh_rnd_sat_i32tou16_noshuff(v32i32 Vec_Odd, v32i32 Vec_Even,
+                                               uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v32u32 ripple_pure_hvx_narsh_sat_u32tou16(
+    v32u32 Vec_Odd, v32u32 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v32u32 ripple_pure_hvx_narsh_rnd_sat_u32tou16(
+    v32u32 Vec_Odd, v32u32 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v32u32
+ripple_pure_hvx_narsh_sat_u32tou16_noshuff(v32u32 Vec_Odd, v32u32 Vec_Even,
+                                           uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v32u32
+ripple_pure_hvx_narsh_rnd_sat_u32tou16_noshuff(v32u32 Vec_Odd, v32u32 Vec_Even,
+                                               uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v64i16 ripple_pure_hvx_narsh_sat_i16toi8(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v64i16 ripple_pure_hvx_narsh_rnd_sat_i16toi8(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v64i16 ripple_pure_hvx_narsh_sat_i16toi8_noshuff(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v64i16
+ripple_pure_hvx_narsh_rnd_sat_i16toi8_noshuff(v64i16 Vec_Odd, v64i16 Vec_Even,
+                                              uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v64i16 ripple_pure_hvx_narsh_sat_i16tou8(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v64i16 ripple_pure_hvx_narsh_rnd_sat_i16tou8(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v64i16 ripple_pure_hvx_narsh_sat_i16tou8_noshuff(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v64i16
+ripple_pure_hvx_narsh_rnd_sat_i16tou8_noshuff(v64i16 Vec_Odd, v64i16 Vec_Even,
+                                              uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v64i16 ripple_pure_hvx_narsh_sat_u16tou8(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v64i16 ripple_pure_hvx_narsh_rnd_sat_u16tou8(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v64i16 ripple_pure_hvx_narsh_sat_u16tou8_noshuff(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift);
+extern RIPPLE_VECTOR_CANDIDATE v64i16
+ripple_pure_hvx_narsh_rnd_sat_u16tou8_noshuff(v64i16 Vec_Odd, v64i16 Vec_Even,
+                                              uint32_t Shift);
+
+#ifdef __cplusplus
+}
+#endif
 
 #define HVX_32_i32 32
 #define HVX_64_i16 64

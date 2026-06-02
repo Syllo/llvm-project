@@ -1,3 +1,11 @@
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
 #pragma once
 
 #ifdef __cplusplus
@@ -30,6 +38,7 @@ __decl_f32_vec_t(32, 128);
 
 __decl_int_vec_t(32, 32, 128);
 __decl_int_vec_t(16, 64, 128);
+__decl_int_vec_t(32, 64, 256);
 
 #undef __decl_int_vec_t
 

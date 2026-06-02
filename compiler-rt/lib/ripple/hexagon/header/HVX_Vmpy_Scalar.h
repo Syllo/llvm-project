@@ -10,8 +10,7 @@
 // library.
 //
 // The Ripple compiler pass replaces calls to hvx_*_vmpy_* / hvx_*_vmpyacc_*
-// with the corresponding ripple_ew_pure_hvx_* implementations from
-// HVX_Vmpy_Scalar.cc.
+// with the corresponding ripple_ew_pure_hvx_* implementations in this header.
 //
 // The polymorphic hvx_vmpy* / hvx_vmpyacc* entry points follow the same
 // pattern as hvx_vdeal in HVX_Vdeal.h: typed extern "C" declarations via
@@ -28,8 +27,10 @@
 //   char is always unsigned on Hexagon.
 
 #pragma once
-#include "__ripple_vec.h"
-#include <stddef.h>
+#include "__ripple_func_attribs.h"
+#include <hexagon_protos.h>
+#include <ripple.h>
+#include <ripple_hvx.h>
 
 // Use basic C types instead of stdint types: on Hexagon, stdint does not
 // define a type for plain 'int' (4 bytes), so stdint types cannot cover all
@@ -40,18 +41,19 @@
 extern "C" {
 #endif
 
-static_assert(sizeof(signed char) == 1 && sizeof(short) == 2,
-              "HVX_Vmpy_Scalar: unexpected char/short size");
-static_assert(sizeof(int) == 4, "HVX_Vmpy_Scalar: unexpected int size");
-static_assert(sizeof(unsigned int) == 4,
-              "HVX_Vmpy_Scalar: unexpected unsigned int size");
+// Scalar declarations. Ripple candidate names mirror these entry points.
+
+RIPPLE_STATIC_ASSERT(sizeof(signed char) == 1 && sizeof(short) == 2,
+                     "HVX_Vmpy_Scalar: unexpected char/short size");
+RIPPLE_STATIC_ASSERT(sizeof(int) == 4, "HVX_Vmpy_Scalar: unexpected int size");
+RIPPLE_STATIC_ASSERT(sizeof(unsigned int) == 4,
+                     "HVX_Vmpy_Scalar: unexpected unsigned int size");
 
 // ---------------------------------------------------------------------------
 // vmpy: vector * scalar (widening, odd/even interleaved output)
 // ---------------------------------------------------------------------------
 #define _decl_hvx_vmpy(cOutType, outType, cVecType, vecType, cScType, scType)  \
-  __attribute__((always_inline)) extern cOutType                               \
-      hvx_##outType##_vmpy_##vecType##scType(cVecType a, cScType b)
+  cOutType hvx_##outType##_vmpy_##vecType##scType(cVecType a, cScType b);
 
 _decl_hvx_vmpy(short, i16, unsigned char, u8, signed char,
                i8); // Q6_Wh_vmpy_VubRb
@@ -63,12 +65,10 @@ _decl_hvx_vmpy(int, i32, short, i16, short, i16); // Q6_Ww_vmpy_VhRh
 // vmpy_s1_sat / vmpy_s1_rnd_sat: non-widening, sequential output, <<1 + sat
 // ---------------------------------------------------------------------------
 #define _decl_hvx_vmpy_s1_sat(cType, type)                                     \
-  __attribute__((always_inline)) extern cType                                  \
-      hvx_##type##_vmpy_##type##type##_s1_sat(cType v, cType r)
+  cType hvx_##type##_vmpy_##type##type##_s1_sat(cType v, cType r)
 
 #define _decl_hvx_vmpy_s1_rnd_sat(cType, type)                                 \
-  __attribute__((always_inline)) extern cType                                  \
-      hvx_##type##_vmpy_##type##type##_s1_rnd_sat(cType v, cType r)
+  cType hvx_##type##_vmpy_##type##type##_s1_rnd_sat(cType v, cType r)
 
 _decl_hvx_vmpy_s1_sat(short, i16);     // Q6_Vh_vmpy_VhRh_s1_sat
 _decl_hvx_vmpy_s1_rnd_sat(short, i16); // Q6_Vh_vmpy_VhRh_s1_rnd_sat
@@ -78,8 +78,8 @@ _decl_hvx_vmpy_s1_rnd_sat(short, i16); // Q6_Vh_vmpy_VhRh_s1_rnd_sat
 // ---------------------------------------------------------------------------
 #define _decl_hvx_vmpy_noshuff(cOutType, outType, cVecType, vecType, cScType,  \
                                scType)                                         \
-  __attribute__((always_inline)) extern cOutType                               \
-      hvx_##outType##_vmpy_##vecType##scType##_noshuff(cVecType a, cScType b)
+  cOutType hvx_##outType##_vmpy_##vecType##scType##_noshuff(cVecType a,        \
+                                                            cScType b)
 
 _decl_hvx_vmpy_noshuff(short, i16, unsigned char, u8, signed char,
                        i8); // Q6_Wh_vmpy_VubRb   + vdeal
@@ -94,9 +94,8 @@ _decl_hvx_vmpy_noshuff(int, i32, short, i16, short,
 // ---------------------------------------------------------------------------
 #define _decl_hvx_vmpyacc(cOutType, outType, cAccType, accType, cVecType,      \
                           vecType, cScType, scType)                            \
-  __attribute__((always_inline)) extern cOutType                               \
-      hvx_##outType##_vmpyacc_##accType##vecType##scType(                      \
-          cAccType acc, cVecType a, cScType b)
+  cOutType hvx_##outType##_vmpyacc_##accType##vecType##scType(                 \
+      cAccType acc, cVecType a, cScType b)
 
 _decl_hvx_vmpyacc(short, i16, short, i16, unsigned char, u8, signed char,
                   i8); // Q6_Wh_vmpyacc_WhVubRb
@@ -112,9 +111,8 @@ _decl_hvx_vmpyacc(int, i32, int, i32, short, i16, short,
 // NOTE: accumulator must be in odd/even interleaved order.
 // ---------------------------------------------------------------------------
 #define _decl_hvx_vmpyacc_sat(cType, type, cVecType, vecType, cScType, scType) \
-  __attribute__((always_inline)) extern cType                                  \
-      hvx_##type##_vmpyacc_##type##vecType##scType##_sat(                      \
-          cType acc, cVecType a, cScType b)
+  cType hvx_##type##_vmpyacc_##type##vecType##scType##_sat(                    \
+      cType acc, cVecType a, cScType b)
 
 _decl_hvx_vmpyacc_sat(int, i32, short, i16, short,
                       i16); // Q6_Ww_vmpyacc_WwVhRh_sat
@@ -125,9 +123,8 @@ _decl_hvx_vmpyacc_sat(int, i32, short, i16, short,
 // ---------------------------------------------------------------------------
 #define _decl_hvx_vmpyacc_noshuff(cOutType, outType, cAccType, accType,        \
                                   cVecType, vecType, cScType, scType)          \
-  __attribute__((always_inline)) extern cOutType                               \
-      hvx_##outType##_vmpyacc_##accType##vecType##scType##_noshuff(            \
-          cAccType acc, cVecType a, cScType b)
+  cOutType hvx_##outType##_vmpyacc_##accType##vecType##scType##_noshuff(       \
+      cAccType acc, cVecType a, cScType b)
 
 _decl_hvx_vmpyacc_noshuff(short, i16, short, i16, unsigned char, u8,
                           signed char, i8); // Q6_Wh_vmpyacc_WhVubRb   + vdeal
@@ -146,9 +143,8 @@ _decl_hvx_vmpyacc_noshuff(int, i32, int, i32, short, i16, short,
 // ---------------------------------------------------------------------------
 #define _decl_hvx_vmpyacc_sat_noshuff(cType, type, cVecType, vecType, cScType, \
                                       scType)                                  \
-  __attribute__((always_inline)) extern cType                                  \
-      hvx_##type##_vmpyacc_##type##vecType##scType##_sat_noshuff(              \
-          cType acc, cVecType a, cScType b)
+  cType hvx_##type##_vmpyacc_##type##vecType##scType##_sat_noshuff(            \
+      cType acc, cVecType a, cScType b)
 
 _decl_hvx_vmpyacc_sat_noshuff(int, i32, short, i16, short,
                               i16); // Q6_Ww_vmpyacc_WwVhRh_sat + vdeal
@@ -158,11 +154,9 @@ _decl_hvx_vmpyacc_sat_noshuff(int, i32, short, i16, short,
 // r encodes two u16 values packed into a u32 (used by Q6_Wuw_vmpy_VuhRuh).
 // ---------------------------------------------------------------------------
 // OUTPUT: odd/even interleaved.
-__attribute__((always_inline)) extern unsigned int
-hvx_u32_vmpy_u16_2u16(unsigned short in, unsigned int r);
+unsigned int hvx_u32_vmpy_u16_2u16(unsigned short in, unsigned int r);
 // OUTPUT: sequential (deinterleaved via vdeal).
-__attribute__((always_inline)) extern unsigned int
-hvx_u32_vmpy_u16_2u16_noshuff(unsigned short in, unsigned int r);
+unsigned int hvx_u32_vmpy_u16_2u16_noshuff(unsigned short in, unsigned int r);
 
 #undef _decl_hvx_vmpy
 #undef _decl_hvx_vmpy_s1_sat
@@ -176,6 +170,123 @@ hvx_u32_vmpy_u16_2u16_noshuff(unsigned short in, unsigned int r);
 #ifdef __cplusplus
 } // extern "C"
 #endif
+
+// ripple_vector_candidate definitions.
+
+RIPPLE_CANDIDATE_INLINE
+v128i16 ripple_ew_pure_hvx_i16_vmpy_u8i8(v128u8 v, signed char r) {
+  return Q6_Wh_vmpy_VubRb(v, r);
+}
+
+RIPPLE_CANDIDATE_INLINE v128u16
+ripple_ew_pure_hvx_u16_vmpy_u8u8(v128u8 v, unsigned char r) {
+  return Q6_Wuh_vmpy_VubRub(v, r);
+}
+
+RIPPLE_CANDIDATE_INLINE v64u32
+ripple_ew_pure_hvx_u32_vmpy_u16_2u16(v64u16 v, unsigned int r) {
+  return Q6_Wuw_vmpy_VuhRuh(v, r);
+}
+
+RIPPLE_CANDIDATE_INLINE v64i32 ripple_ew_pure_hvx_i32_vmpy_i16i16(v64i16 v,
+                                                                  short r) {
+  return Q6_Ww_vmpy_VhRh(v, r);
+}
+
+RIPPLE_CANDIDATE_INLINE v64i16
+ripple_ew_pure_hvx_i16_vmpy_i16i16_s1_sat(v64i16 v, short r) {
+  return Q6_Vh_vmpy_VhRh_s1_sat(v, r);
+}
+
+RIPPLE_CANDIDATE_INLINE v64i16
+ripple_ew_pure_hvx_i16_vmpy_i16i16_s1_rnd_sat(v64i16 v, short r) {
+  return Q6_Vh_vmpy_VhRh_s1_rnd_sat(v, r);
+}
+
+RIPPLE_CANDIDATE_INLINE v128i16
+ripple_ew_pure_hvx_i16_vmpy_u8i8_noshuff(v128u8 v, signed char r) {
+  v128i16 interleaved = Q6_Wh_vmpy_VubRb(v, r);
+  return Q6_W_vdeal_VVR(Q6_V_hi_W(interleaved), Q6_V_lo_W(interleaved), 2);
+}
+
+RIPPLE_CANDIDATE_INLINE v128u16
+ripple_ew_pure_hvx_u16_vmpy_u8u8_noshuff(v128u8 v, unsigned char r) {
+  v128u16 interleaved = Q6_Wuh_vmpy_VubRub(v, r);
+  return Q6_W_vdeal_VVR(Q6_V_hi_W(interleaved), Q6_V_lo_W(interleaved), 2);
+}
+
+RIPPLE_CANDIDATE_INLINE v64u32
+ripple_ew_pure_hvx_u32_vmpy_u16_2u16_noshuff(v64u16 v, unsigned int r) {
+  v64u32 interleaved = Q6_Wuw_vmpy_VuhRuh(v, r);
+  return Q6_W_vdeal_VVR(Q6_V_hi_W(interleaved), Q6_V_lo_W(interleaved), 4);
+}
+
+RIPPLE_CANDIDATE_INLINE v64i32
+ripple_ew_pure_hvx_i32_vmpy_i16i16_noshuff(v64i16 v, short r) {
+  v64i32 interleaved = Q6_Ww_vmpy_VhRh(v, r);
+  return Q6_W_vdeal_VVR(Q6_V_hi_W(interleaved), Q6_V_lo_W(interleaved), 4);
+}
+
+RIPPLE_CANDIDATE_INLINE v128i16
+ripple_ew_pure_hvx_i16_vmpyacc_i16u8i8(v128i16 x, v128u8 v, signed char r) {
+  return Q6_Wh_vmpyacc_WhVubRb(x, v, r);
+}
+
+RIPPLE_CANDIDATE_INLINE v128u16
+ripple_ew_pure_hvx_u16_vmpyacc_u16u8u8(v128u16 x, v128u8 v, unsigned char r) {
+  return Q6_Wuh_vmpyacc_WuhVubRub(x, v, r);
+}
+
+RIPPLE_CANDIDATE_INLINE v64u32
+ripple_ew_pure_hvx_u32_vmpyacc_u32u16u16(v64u32 x, v64u16 v, unsigned short r) {
+  return Q6_Wuw_vmpyacc_WuwVuhRuh(x, v, r);
+}
+
+RIPPLE_CANDIDATE_INLINE v64i32
+ripple_ew_pure_hvx_i32_vmpyacc_i32i16i16(v64i32 x, v64i16 v, short r) {
+  return Q6_Ww_vmpyacc_WwVhRh(x, v, r);
+}
+
+RIPPLE_CANDIDATE_INLINE v64i32
+ripple_ew_pure_hvx_i32_vmpyacc_i32i16i16_sat(v64i32 x, v64i16 v, short r) {
+  return Q6_Ww_vmpyacc_WwVhRh_sat(x, v, r);
+}
+
+RIPPLE_CANDIDATE_INLINE v128i16 ripple_ew_pure_hvx_i16_vmpyacc_i16u8i8_noshuff(
+    v128i16 x, v128u8 v, signed char r) {
+  v128i16 x_interleaved = Q6_W_vshuff_VVR(Q6_V_hi_W(x), Q6_V_lo_W(x), 2);
+  v128i16 interleaved = Q6_Wh_vmpyacc_WhVubRb(x_interleaved, v, r);
+  return Q6_W_vdeal_VVR(Q6_V_hi_W(interleaved), Q6_V_lo_W(interleaved), 2);
+}
+
+RIPPLE_CANDIDATE_INLINE v128u16 ripple_ew_pure_hvx_u16_vmpyacc_u16u8u8_noshuff(
+    v128u16 x, v128u8 v, unsigned char r) {
+  v128u16 x_interleaved = Q6_W_vshuff_VVR(Q6_V_hi_W(x), Q6_V_lo_W(x), 2);
+  v128u16 interleaved = Q6_Wuh_vmpyacc_WuhVubRub(x_interleaved, v, r);
+  return Q6_W_vdeal_VVR(Q6_V_hi_W(interleaved), Q6_V_lo_W(interleaved), 2);
+}
+
+RIPPLE_CANDIDATE_INLINE v64u32 ripple_ew_pure_hvx_u32_vmpyacc_u32u16u16_noshuff(
+    v64u32 x, v64u16 v, unsigned short r) {
+  v64u32 x_interleaved = Q6_W_vshuff_VVR(Q6_V_hi_W(x), Q6_V_lo_W(x), 4);
+  v64u32 interleaved = Q6_Wuw_vmpyacc_WuwVuhRuh(x_interleaved, v, r);
+  return Q6_W_vdeal_VVR(Q6_V_hi_W(interleaved), Q6_V_lo_W(interleaved), 4);
+}
+
+RIPPLE_CANDIDATE_INLINE v64i32
+ripple_ew_pure_hvx_i32_vmpyacc_i32i16i16_noshuff(v64i32 x, v64i16 v, short r) {
+  v64i32 x_interleaved = Q6_W_vshuff_VVR(Q6_V_hi_W(x), Q6_V_lo_W(x), 4);
+  v64i32 interleaved = Q6_Ww_vmpyacc_WwVhRh(x_interleaved, v, r);
+  return Q6_W_vdeal_VVR(Q6_V_hi_W(interleaved), Q6_V_lo_W(interleaved), 4);
+}
+
+RIPPLE_CANDIDATE_INLINE v64i32
+ripple_ew_pure_hvx_i32_vmpyacc_i32i16i16_sat_noshuff(v64i32 x, v64i16 v,
+                                                     short r) {
+  v64i32 x_interleaved = Q6_W_vshuff_VVR(Q6_V_hi_W(x), Q6_V_lo_W(x), 4);
+  v64i32 interleaved = Q6_Ww_vmpyacc_WwVhRh_sat(x_interleaved, v, r);
+  return Q6_W_vdeal_VVR(Q6_V_hi_W(interleaved), Q6_V_lo_W(interleaved), 4);
+}
 
 // =============================================================================
 // Polymorphic wrappers

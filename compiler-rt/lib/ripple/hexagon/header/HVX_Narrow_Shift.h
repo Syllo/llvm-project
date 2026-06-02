@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===------------------------------------------------------------------------===
-// Header to support Narrow shifting using HVX
+// Header to support the HVX Narrow shift instructions
 //===------------------------------------------------------------------------===
 //
 // These functions perform narrowing shift operations on pairs of values.
@@ -38,10 +38,16 @@
 //
 
 #pragma once
+#include "__ripple_func_attribs.h"
+#include <hexagon_protos.h>
+#include <ripple_hvx.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Scalar declarations. Ripple candidate names mirror these entry points.
 
 // int32 → int16, packed into uint32 (int16 + int16)
 int32_t hvx_narsh_i32toi16(int32_t odd, int32_t even, uint32_t shift);
@@ -95,5 +101,124 @@ uint16_t hvx_narsh_rnd_sat_u16tou8_noshuff(uint16_t odd, uint16_t even,
                                            uint32_t shift);
 
 #ifdef __cplusplus
-}
+} // extern "C"
 #endif
+
+// Vector candidates — static inline, found by the Ripple pass.
+
+// i32 -> i16
+RIPPLE_CANDIDATE_INLINE v32i32 ripple_pure_hvx_narsh_i32toi16(v32i32 Vec_Odd,
+                                                              v32i32 Vec_Even,
+                                                              uint32_t Shift) {
+  return Q6_Vh_vasr_VwVwR(Vec_Odd, Vec_Even, Shift);
+}
+RIPPLE_CANDIDATE_INLINE v32i32 ripple_pure_hvx_narsh_sat_i32toi16(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift) {
+  return Q6_Vh_vasr_VwVwR_sat(Vec_Odd, Vec_Even, Shift);
+}
+RIPPLE_CANDIDATE_INLINE v32i32 ripple_pure_hvx_narsh_rnd_sat_i32toi16(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift) {
+  return Q6_Vh_vasr_VwVwR_rnd_sat(Vec_Odd, Vec_Even, Shift);
+}
+RIPPLE_CANDIDATE_INLINE v32i32 ripple_pure_hvx_narsh_i32toi16_noshuff(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift) {
+  return Q6_Vh_vdeal_Vh(Q6_Vh_vasr_VwVwR(Vec_Odd, Vec_Even, Shift));
+}
+RIPPLE_CANDIDATE_INLINE v32i32 ripple_pure_hvx_narsh_sat_i32toi16_noshuff(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift) {
+  return Q6_Vh_vdeal_Vh(Q6_Vh_vasr_VwVwR_sat(Vec_Odd, Vec_Even, Shift));
+}
+RIPPLE_CANDIDATE_INLINE v32i32 ripple_pure_hvx_narsh_rnd_sat_i32toi16_noshuff(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift) {
+  return Q6_Vh_vdeal_Vh(Q6_Vh_vasr_VwVwR_rnd_sat(Vec_Odd, Vec_Even, Shift));
+}
+
+// i32 -> u16
+RIPPLE_CANDIDATE_INLINE v32u32 ripple_pure_hvx_narsh_sat_i32tou16(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift) {
+  return Q6_Vuh_vasr_VwVwR_sat(Vec_Odd, Vec_Even, Shift);
+}
+RIPPLE_CANDIDATE_INLINE v32u32 ripple_pure_hvx_narsh_rnd_sat_i32tou16(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift) {
+  return Q6_Vuh_vasr_VwVwR_rnd_sat(Vec_Odd, Vec_Even, Shift);
+}
+RIPPLE_CANDIDATE_INLINE v32u32 ripple_pure_hvx_narsh_sat_i32tou16_noshuff(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift) {
+  return Q6_Vh_vdeal_Vh(Q6_Vuh_vasr_VwVwR_sat(Vec_Odd, Vec_Even, Shift));
+}
+RIPPLE_CANDIDATE_INLINE v32u32 ripple_pure_hvx_narsh_rnd_sat_i32tou16_noshuff(
+    v32i32 Vec_Odd, v32i32 Vec_Even, uint32_t Shift) {
+  return Q6_Vh_vdeal_Vh(Q6_Vuh_vasr_VwVwR_rnd_sat(Vec_Odd, Vec_Even, Shift));
+}
+
+// u32 -> u16
+RIPPLE_CANDIDATE_INLINE v32u32 ripple_pure_hvx_narsh_sat_u32tou16(
+    v32u32 Vec_Odd, v32u32 Vec_Even, uint32_t Shift) {
+  return Q6_Vuh_vasr_VuwVuwR_sat(Vec_Odd, Vec_Even, Shift);
+}
+RIPPLE_CANDIDATE_INLINE v32u32 ripple_pure_hvx_narsh_rnd_sat_u32tou16(
+    v32u32 Vec_Odd, v32u32 Vec_Even, uint32_t Shift) {
+  return Q6_Vuh_vasr_VuwVuwR_rnd_sat(Vec_Odd, Vec_Even, Shift);
+}
+RIPPLE_CANDIDATE_INLINE v32u32 ripple_pure_hvx_narsh_sat_u32tou16_noshuff(
+    v32u32 Vec_Odd, v32u32 Vec_Even, uint32_t Shift) {
+  return Q6_Vh_vdeal_Vh(Q6_Vuh_vasr_VuwVuwR_sat(Vec_Odd, Vec_Even, Shift));
+}
+RIPPLE_CANDIDATE_INLINE v32u32 ripple_pure_hvx_narsh_rnd_sat_u32tou16_noshuff(
+    v32u32 Vec_Odd, v32u32 Vec_Even, uint32_t Shift) {
+  return Q6_Vh_vdeal_Vh(Q6_Vuh_vasr_VuwVuwR_rnd_sat(Vec_Odd, Vec_Even, Shift));
+}
+
+// i16 -> i8
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_pure_hvx_narsh_sat_i16toi8(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift) {
+  return Q6_Vb_vasr_VhVhR_sat(Vec_Odd, Vec_Even, Shift);
+}
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_pure_hvx_narsh_rnd_sat_i16toi8(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift) {
+  return Q6_Vb_vasr_VhVhR_rnd_sat(Vec_Odd, Vec_Even, Shift);
+}
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_pure_hvx_narsh_sat_i16toi8_noshuff(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift) {
+  return Q6_Vb_vdeal_Vb(Q6_Vb_vasr_VhVhR_sat(Vec_Odd, Vec_Even, Shift));
+}
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_pure_hvx_narsh_rnd_sat_i16toi8_noshuff(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift) {
+  return Q6_Vb_vdeal_Vb(Q6_Vb_vasr_VhVhR_rnd_sat(Vec_Odd, Vec_Even, Shift));
+}
+
+// i16 -> u8
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_pure_hvx_narsh_sat_i16tou8(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift) {
+  return Q6_Vub_vasr_VhVhR_sat(Vec_Odd, Vec_Even, Shift);
+}
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_pure_hvx_narsh_rnd_sat_i16tou8(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift) {
+  return Q6_Vub_vasr_VhVhR_rnd_sat(Vec_Odd, Vec_Even, Shift);
+}
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_pure_hvx_narsh_sat_i16tou8_noshuff(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift) {
+  return Q6_Vb_vdeal_Vb(Q6_Vub_vasr_VhVhR_sat(Vec_Odd, Vec_Even, Shift));
+}
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_pure_hvx_narsh_rnd_sat_i16tou8_noshuff(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift) {
+  return Q6_Vb_vdeal_Vb(Q6_Vub_vasr_VhVhR_rnd_sat(Vec_Odd, Vec_Even, Shift));
+}
+
+// u16 -> u8
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_pure_hvx_narsh_sat_u16tou8(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift) {
+  return Q6_Vub_vasr_VuhVuhR_sat(Vec_Odd, Vec_Even, Shift);
+}
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_pure_hvx_narsh_rnd_sat_u16tou8(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift) {
+  return Q6_Vub_vasr_VuhVuhR_rnd_sat(Vec_Odd, Vec_Even, Shift);
+}
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_pure_hvx_narsh_sat_u16tou8_noshuff(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift) {
+  return Q6_Vb_vdeal_Vb(Q6_Vub_vasr_VuhVuhR_sat(Vec_Odd, Vec_Even, Shift));
+}
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_pure_hvx_narsh_rnd_sat_u16tou8_noshuff(
+    v64i16 Vec_Odd, v64i16 Vec_Even, uint32_t Shift) {
+  return Q6_Vb_vdeal_Vb(Q6_Vub_vasr_VuhVuhR_rnd_sat(Vec_Odd, Vec_Even, Shift));
+}

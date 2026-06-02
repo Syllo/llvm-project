@@ -10,37 +10,46 @@
 //
 // These declarations expose the Ripple HVX vavg/vnavg functions to user code.
 // The Ripple compiler pass replaces calls to hvx_*_vavg_* / hvx_*_vnavg_*
-// with the corresponding ripple_ew_pure_hvx_* implementations from HVX_Vavg.cc.
+// with the corresponding ripple_ew_pure_hvx_* definitions below.
 //
 // The polymorphic hvx_vavg / hvx_vavg_rnd / hvx_vnavg entry points follow the
-// same pattern as hvx_vdeal in HVX_Vdeal.h: typed extern "C" declarations via
-// _decl_* macros, then C _Generic dispatch and C++ overloaded static inlines.
+// same pattern as hvx_vdeal in HVX_VectorPair.h: typed extern "C" declarations
+// via _decl_* macros, then C _Generic dispatch and C++ overloaded static
+// inlines.
 
 #pragma once
-#include "__ripple_vec.h"
-#include <stddef.h>
+#include "__ripple_func_attribs.h"
+#include <hexagon_protos.h>
+#include <ripple.h>
+#include <ripple_hvx.h>
+
+// The candidate bodies assume 128-byte HVX vectors.  The old bitcode build
+// enforced -mhvx-length=128B per source; in the header-only model the includer
+// must supply it.
+#if defined(__HVX_LENGTH__) && __HVX_LENGTH__ != 128
+#error "HVX_Vavg.h requires -mhvx-length=128B"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+// Scalar declarations. Ripple candidate names mirror these entry points.
+
 // Declares: hvx_<outType>_vavg_<inType><inType>
 // Truncating average: out[i] = (a[i] + b[i]) >> 1
 #define _decl_hvx_vavg(cOutType, outType, cInType, inType)                     \
-  __attribute__((always_inline)) extern cOutType                               \
-      hvx_##outType##_vavg_##inType##inType(cInType a, cInType b)
+  cOutType hvx_##outType##_vavg_##inType##inType(cInType a, cInType b);
 
 // Declares: hvx_<outType>_vavg_<inType><inType>_rnd
 // Rounding average: out[i] = (a[i] + b[i] + 1) >> 1
 #define _decl_hvx_vavg_rnd(cOutType, outType, cInType, inType)                 \
-  __attribute__((always_inline)) extern cOutType                               \
-      hvx_##outType##_vavg_##inType##inType##_rnd(cInType a, cInType b)
+  cOutType hvx_##outType##_vavg_##inType##inType##_rnd(cInType a, cInType b);
 
 // Declares: hvx_<outType>_vnavg_<inType><inType>
 // Negated average: out[i] = (a[i] - b[i]) >> 1
 #define _decl_hvx_vnavg(cOutType, outType, cInType, inType)                    \
-  __attribute__((always_inline)) extern cOutType                               \
-      hvx_##outType##_vnavg_##inType##inType(cInType a, cInType b)
+  cOutType hvx_##outType##_vnavg_##inType##inType(cInType a, cInType b);
 
 // --- vavg: truncating average ---
 _decl_hvx_vavg(unsigned char, u8, unsigned char, u8);
@@ -73,13 +82,75 @@ _decl_hvx_vnavg(int, i32, int, i32);
 } // extern "C"
 #endif
 
-// =============================================================================
-// Polymorphic wrappers
-// =============================================================================
+// Vector candidates — static inline, found by the Ripple pass.
+RIPPLE_CANDIDATE_INLINE v128i8 ripple_ew_pure_hvx_i8_vavg_i8i8(v128i8 a,
+                                                               v128i8 b) {
+  return Q6_Vb_vavg_VbVb(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v128i8 ripple_ew_pure_hvx_i8_vavg_i8i8_rnd(v128i8 a,
+                                                                   v128i8 b) {
+  return Q6_Vb_vavg_VbVb_rnd(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v128i8 ripple_ew_pure_hvx_i8_vnavg_i8i8(v128i8 a,
+                                                                v128i8 b) {
+  return Q6_Vb_vnavg_VbVb(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v128u8 ripple_ew_pure_hvx_u8_vavg_u8u8(v128u8 a,
+                                                               v128u8 b) {
+  return Q6_Vub_vavg_VubVub(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v128u8 ripple_ew_pure_hvx_u8_vavg_u8u8_rnd(v128u8 a,
+                                                                   v128u8 b) {
+  return Q6_Vub_vavg_VubVub_rnd(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v128i8 ripple_ew_pure_hvx_i8_vnavg_u8u8(v128u8 a,
+                                                                v128u8 b) {
+  return Q6_Vb_vnavg_VubVub(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v64u16 ripple_ew_pure_hvx_u16_vavg_u16u16(v64u16 a,
+                                                                  v64u16 b) {
+  return Q6_Vuh_vavg_VuhVuh(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v64u16
+ripple_ew_pure_hvx_u16_vavg_u16u16_rnd(v64u16 a, v64u16 b) {
+  return Q6_Vuh_vavg_VuhVuh_rnd(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_ew_pure_hvx_i16_vavg_i16i16(v64i16 a,
+                                                                  v64i16 b) {
+  return Q6_Vh_vavg_VhVh(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v64i16
+ripple_ew_pure_hvx_i16_vavg_i16i16_rnd(v64i16 a, v64i16 b) {
+  return Q6_Vh_vavg_VhVh_rnd(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v64i16 ripple_ew_pure_hvx_i16_vnavg_i16i16(v64i16 a,
+                                                                   v64i16 b) {
+  return Q6_Vh_vnavg_VhVh(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v32u32 ripple_ew_pure_hvx_u32_vavg_u32u32(v32u32 a,
+                                                                  v32u32 b) {
+  return Q6_Vuw_vavg_VuwVuw(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v32u32
+ripple_ew_pure_hvx_u32_vavg_u32u32_rnd(v32u32 a, v32u32 b) {
+  return Q6_Vuw_vavg_VuwVuw_rnd(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v32i32 ripple_ew_pure_hvx_i32_vavg_i32i32(v32i32 a,
+                                                                  v32i32 b) {
+  return Q6_Vw_vavg_VwVw(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v32i32
+ripple_ew_pure_hvx_i32_vavg_i32i32_rnd(v32i32 a, v32i32 b) {
+  return Q6_Vw_vavg_VwVw_rnd(a, b);
+}
+RIPPLE_CANDIDATE_INLINE v32i32 ripple_ew_pure_hvx_i32_vnavg_i32i32(v32i32 a,
+                                                                   v32i32 b) {
+  return Q6_Vw_vnavg_VwVw(a, b);
+}
+
+// Polymorphic entry points (C _Generic / C++ overloads).
 
 #ifndef __cplusplus
-
-// --- C: _Generic dispatch ---
 
 // hvx_vavg(a, b) — truncating average, dispatches on type of a
 #define hvx_vavg(a, b)                                                         \
