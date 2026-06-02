@@ -8,88 +8,66 @@
 //
 
 #pragma once
-#include "__ripple_vec.h"
+#include <ripple.h>
 #include <stddef.h>
 #include <stdint.h>
 
+#include "__ripple_func_attribs.h"
+#include <hexagon_protos.h>
+#include <hexagon_types.h>
 #include <ripple_hvx.h>
 
-#define RIPPLE_VECTOR_PAIR_CANDIDATE __attribute__((ripple_vector_candidate))
+// ripple_vector_candidate definitions.
+#define _def_ripple_hvx_vdeals(N_ELEM, T, ELEM_SIZE)                           \
+  RIPPLE_CANDIDATE_INLINE v##N_ELEM##T ripple_pure_hvx_vdeal_##T(              \
+      v##N_ELEM##T src, size_t chunk_size) {                                   \
+    HVX_Vector left = Q6_V_lo_W(src);                                          \
+    HVX_Vector right = Q6_V_hi_W(src);                                         \
+    return Q6_W_vdeal_VVR(right, left, (chunk_size) * ELEM_SIZE);              \
+  }                                                                            \
+                                                                               \
+  RIPPLE_CANDIDATE_INLINE v##N_ELEM##T ripple_pure_hvx_vshuff_##T(             \
+      v##N_ELEM##T src, size_t chunk_size) {                                   \
+    HVX_Vector left = Q6_V_lo_W(src);                                          \
+    HVX_Vector right = Q6_V_hi_W(src);                                         \
+    return Q6_W_vshuff_VVR(right, left, (chunk_size) * ELEM_SIZE);             \
+  }
+
+_def_ripple_hvx_vdeals(256, i8, 1);
+_def_ripple_hvx_vdeals(128, i16, 2);
+_def_ripple_hvx_vdeals(64, i32, 4);
+_def_ripple_hvx_vdeals(32, i64, 8);
+
+_def_ripple_hvx_vdeals(256, u8, 1);
+_def_ripple_hvx_vdeals(128, u16, 2);
+_def_ripple_hvx_vdeals(64, u32, 4);
+_def_ripple_hvx_vdeals(32, u64, 8);
+
+#if __has_bf16__
+_def_ripple_hvx_vdeals(128, bf16, 2);
+#endif
+
+#if __has_Float16__
+_def_ripple_hvx_vdeals(128, f16, 2);
+#endif
+
+_def_ripple_hvx_vdeals(64, f32, 4);
+_def_ripple_hvx_vdeals(32, f64, 8);
+
+#undef _def_ripple_hvx_vdeals
+
+// Scalar declarations. Ripple candidate names mirror these entry points.
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-extern RIPPLE_VECTOR_PAIR_CANDIDATE
-    v256u8 ripple_pure_hvx_vdeal_u8(v256u8 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v128u16
-ripple_pure_hvx_vdeal_u16(v128u16 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v64u32
-ripple_pure_hvx_vdeal_u32(v64u32 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v32u64
-ripple_pure_hvx_vdeal_u64(v32u64 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v256i8
-ripple_pure_hvx_vdeal_i8(v256i8 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v128i16
-ripple_pure_hvx_vdeal_i16(v128i16 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v64i32
-ripple_pure_hvx_vdeal_i32(v64i32 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v32i64
-ripple_pure_hvx_vdeal_i64(v32i64 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v64f32
-ripple_pure_hvx_vdeal_f32(v64f32 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v32f64
-ripple_pure_hvx_vdeal_f64(v32f64 src, size_t chunk_size);
-
-#if __has_Float16__
-extern RIPPLE_VECTOR_PAIR_CANDIDATE
-    v128f16 ripple_pure_hvx_vdeal_f16(v128f16 src, size_t chunk_sizze);
-#endif
-
-#if __has_bf16__
-extern RIPPLE_VECTOR_PAIR_CANDIDATE
-    v128bf16 ripple_pure_hvx_vdeal_bf16(v128bf16 src, size_t chunk_size);
-#endif
-
-extern RIPPLE_VECTOR_PAIR_CANDIDATE
-    v256u8 ripple_pure_hvx_vshuff_u8(v256u8 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v128u16
-ripple_pure_hvx_vshuff_u16(v128u16 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v64u32
-ripple_pure_hvx_vshuff_u32(v64u32 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v32u64
-ripple_pure_hvx_vshuff_u64(v32u64 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v256i8
-ripple_pure_hvx_vshuff_i8(v256i8 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v128i16
-ripple_pure_hvx_vshuff_i16(v128i16 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v64i32
-ripple_pure_hvx_vshuff_i32(v64i32 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v32i64
-ripple_pure_hvx_vshuff_i64(v32i64 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v64f32
-ripple_pure_hvx_vshuff_f32(v64f32 src, size_t chunk_size);
-extern RIPPLE_VECTOR_PAIR_CANDIDATE v32f64
-ripple_pure_hvx_vshuff_f64(v32f64 src, size_t chunk_size);
-
-#if __has_Float16__
-extern RIPPLE_VECTOR_PAIR_CANDIDATE
-    v128f16 ripple_pure_hvx_vshuff_f16(v128f16 src, size_t chunk_sizze);
-#endif
-
-#if __has_bf16__
-extern RIPPLE_VECTOR_PAIR_CANDIDATE
-    v128bf16 ripple_pure_hvx_vshuff_bf16(v128bf16 src, size_t chunk_size);
-#endif
-
-#undef RIPPLE_VECTOR_PAIR_CANDIDATE
 
 #define _decl_hvx_vdeals(ct, t)                                                \
   __attribute__((used, always_inline, weak)) extern ct hvx_vdeal_##t(          \
       ct src, size_t chunk_size);                                              \
                                                                                \
   __attribute__((used, always_inline, weak)) extern ct hvx_vshuff_##t(         \
-      ct src, size_t chunk_size);
+      ct src, size_t chunk_size)
 
 _decl_hvx_vdeals(int8_t, i8);
 _decl_hvx_vdeals(int16_t, i16);
@@ -245,7 +223,8 @@ _decl_hvx_vdeals(_Float16, f16);
 #ifdef __cplusplus
 
 #define _decl_hvx_vdeals_spec_int(CT, UI)                                      \
-  [[gnu::always_inline]] static CT __hvx_vdeal(CT Val, size_t chunk_size) {    \
+  [[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static CT __hvx_vdeal(            \
+      CT Val, size_t chunk_size) {                                             \
     switch (sizeof(Val)) {                                                     \
     case 1:                                                                    \
       return hvx_vdeal_##UI##8((Val), (chunk_size));                           \
@@ -260,7 +239,8 @@ _decl_hvx_vdeals(_Float16, f16);
     }                                                                          \
   }                                                                            \
                                                                                \
-  [[gnu::always_inline]] static CT __hvx_vshuff(CT Val, size_t chunk_size) {   \
+  [[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static CT __hvx_vshuff(           \
+      CT Val, size_t chunk_size) {                                             \
     switch (sizeof(Val)) {                                                     \
     case 1:                                                                    \
       return hvx_vshuff_##UI##8((Val), (chunk_size));                          \
@@ -275,67 +255,71 @@ _decl_hvx_vdeals(_Float16, f16);
     }                                                                          \
   }
 
+// clang-format off
 _decl_hvx_vdeals_spec_int(signed char, i)
-    _decl_hvx_vdeals_spec_int(unsigned char, u) _decl_hvx_vdeals_spec_int(short,
-                                                                          i)
-        _decl_hvx_vdeals_spec_int(unsigned short, u)
-            _decl_hvx_vdeals_spec_int(int, i)
-                _decl_hvx_vdeals_spec_int(unsigned int, u)
-                    _decl_hvx_vdeals_spec_int(long, i)
-                        _decl_hvx_vdeals_spec_int(unsigned long, u)
-                            _decl_hvx_vdeals_spec_int(long long, i)
-                                _decl_hvx_vdeals_spec_int(unsigned long long, u)
+_decl_hvx_vdeals_spec_int(unsigned char, u)
+_decl_hvx_vdeals_spec_int(short, i)
+_decl_hvx_vdeals_spec_int(unsigned short, u)
+_decl_hvx_vdeals_spec_int(int, i)
+_decl_hvx_vdeals_spec_int(unsigned int, u)
+_decl_hvx_vdeals_spec_int(long, i)
+_decl_hvx_vdeals_spec_int(unsigned long, u)
+_decl_hvx_vdeals_spec_int(long long, i)
+_decl_hvx_vdeals_spec_int(unsigned long long, u)
+// clang-format on
 
 #undef _decl_hvx_vdeals_spec_int
 
     // plain char — signedness is implementation-defined
-    [[gnu::always_inline]] static char __hvx_vdeal(const char Val,
-                                                   size_t chunk_size) {
+    [[gnu::always_inline]] RIPPLE_MAYBE_UNUSED
+    static char __hvx_vdeal(const char Val, size_t chunk_size) {
   return __ripple_char_is_signed ? hvx_vdeal_i8((Val), (chunk_size))
                                  : hvx_vdeal_u8((Val), (chunk_size));
 }
 
-[[gnu::always_inline]] static char __hvx_vshuff(const char Val,
-                                                size_t chunk_size) {
+[[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static char
+__hvx_vshuff(const char Val, size_t chunk_size) {
   return __ripple_char_is_signed ? hvx_vshuff_i8((Val), (chunk_size))
                                  : hvx_vshuff_u8((Val), (chunk_size));
 }
 
 #if __has_Float16__
-[[gnu::always_inline]] static _Float16 __hvx_vdeal(_Float16 Val,
-                                                   size_t chunk_size) {
+[[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static _Float16
+__hvx_vdeal(_Float16 Val, size_t chunk_size) {
   return hvx_vdeal_f16((Val), (chunk_size));
 }
-[[gnu::always_inline]] static _Float16 __hvx_vshuff(_Float16 Val,
-                                                    size_t chunk_size) {
+[[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static _Float16
+__hvx_vshuff(_Float16 Val, size_t chunk_size) {
   return hvx_vshuff_f16((Val), (chunk_size));
 }
 #endif
 
 #if __has_bf16__
-[[gnu::always_inline]] static __bf16 __hvx_vdeal(__bf16 Val,
-                                                 size_t chunk_size) {
+[[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static __bf16
+__hvx_vdeal(__bf16 Val, size_t chunk_size) {
   return hvx_vdeal_bf16((Val), (chunk_size));
 }
-[[gnu::always_inline]] static __bf16 __hvx_vshuff(__bf16 Val,
-                                                  size_t chunk_size) {
+[[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static __bf16
+__hvx_vshuff(__bf16 Val, size_t chunk_size) {
   return hvx_vshuff_bf16((Val), (chunk_size));
 }
 #endif
 
-[[gnu::always_inline]] static float __hvx_vdeal(float Val, size_t chunk_size) {
+[[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static float
+__hvx_vdeal(float Val, size_t chunk_size) {
   return hvx_vdeal_f32((Val), (chunk_size));
 }
-[[gnu::always_inline]] static float __hvx_vshuff(float Val, size_t chunk_size) {
+[[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static float
+__hvx_vshuff(float Val, size_t chunk_size) {
   return hvx_vshuff_f32((Val), (chunk_size));
 }
 
-[[gnu::always_inline]] static double __hvx_vdeal(double Val,
-                                                 size_t chunk_size) {
+[[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static double
+__hvx_vdeal(double Val, size_t chunk_size) {
   return hvx_vdeal_f64((Val), (chunk_size));
 }
-[[gnu::always_inline]] static double __hvx_vshuff(double Val,
-                                                  size_t chunk_size) {
+[[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static double
+__hvx_vshuff(double Val, size_t chunk_size) {
   return hvx_vshuff_f64((Val), (chunk_size));
 }
 
@@ -344,37 +328,37 @@ _decl_hvx_vdeals_spec_int(signed char, i)
 // ----------------------------------------------------------------------------
 
 template <typename T>
-__attribute__((always_inline)) static T
+__attribute__((always_inline)) RIPPLE_MAYBE_UNUSED static T
 hvx_pair_chunked_unzip(T x, size_t chunk_size) {
   return __hvx_vdeal(x, -chunk_size);
 }
 
 template <typename T>
-__attribute__((always_inline)) static T
+__attribute__((always_inline)) RIPPLE_MAYBE_UNUSED static T
 hvx_pair_chunked_zip(T x, size_t chunk_size) {
   return __hvx_vshuff(x, -chunk_size);
 }
 
 template <typename T>
-__attribute__((always_inline)) static T
+__attribute__((always_inline)) RIPPLE_MAYBE_UNUSED static T
 hvx_pair_chunked_unzip_list(T x, size_t chunk_size, size_t list_size) {
   return __hvx_vdeal(x, list_size - chunk_size);
 }
 
 template <typename T>
-__attribute__((always_inline)) static T
+__attribute__((always_inline)) RIPPLE_MAYBE_UNUSED static T
 hvx_pair_chunked_zip_list(T x, size_t chunk_size, size_t list_size) {
   return __hvx_vshuff(x, list_size - chunk_size);
 }
 
 template <typename T>
-__attribute__((always_inline)) static T
+__attribute__((always_inline)) RIPPLE_MAYBE_UNUSED static T
 hvx_pair_2x2_transpose_dec(T x, size_t chunk_size) {
   return __hvx_vdeal(x, chunk_size);
 }
 
 template <typename T>
-__attribute__((always_inline)) static T
+__attribute__((always_inline)) RIPPLE_MAYBE_UNUSED static T
 hvx_pair_2x2_transpose_inc(T x, size_t chunk_size) {
   return __hvx_vshuff(x, chunk_size);
 }

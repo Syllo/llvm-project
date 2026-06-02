@@ -1,7 +1,6 @@
 // UNSUPPORTED: cui
 // REQUIRES: hexagon-registered-target
-// REQUIRES: rt_lib
-// RUN: %clang++ -g -S -fenable-ripple --target=hexagon -mhvx -mhvx-length=128B -mv85 -emit-llvm %s -o - -mllvm -ripple-disable-link 2>&1 | FileCheck %s
+// RUN: %clang++ -g -S -fenable-ripple --target=hexagon -mhvx -mhvx-length=128B -mv81 -mhvx-qfloat -emit-llvm %s -o - -mllvm -ripple-disable-link 2>&1 | FileCheck %s
 
 // This test verifies that the Ripple compiler pass replaces calls to the
 // hvx_prepare_lut_* / hvx_vlut_* entry points (declared in HVX_Vlut.h) with the
@@ -10,8 +9,534 @@
 // FileCheck lines confirm the expected ripple_* symbols appear in the emitted
 // LLVM IR.
 
-#include <ripple.h>
-#include <ripple/HVX_Vlut.h>
+#include "ripple_test.h"
+// HVX_Vlut RT library declarations, inlined so this frontend test does
+// not depend on the compiler-rt headers or the Hexagon SDK.
+#ifndef RIPPLE_VECTOR_CANDIDATE
+#define RIPPLE_VECTOR_CANDIDATE __attribute__((ripple_vector_candidate))
+#endif
+#include "ripple_hvx_test_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+__attribute__((always_inline)) extern unsigned char
+hvx_prepare_lut_256u8(unsigned char table);
+
+__attribute__((always_inline)) extern unsigned char
+hvx_prepare_lut_128x2u8(unsigned char table);
+
+__attribute__((always_inline)) extern unsigned char
+hvx_prepare_lut_128u8(unsigned char table);
+
+__attribute__((always_inline)) extern unsigned char
+hvx_vlut_u8_w_ptr(unsigned char indices, const unsigned char *prepared_table);
+
+__attribute__((always_inline)) extern unsigned char
+hvx_vlut_u8_w_value(unsigned char indices, unsigned char table);
+
+__attribute__((always_inline)) extern unsigned char
+hvx_vlut_u8_2vec(unsigned char indices, const unsigned char table_lo,
+                 const unsigned char table_hi);
+
+__attribute__((always_inline)) extern unsigned short
+hvx_prepare_lut_64u16(unsigned short table);
+
+__attribute__((always_inline)) extern unsigned short
+hvx_vlut_64u16(unsigned char indices, unsigned short table);
+
+__attribute__((always_inline)) extern unsigned short
+hvx_prepare_lut_128u16(unsigned short table);
+
+__attribute__((always_inline)) extern unsigned short
+hvx_vlut_128u16(unsigned char indices, unsigned short table);
+
+__attribute__((always_inline)) extern unsigned short
+hvx_prepare_lut_256u16(unsigned short table);
+
+__attribute__((always_inline)) extern unsigned short
+hvx_vlut_256u16(unsigned char indices, unsigned short table);
+
+__attribute__((always_inline)) extern unsigned int
+hvx_prepare_lut_128u32(unsigned int table);
+
+__attribute__((always_inline)) extern unsigned int
+hvx_vlut_128u32(unsigned char indices, unsigned int table);
+
+__attribute__((always_inline)) extern unsigned int
+hvx_prepare_lut_256u32(unsigned int table);
+
+__attribute__((always_inline)) extern unsigned int
+hvx_vlut_256u32(unsigned char indices, unsigned int table);
+
+__attribute__((always_inline)) extern unsigned long long
+hvx_prepare_lut_64u64(unsigned long long table);
+
+__attribute__((always_inline)) extern unsigned long long
+hvx_vlut_64u64(unsigned char indices, unsigned long long table);
+
+__attribute__((always_inline)) extern unsigned long long
+hvx_prepare_lut_128u64(unsigned long long table);
+
+__attribute__((always_inline)) extern unsigned long long
+hvx_vlut_128u64(unsigned char indices, unsigned long long table);
+
+#if __has_Float16__
+__attribute__((always_inline)) extern _Float16
+hvx_prepare_lut_128f16(_Float16 table);
+
+__attribute__((always_inline)) extern _Float16
+hvx_vlut_128f16(unsigned char indices, _Float16 table);
+
+__attribute__((always_inline)) extern _Float16
+hvx_prepare_lut_256f16(_Float16 table);
+
+__attribute__((always_inline)) extern _Float16
+hvx_vlut_256f16(unsigned char indices, _Float16 table);
+#endif
+
+#if __has_bf16__
+__attribute__((always_inline)) extern __bf16
+hvx_prepare_lut_128bf16(__bf16 table);
+
+__attribute__((always_inline)) extern __bf16
+hvx_vlut_128bf16(unsigned char indices, __bf16 table);
+
+__attribute__((always_inline)) extern __bf16
+hvx_prepare_lut_256bf16(__bf16 table);
+
+__attribute__((always_inline)) extern __bf16
+hvx_vlut_256bf16(unsigned char indices, __bf16 table);
+#endif
+
+__attribute__((always_inline)) extern float hvx_prepare_lut_128f32(float table);
+
+__attribute__((always_inline)) extern float
+hvx_vlut_128f32(unsigned char indices, float table);
+
+__attribute__((always_inline)) extern float hvx_prepare_lut_256f32(float table);
+
+__attribute__((always_inline)) extern float
+hvx_vlut_256f32(unsigned char indices, float table);
+
+__attribute__((always_inline)) extern double
+hvx_prepare_lut_64f64(double table);
+
+__attribute__((always_inline)) extern double
+hvx_vlut_64f64(unsigned char indices, double table);
+
+__attribute__((always_inline)) extern double
+hvx_prepare_lut_128f64(double table);
+
+__attribute__((always_inline)) extern double
+hvx_vlut_128f64(unsigned char indices, double table);
+
+extern RIPPLE_VECTOR_CANDIDATE v256u8
+ripple_hvx_prepare_lut_256u8(v256u8 table);
+extern RIPPLE_VECTOR_CANDIDATE v256u8
+ripple_arg0_t128x2u8_ret_t128x2u8_hvx_prepare_lut_128x2u8(v256u8 table);
+extern RIPPLE_VECTOR_CANDIDATE v128u8
+ripple_hvx_prepare_lut_128u8(v128u8 table);
+extern RIPPLE_VECTOR_CANDIDATE v128u8
+ripple_ew_pure_hvx_vlut_u8_w_ptr(v128u8 indices, const unsigned char *table);
+extern RIPPLE_VECTOR_CANDIDATE v128u8
+ripple_pure_arg0_t128u8_arg1_t128x2u8_hvx_vlut_u8_w_value(v128u8 indices,
+                                                          v256u8 table);
+extern RIPPLE_VECTOR_CANDIDATE v128u8 ripple_ew_pure_hvx_vlut_u8_2vec(
+    v128u8 indices, v128u8 table_lo, v128u8 table_hi);
+extern RIPPLE_VECTOR_CANDIDATE v64u16
+ripple_arg0_t64u16_ret_t64u16_hvx_prepare_lut_64u16(v64u16 table);
+extern RIPPLE_VECTOR_CANDIDATE v128u16
+ripple_pure_arg0_t64x2u8_arg1_t64u16_ret_t64x2u16_hvx_vlut_64u16(
+    v128u8 indices, v64u16 prepared);
+extern RIPPLE_VECTOR_CANDIDATE v128u16
+ripple_arg0_t128u16_ret_t128u16_hvx_prepare_lut_128u16(v128u16 table);
+extern RIPPLE_VECTOR_CANDIDATE v128u16
+ripple_pure_arg0_t128u8_arg1_t128u16_ret_t128u16_hvx_vlut_128u16(
+    v128u8 indices, v128u16 prepared);
+extern RIPPLE_VECTOR_CANDIDATE v256u16
+ripple_arg0_t128x2u16_ret_t128x2u16_hvx_prepare_lut_256u16(v256u16 table);
+extern RIPPLE_VECTOR_CANDIDATE v128u16
+ripple_pure_arg0_t128u8_arg1_t128x2u16_ret_t128u16_hvx_vlut_256u16(
+    v128u8 indices, v256u16 prepared);
+extern RIPPLE_VECTOR_CANDIDATE v128u32
+ripple_arg0_t128u32_ret_t128u32_hvx_prepare_lut_128u32(v128u32 table);
+extern RIPPLE_VECTOR_CANDIDATE v128u32
+ripple_pure_arg0_t128u8_arg1_t128u32_ret_t128u32_hvx_vlut_128u32(
+    v128u8 indices, v128u32 prepared);
+extern RIPPLE_VECTOR_CANDIDATE v256u32
+ripple_arg0_t128x2u32_ret_t128x2u32_hvx_prepare_lut_256u32(v256u32 table);
+extern RIPPLE_VECTOR_CANDIDATE v128u32
+ripple_pure_arg0_t128u8_arg1_t128x2u32_ret_t128u32_hvx_vlut_256u32(
+    v128u8 indices, v256u32 prepared);
+extern RIPPLE_VECTOR_CANDIDATE v64u64
+ripple_arg0_t64u64_ret_t64u64_hvx_prepare_lut_64u64(v64u64 table);
+extern RIPPLE_VECTOR_CANDIDATE v128u64
+ripple_pure_arg0_t64x2u8_arg1_t64u64_ret_t64x2u64_hvx_vlut_64u64(
+    v128u8 indices, v64u64 prepared);
+extern RIPPLE_VECTOR_CANDIDATE v128u64
+ripple_arg0_t128u64_ret_t128u64_hvx_prepare_lut_128u64(v128u64 table);
+extern RIPPLE_VECTOR_CANDIDATE v128u64
+ripple_pure_arg0_t128u8_arg1_t128u64_ret_t128u64_hvx_vlut_128u64(
+    v128u8 indices, v128u64 prepared);
+extern RIPPLE_VECTOR_CANDIDATE v128f32
+ripple_arg0_t128f32_ret_t128f32_hvx_prepare_lut_128f32(v128f32 table);
+extern RIPPLE_VECTOR_CANDIDATE v128f32
+ripple_pure_arg0_t128u8_arg1_t128f32_ret_t128f32_hvx_vlut_128f32(
+    v128u8 indices, v128f32 prepared);
+extern RIPPLE_VECTOR_CANDIDATE v256f32
+ripple_arg0_t128x2f32_ret_t128x2f32_hvx_prepare_lut_256f32(v256f32 table);
+extern RIPPLE_VECTOR_CANDIDATE v128f32
+ripple_pure_arg0_t128u8_arg1_t128x2f32_ret_t128f32_hvx_vlut_256f32(
+    v128u8 indices, v256f32 prepared);
+extern RIPPLE_VECTOR_CANDIDATE v64f64
+ripple_arg0_t64f64_ret_t64f64_hvx_prepare_lut_64f64(v64f64 table);
+extern RIPPLE_VECTOR_CANDIDATE v128f64
+ripple_pure_arg0_t64x2u8_arg1_t64f64_ret_t64x2f64_hvx_vlut_64f64(
+    v128u8 indices, v64f64 prepared);
+extern RIPPLE_VECTOR_CANDIDATE v128f64
+ripple_arg0_t128f64_ret_t128f64_hvx_prepare_lut_128f64(v128f64 table);
+extern RIPPLE_VECTOR_CANDIDATE v128f64
+ripple_pure_arg0_t128u8_arg1_t128f64_ret_t128f64_hvx_vlut_128f64(
+    v128u8 indices, v128f64 prepared);
+#if __has_Float16__
+extern RIPPLE_VECTOR_CANDIDATE v128f16
+ripple_arg0_t128f16_ret_t128f16_hvx_prepare_lut_128f16(v128f16 table);
+extern RIPPLE_VECTOR_CANDIDATE v128f16
+ripple_pure_arg0_t128u8_arg1_t128f16_ret_t128f16_hvx_vlut_128f16(
+    v128u8 indices, v128f16 prepared);
+extern RIPPLE_VECTOR_CANDIDATE v256f16
+ripple_arg0_t128x2f16_ret_t128x2f16_hvx_prepare_lut_256f16(v256f16 table);
+extern RIPPLE_VECTOR_CANDIDATE v128f16
+ripple_pure_arg0_t128u8_arg1_t128x2f16_ret_t128f16_hvx_vlut_256f16(
+    v128u8 indices, v256f16 prepared);
+#endif
+#if __has_bf16__
+extern RIPPLE_VECTOR_CANDIDATE v128bf16
+ripple_arg0_t128bf16_ret_t128bf16_hvx_prepare_lut_128bf16(v128bf16 table);
+extern RIPPLE_VECTOR_CANDIDATE v128bf16
+ripple_pure_arg0_t128u8_arg1_t128bf16_ret_t128bf16_hvx_vlut_128bf16(
+    v128u8 indices, v128bf16 prepared);
+extern RIPPLE_VECTOR_CANDIDATE v256bf16
+ripple_arg0_t128x2bf16_ret_t128x2bf16_hvx_prepare_lut_256bf16(v256bf16 table);
+extern RIPPLE_VECTOR_CANDIDATE v128bf16
+ripple_pure_arg0_t128u8_arg1_t128x2bf16_ret_t128bf16_hvx_vlut_256bf16(
+    v128u8 indices, v256bf16 prepared);
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifndef __cplusplus
+
+#if __has_Float16__
+#define __HVX_VLUT_F16_PREPARE(table)                                          \
+  , _Float16 : hvx_prepare_lut_128f16((table))
+#define __HVX_VLUT_F16_VLUT(indices, prepared)                                 \
+  , _Float16 : hvx_vlut_128f16((indices), (prepared))
+#define __HVX_VLUT_F16_PREPARE_DOUBLE(table)                                   \
+  , _Float16 : hvx_prepare_lut_256f16((table))
+#define __HVX_VLUT_F16_VLUT_DOUBLE(indices, prepared)                          \
+  , _Float16 : hvx_vlut_256f16((indices), (prepared))
+#else
+#define __HVX_VLUT_F16_PREPARE(table)
+#define __HVX_VLUT_F16_VLUT(indices, prepared)
+#define __HVX_VLUT_F16_PREPARE_DOUBLE(table)
+#define __HVX_VLUT_F16_VLUT_DOUBLE(indices, prepared)
+#endif
+
+#if __has_bf16__
+#define __HVX_VLUT_BF16_PREPARE(table)                                         \
+  , __bf16 : hvx_prepare_lut_128bf16((table))
+#define __HVX_VLUT_BF16_VLUT(indices, prepared)                                \
+  , __bf16 : hvx_vlut_128bf16((indices), (prepared))
+#define __HVX_VLUT_BF16_PREPARE_DOUBLE(table)                                  \
+  , __bf16 : hvx_prepare_lut_256bf16((table))
+#define __HVX_VLUT_BF16_VLUT_DOUBLE(indices, prepared)                         \
+  , __bf16 : hvx_vlut_256bf16((indices), (prepared))
+#else
+#define __HVX_VLUT_BF16_PREPARE(table)
+#define __HVX_VLUT_BF16_VLUT(indices, prepared)
+#define __HVX_VLUT_BF16_PREPARE_DOUBLE(table)
+#define __HVX_VLUT_BF16_VLUT_DOUBLE(indices, prepared)
+#endif
+
+#define hvx_prepare_lut(table)                                                 \
+  _Generic((table),                                                            \
+      unsigned short: hvx_prepare_lut_128u16((table)),                         \
+      short: (short)hvx_prepare_lut_128u16((unsigned short)(table)),           \
+      unsigned int: hvx_prepare_lut_128u32((table)),                           \
+      int: (int)hvx_prepare_lut_128u32((unsigned int)(table)),                 \
+      unsigned long: hvx_prepare_lut_128u32((table)),                          \
+      long: (long)hvx_prepare_lut_128u32((unsigned long)(table)),              \
+      unsigned long long: hvx_prepare_lut_64u64((table)),                      \
+      long long: (long long)hvx_prepare_lut_64u64(                             \
+               (unsigned long long)(table)),                                   \
+      float: hvx_prepare_lut_128f32((table)),                                  \
+      double: hvx_prepare_lut_64f64((table)) __HVX_VLUT_F16_PREPARE((table))   \
+          __HVX_VLUT_BF16_PREPARE((table)))
+
+#define hvx_vlut(indices, prepared)                                            \
+  _Generic((prepared),                                                         \
+      unsigned short: hvx_vlut_128u16((indices), (prepared)),                  \
+      short: (short)hvx_vlut_128u16((indices), (unsigned short)(prepared)),    \
+      unsigned int: hvx_vlut_128u32((indices), (prepared)),                    \
+      int: (int)hvx_vlut_128u32((indices), (unsigned int)(prepared)),          \
+      unsigned long: hvx_vlut_128u32((indices), (prepared)),                   \
+      long: (long)hvx_vlut_128u32((indices), (unsigned long)(prepared)),       \
+      unsigned long long: hvx_vlut_64u64((indices), (prepared)),               \
+      long long: (long long)hvx_vlut_64u64((indices),                          \
+                                           (unsigned long long)(prepared)),    \
+      float: hvx_vlut_128f32((indices), (prepared)),                           \
+      double: hvx_vlut_64f64((indices), (prepared))                            \
+          __HVX_VLUT_F16_VLUT((indices), (prepared))                           \
+              __HVX_VLUT_BF16_VLUT((indices), (prepared)))
+
+#define hvx_prepare_lut_double(table)                                          \
+  _Generic((table),                                                            \
+      unsigned short: hvx_prepare_lut_256u16((table)),                         \
+      short: (short)hvx_prepare_lut_256u16((unsigned short)(table)),           \
+      unsigned int: hvx_prepare_lut_256u32((table)),                           \
+      int: (int)hvx_prepare_lut_256u32((unsigned int)(table)),                 \
+      unsigned long: hvx_prepare_lut_256u32((table)),                          \
+      long: (long)hvx_prepare_lut_256u32((unsigned long)(table)),              \
+      unsigned long long: hvx_prepare_lut_128u64((table)),                     \
+      long long: (long long)hvx_prepare_lut_128u64(                            \
+               (unsigned long long)(table)),                                   \
+      float: hvx_prepare_lut_256f32((table)),                                  \
+      double: hvx_prepare_lut_128f64((table))                                  \
+          __HVX_VLUT_F16_PREPARE_DOUBLE((table))                               \
+              __HVX_VLUT_BF16_PREPARE_DOUBLE((table)))
+
+#define hvx_vlut_double(indices, prepared)                                     \
+  _Generic((prepared),                                                         \
+      unsigned short: hvx_vlut_256u16((indices), (prepared)),                  \
+      short: (short)hvx_vlut_256u16((indices), (unsigned short)(prepared)),    \
+      unsigned int: hvx_vlut_256u32((indices), (prepared)),                    \
+      int: (int)hvx_vlut_256u32((indices), (unsigned int)(prepared)),          \
+      unsigned long: hvx_vlut_256u32((indices), (prepared)),                   \
+      long: (long)hvx_vlut_256u32((indices), (unsigned long)(prepared)),       \
+      unsigned long long: hvx_vlut_128u64((indices), (prepared)),              \
+      long long: (long long)hvx_vlut_128u64((indices),                         \
+                                            (unsigned long long)(prepared)),   \
+      float: hvx_vlut_256f32((indices), (prepared)),                           \
+      double: hvx_vlut_128f64((indices), (prepared))                           \
+          __HVX_VLUT_F16_VLUT_DOUBLE((indices), (prepared))                    \
+              __HVX_VLUT_BF16_VLUT_DOUBLE((indices), (prepared)))
+
+#else
+
+[[gnu::always_inline, gnu::unused]] static unsigned short
+hvx_prepare_lut(unsigned short table) {
+  return hvx_prepare_lut_128u16(table);
+}
+[[gnu::always_inline, gnu::unused]] static short hvx_prepare_lut(short table) {
+  return (short)hvx_prepare_lut_128u16((unsigned short)table);
+}
+[[gnu::always_inline, gnu::unused]] static unsigned int
+hvx_prepare_lut(unsigned int table) {
+  return hvx_prepare_lut_128u32(table);
+}
+[[gnu::always_inline, gnu::unused]] static int hvx_prepare_lut(int table) {
+  return (int)hvx_prepare_lut_128u32((unsigned int)table);
+}
+[[gnu::always_inline, gnu::unused]] static unsigned long
+hvx_prepare_lut(unsigned long table) {
+  return hvx_prepare_lut_128u32(table);
+}
+[[gnu::always_inline, gnu::unused]] static long hvx_prepare_lut(long table) {
+  return (long)hvx_prepare_lut_128u32((unsigned long)table);
+}
+[[gnu::always_inline, gnu::unused]] static unsigned long long
+hvx_prepare_lut(unsigned long long table) {
+  return hvx_prepare_lut_64u64(table);
+}
+[[gnu::always_inline, gnu::unused]] static long long
+hvx_prepare_lut(long long table) {
+  return (long long)hvx_prepare_lut_64u64((unsigned long long)table);
+}
+[[gnu::always_inline, gnu::unused]] static float hvx_prepare_lut(float table) {
+  return hvx_prepare_lut_128f32(table);
+}
+[[gnu::always_inline, gnu::unused]] static double
+hvx_prepare_lut(double table) {
+  return hvx_prepare_lut_64f64(table);
+}
+#if __has_Float16__
+[[gnu::always_inline,
+  gnu::unused]] static _Float16 hvx_prepare_lut(_Float16 table) {
+  return hvx_prepare_lut_128f16(table);
+}
+#endif
+#if __has_bf16__
+[[gnu::always_inline,
+  gnu::unused]] static __bf16 hvx_prepare_lut(__bf16 table) {
+  return hvx_prepare_lut_128bf16(table);
+}
+#endif
+
+[[gnu::always_inline, gnu::unused]] static unsigned short
+hvx_vlut(unsigned char indices, unsigned short prepared) {
+  return hvx_vlut_128u16(indices, prepared);
+}
+[[gnu::always_inline, gnu::unused]] static short hvx_vlut(unsigned char indices,
+                                                          short prepared) {
+  return (short)hvx_vlut_128u16(indices, (unsigned short)prepared);
+}
+[[gnu::always_inline, gnu::unused]] static unsigned int
+hvx_vlut(unsigned char indices, unsigned int prepared) {
+  return hvx_vlut_128u32(indices, prepared);
+}
+[[gnu::always_inline, gnu::unused]] static int hvx_vlut(unsigned char indices,
+                                                        int prepared) {
+  return (int)hvx_vlut_128u32(indices, (unsigned int)prepared);
+}
+[[gnu::always_inline, gnu::unused]] static unsigned long
+hvx_vlut(unsigned char indices, unsigned long prepared) {
+  return hvx_vlut_128u32(indices, prepared);
+}
+[[gnu::always_inline, gnu::unused]] static long hvx_vlut(unsigned char indices,
+                                                         long prepared) {
+  return (long)hvx_vlut_128u32(indices, (unsigned long)prepared);
+}
+[[gnu::always_inline, gnu::unused]] static unsigned long long
+hvx_vlut(unsigned char indices, unsigned long long prepared) {
+  return hvx_vlut_64u64(indices, prepared);
+}
+[[gnu::always_inline, gnu::unused]] static long long
+hvx_vlut(unsigned char indices, long long prepared) {
+  return (long long)hvx_vlut_64u64(indices, (unsigned long long)prepared);
+}
+[[gnu::always_inline, gnu::unused]] static float hvx_vlut(unsigned char indices,
+                                                          float prepared) {
+  return hvx_vlut_128f32(indices, prepared);
+}
+[[gnu::always_inline, gnu::unused]] static double
+hvx_vlut(unsigned char indices, double prepared) {
+  return hvx_vlut_64f64(indices, prepared);
+}
+#if __has_Float16__
+[[gnu::always_inline, gnu::unused]] static _Float16
+hvx_vlut(unsigned char indices, _Float16 prepared) {
+  return hvx_vlut_128f16(indices, prepared);
+}
+#endif
+#if __has_bf16__
+[[gnu::always_inline,
+  gnu::unused]] static __bf16 hvx_vlut(unsigned char indices, __bf16 prepared) {
+  return hvx_vlut_128bf16(indices, prepared);
+}
+#endif
+
+[[gnu::always_inline, gnu::unused]] static unsigned short
+hvx_prepare_lut_double(unsigned short table) {
+  return hvx_prepare_lut_256u16(table);
+}
+[[gnu::always_inline, gnu::unused]] static short
+hvx_prepare_lut_double(short table) {
+  return (short)hvx_prepare_lut_256u16((unsigned short)table);
+}
+[[gnu::always_inline, gnu::unused]] static unsigned int
+hvx_prepare_lut_double(unsigned int table) {
+  return hvx_prepare_lut_256u32(table);
+}
+[[gnu::always_inline, gnu::unused]] static int
+hvx_prepare_lut_double(int table) {
+  return (int)hvx_prepare_lut_256u32((unsigned int)table);
+}
+[[gnu::always_inline, gnu::unused]] static unsigned long
+hvx_prepare_lut_double(unsigned long table) {
+  return hvx_prepare_lut_256u32(table);
+}
+[[gnu::always_inline, gnu::unused]] static long
+hvx_prepare_lut_double(long table) {
+  return (long)hvx_prepare_lut_256u32((unsigned long)table);
+}
+[[gnu::always_inline, gnu::unused]] static unsigned long long
+hvx_prepare_lut_double(unsigned long long table) {
+  return hvx_prepare_lut_128u64(table);
+}
+[[gnu::always_inline, gnu::unused]] static long long
+hvx_prepare_lut_double(long long table) {
+  return (long long)hvx_prepare_lut_128u64((unsigned long long)table);
+}
+[[gnu::always_inline, gnu::unused]] static float
+hvx_prepare_lut_double(float table) {
+  return hvx_prepare_lut_256f32(table);
+}
+[[gnu::always_inline, gnu::unused]] static double
+hvx_prepare_lut_double(double table) {
+  return hvx_prepare_lut_128f64(table);
+}
+#if __has_Float16__
+[[gnu::always_inline,
+  gnu::unused]] static _Float16 hvx_prepare_lut_double(_Float16 table) {
+  return hvx_prepare_lut_256f16(table);
+}
+#endif
+#if __has_bf16__
+[[gnu::always_inline,
+  gnu::unused]] static __bf16 hvx_prepare_lut_double(__bf16 table) {
+  return hvx_prepare_lut_256bf16(table);
+}
+#endif
+
+[[gnu::always_inline, gnu::unused]] static unsigned short
+hvx_vlut_double(unsigned char indices, unsigned short prepared) {
+  return hvx_vlut_256u16(indices, prepared);
+}
+[[gnu::always_inline, gnu::unused]] static short
+hvx_vlut_double(unsigned char indices, short prepared) {
+  return (short)hvx_vlut_256u16(indices, (unsigned short)prepared);
+}
+[[gnu::always_inline, gnu::unused]] static unsigned int
+hvx_vlut_double(unsigned char indices, unsigned int prepared) {
+  return hvx_vlut_256u32(indices, prepared);
+}
+[[gnu::always_inline, gnu::unused]] static int
+hvx_vlut_double(unsigned char indices, int prepared) {
+  return (int)hvx_vlut_256u32(indices, (unsigned int)prepared);
+}
+[[gnu::always_inline, gnu::unused]] static unsigned long
+hvx_vlut_double(unsigned char indices, unsigned long prepared) {
+  return hvx_vlut_256u32(indices, prepared);
+}
+[[gnu::always_inline, gnu::unused]] static long
+hvx_vlut_double(unsigned char indices, long prepared) {
+  return (long)hvx_vlut_256u32(indices, (unsigned long)prepared);
+}
+[[gnu::always_inline, gnu::unused]] static unsigned long long
+hvx_vlut_double(unsigned char indices, unsigned long long prepared) {
+  return hvx_vlut_128u64(indices, prepared);
+}
+[[gnu::always_inline, gnu::unused]] static long long
+hvx_vlut_double(unsigned char indices, long long prepared) {
+  return (long long)hvx_vlut_128u64(indices, (unsigned long long)prepared);
+}
+[[gnu::always_inline, gnu::unused]] static float
+hvx_vlut_double(unsigned char indices, float prepared) {
+  return hvx_vlut_256f32(indices, prepared);
+}
+[[gnu::always_inline, gnu::unused]] static double
+hvx_vlut_double(unsigned char indices, double prepared) {
+  return hvx_vlut_128f64(indices, prepared);
+}
+#if __has_Float16__
+[[gnu::always_inline, gnu::unused]] static _Float16
+hvx_vlut_double(unsigned char indices, _Float16 prepared) {
+  return hvx_vlut_256f16(indices, prepared);
+}
+#endif
+#if __has_bf16__
+[[gnu::always_inline, gnu::unused]] static __bf16
+hvx_vlut_double(unsigned char indices, __bf16 prepared) {
+  return hvx_vlut_256bf16(indices, prepared);
+}
+#endif
+
+#endif
 
 extern "C" {
 

@@ -14,7 +14,7 @@
 // rounding/saturation.
 //
 // The Ripple compiler pass replaces calls to hvx_i32_vmpyo_* with the
-// corresponding ripple_ew_pure_hvx_* implementations from HVX_Vmpy_x32x16.cc.
+// corresponding ripple_ew_pure_hvx_* implementations in this header.
 //
 // The polymorphic hvx_vmpyo_s1_rnd_sat / hvx_vmpyo_s1_sat entry points follow
 // the same pattern as hvx_vdeal in HVX_Vdeal.h: typed extern "C" declarations
@@ -22,26 +22,28 @@
 // inlines.
 
 #pragma once
-#include <stddef.h>
+#include "__ripple_func_attribs.h"
+#include <hexagon_protos.h>
+#include <ripple_hvx.h>
 
 // Use basic C types instead of stdint types: on Hexagon, stdint does not
 // define a type for plain 'int' (4 bytes), so stdint types cannot cover all
 // standard C types.
-static_assert(sizeof(int) == 4, "HVX_Vmpy_x32x16: unexpected int size");
+RIPPLE_STATIC_ASSERT(sizeof(int) == 4, "HVX_Vmpy_x32x16: unexpected int size");
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+// Scalar declarations. Ripple candidate names mirror these entry points.
+
 // out[i] = sat((m[i].hi16 * mc[i] << 1) + rounding) >> 16
 #define _decl_hvx_vmpyo_s1_rnd_sat(cType, type, cScType, scType)               \
-  __attribute__((always_inline)) extern cType                                  \
-      hvx_##type##_vmpyo_##type##scType##_s1_rnd_sat(cType m, cScType mc)
+  cType hvx_##type##_vmpyo_##type##scType##_s1_rnd_sat(cType m, cScType mc)
 
 // out[i] = sat(m[i].hi16 * mc[i] << 1) >> 16  (no rounding)
 #define _decl_hvx_vmpyo_s1_sat(cType, type, cScType, scType)                   \
-  __attribute__((always_inline)) extern cType                                  \
-      hvx_##type##_vmpyo_##type##scType##_s1_sat(cType m, cScType mc)
+  cType hvx_##type##_vmpyo_##type##scType##_s1_sat(cType m, cScType mc)
 
 _decl_hvx_vmpyo_s1_rnd_sat(int, i32, int,
                            i16); // sat((m.hi16 * mc << 1) + rnd) >> 16
@@ -53,6 +55,18 @@ _decl_hvx_vmpyo_s1_sat(int, i32, int, i16); // sat(m.hi16 * mc << 1) >> 16
 #ifdef __cplusplus
 } // extern "C"
 #endif
+
+// ripple_vector_candidate definitions.
+
+RIPPLE_CANDIDATE_INLINE
+v32i32 ripple_ew_pure_hvx_i32_vmpyo_i32i16_s1_rnd_sat(v32i32 m, v32i32 mc) {
+  return Q6_Vw_vmpyo_VwVh_s1_rnd_sat(m, mc);
+}
+
+RIPPLE_CANDIDATE_INLINE v32i32
+ripple_ew_pure_hvx_i32_vmpyo_i32i16_s1_sat(v32i32 m, v32i32 mc) {
+  return Q6_Vw_vmpyo_VwVh_s1_sat(m, mc);
+}
 
 // =============================================================================
 // Polymorphic wrappers
