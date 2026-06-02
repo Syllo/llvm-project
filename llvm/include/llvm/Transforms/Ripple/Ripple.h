@@ -782,9 +782,45 @@ private:
 // _____________________________________________________________________________
 
 class ExternalRippleFunction {
+public:
+  /// A function's source-level name, split into its enclosing namespace
+  /// qualifier and its unqualified base name, as used to match an in-module
+  /// ripple candidate against the scalar call sites it replaces.  For
+  /// C-linkage and unqualified functions @c Namespace is empty.  Anonymous-
+  /// namespace functions are treated as global (empty @c Namespace) so they
+  /// match unqualified call sites.  This normalization is only for Ripple's
+  /// matching key; it does not change linkage or symbol identity in IR.
+  struct SourceFunctionName {
+    std::string Namespace;
+    std::string Base;
+
+    /// Decompose the LLVM symbol @p Name into its source-level
+    /// (namespace, base).  Implemented in Ripple.cpp using
+    /// ItaniumPartialDemangler for Itanium names and microsoftDemangle (with
+    /// type/qualifier-suppressing flags) for MSVC. Anything that fails to
+    /// demangle or is not a function falls back to treating the raw symbol
+    /// as the base name in the global namespace.
+    static SourceFunctionName parse(StringRef Name);
+    static SourceFunctionName parse(const Function *F);
+
+    /// Two source names are equal iff both namespace and base name match.
+    /// Used to match a scalar call site against a candidate's scalar
+    /// function name.
+    bool operator==(const SourceFunctionName &Other) const {
+      return Namespace == Other.Namespace && Base == Other.Base;
+    }
+    bool operator!=(const SourceFunctionName &Other) const {
+      return !(*this == Other);
+    }
+  };
+
+private:
   Function *F;
   FunctionType *CanonicalizedType;
-  StringRef ScalarName;
+  /// Source-level (namespace, base) name of the scalar function this candidate
+  /// replaces.  A call site only matches when its own SourceFunctionName
+  /// compares equal — namespace and base name must both agree.
+  SourceFunctionName Scalar;
   TensorShape ReturnShape;
   SmallVector<TensorShape, 0> ArgShapes;
   bool ElementWiseFunction = false;
@@ -894,7 +930,11 @@ public:
 
   /// @brief Returns the scalar sub-string that this external Ripple function's
   /// name is targeting.
-  StringRef scalarFunctionName() const { return ScalarName; }
+  StringRef scalarFunctionName() const { return Scalar.Base; }
+
+  /// @brief Returns the full source-level (namespace, base) of the scalar
+  /// function this candidate replaces.
+  const SourceFunctionName &scalarSourceName() const { return Scalar; }
 
   /// @brief Returns true whether this is an elementwise function.
   ///
@@ -909,18 +949,28 @@ public:
   /// @pre isElementWiseFunction() is true
   const TensorShape &elementWiseShape() const;
 
-  /// @brief Checks if a call to scalar @p FName with the canonicalized
-  /// prototype (i.e., using canonicalizeFunctionType()) @p FType is a potential
-  /// match for this external function.
+  /// @brief Checks if a call to scalar source function name @p CallName with
+  /// the canonicalized prototype (i.e., using canonicalizeFunctionType()) @p
+  /// FType is a potential match for this external function.
   ///
   /// @note in order to check this and additionally match the argument(s) and
   /// return tensor shapes, use ExternalRippleFunction::matchesFunction
   ///
   /// @pre Expects a canonicalized function type and argument shape list
-  bool matchesFunctionNameAndScalarPrototype(StringRef FName,
+  bool matchesFunctionNameAndScalarPrototype(const SourceFunctionName &CallName,
                                              const FunctionType *FType) const;
 
-  /// @brief Checks if a call to scalar @p FName with the canonicalized
+  /// @brief Convenience overload that parses @p FName into a
+  /// SourceFunctionName on the fly.  Prefer the SourceFunctionName overload
+  /// when matching a single call against many candidates, to avoid demangling
+  /// the call name once per candidate.
+  bool matchesFunctionNameAndScalarPrototype(StringRef FName,
+                                             const FunctionType *FType) const {
+    return matchesFunctionNameAndScalarPrototype(
+        SourceFunctionName::parse(FName), FType);
+  }
+
+  /// @brief Checks if a call to scalar @p CallName with the canonicalized
   /// prototype @p FType and argument shapes @p CallArgShapes is a match for
   /// this external function.
   ///
@@ -930,9 +980,19 @@ public:
   ///
   /// @pre Expects a canonicalized function type and argument shape list
   /// This methods gracefully handles function attributes such as sret and byval
-  bool matchesFunction(StringRef FName, const FunctionType *FType,
+  bool matchesFunction(const SourceFunctionName &CallName,
+                       const FunctionType *FType,
                        ArrayRef<const TensorShape *> CallArgShapes,
                        TensorShape *ReturnBcastShape) const;
+
+  /// @brief Convenience overload that parses \p FName on the fly.  Prefer the
+  /// SourceFunctionName overload in tight matching loops.
+  bool matchesFunction(StringRef FName, const FunctionType *FType,
+                       ArrayRef<const TensorShape *> CallArgShapes,
+                       TensorShape *ReturnBcastShape) const {
+    return matchesFunction(SourceFunctionName::parse(FName), FType,
+                           CallArgShapes, ReturnBcastShape);
+  }
 
   /// @brief Canonicalizes the function type by moving sret argument to the
   /// return type and replace pointer byval argument by the byval type. Uses the
@@ -976,10 +1036,6 @@ public:
   /// @brief True whether this external function returns void, false otherwise.
   bool returnsVoid() const;
 
-  /// @brief True if @p F follows Ripple naming convention, i.e., is prefixed by
-  /// "ripple_".
-  static bool usesRippleNamingConvention(const Function *F);
-
   /// @brief Returns true if the external function has a tensor mask
   bool hasTensorMaskArgument() const;
 
@@ -1016,12 +1072,12 @@ public:
                                                        const CallInst *CI);
 
 private:
-  /// @brief Remove the ripple prefix from \p Fun's name.
-  static StringRef removeRipplePrefix(const Function *Fun);
+  /// @brief Strip the leading ripple prefix from the source base name.
+  static StringRef removeRipplePrefix(StringRef Base);
 
   /// @brief Private ExternalRippleFunction constructor
   ExternalRippleFunction(
-      Function *Fun, StringRef ScalarName,
+      Function *Fun, SourceFunctionName Scalar,
       const SmallVectorImpl<StringRef> &Options, size_t TensorRank,
       const std::optional<ReturnSignatureInfo> &ReturnShape,
       const SmallVectorImpl<ArgumentSignatureInfo> &ArgumentShapes,
