@@ -1,6 +1,6 @@
 // REQUIRES: hexagon-registered-target
 // RUN: %clang -S --target=hexagon -mhvx -mv81 -mhvx-length=128B -O0 \
-// RUN:     -fenable-ripple -fdisable-ripple-lib \
+// RUN:     -fenable-ripple \
 // RUN:     -mllvm -ripple-pad-to-target-simd -emit-llvm %s -o - 2>&1 \
 // RUN:     | FileCheck %s --check-prefix=HVX
 

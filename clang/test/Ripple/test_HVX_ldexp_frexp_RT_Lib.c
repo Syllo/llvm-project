@@ -1,7 +1,7 @@
 // UNSUPPORTED: cui
 // REQUIRES: hexagon-registered-target
 // RUN: %clang -g -S -fenable-ripple --target=hexagon -O2 -mhvx -mv81 -emit-llvm %s \
-// RUN: -o - -mllvm -ripple-disable-link 2>&1 | FileCheck %s
+// RUN: -o - 2>&1 | FileCheck %s
 
 // This test verifies that the Ripple compiler pass replaces calls to the
 // ldexpf/frexpf (and _Float16 variants) math builtins with the corresponding

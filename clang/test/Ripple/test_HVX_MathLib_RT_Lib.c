@@ -1,7 +1,7 @@
 // UNSUPPORTED: cui
 // REQUIRES: hexagon-registered-target
 // RUN: %clang -g -S -fenable-ripple --target=hexagon -mhvx -mv81 -mhvx-qfloat -emit-llvm %s \
-// RUN:   -o - -mllvm -ripple-disable-link 2>&1 | FileCheck %s
+// RUN:   -o - 2>&1 | FileCheck %s
 #include "ripple_test.h"
 // HVX_MathLib RT library declarations, inlined so this frontend test does
 // not depend on the compiler-rt headers or the Hexagon SDK.

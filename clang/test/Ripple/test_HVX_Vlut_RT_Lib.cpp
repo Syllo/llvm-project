@@ -1,6 +1,6 @@
 // UNSUPPORTED: cui
 // REQUIRES: hexagon-registered-target
-// RUN: %clang++ -g -S -fenable-ripple --target=hexagon -mhvx -mhvx-length=128B -mv81 -mhvx-qfloat -emit-llvm %s -o - -mllvm -ripple-disable-link 2>&1 | FileCheck %s
+// RUN: %clang++ -g -S -fenable-ripple --target=hexagon -mhvx -mhvx-length=128B -mv81 -mhvx-qfloat -emit-llvm %s -o - 2>&1 | FileCheck %s
 
 // This test verifies that the Ripple compiler pass replaces calls to the
 // hvx_prepare_lut_* / hvx_vlut_* entry points (declared in HVX_Vlut.h) with the

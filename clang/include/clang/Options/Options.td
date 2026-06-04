@@ -9087,15 +9087,6 @@ def fenable_ripple : Flag<["-"], "fenable-ripple">,
     HelpText<"Enable Ripple transformation">,
     MarshallingInfoFlag<CodeGenOpts<"EnableRipple">>;
 
-def fripple_lib : Separate<["-"], "fripple-lib">,
-    Visibility<[ClangOption, CLOption, CC1Option]>,
-    HelpText<"Adds a file to the Ripple bitcode library path">;
-def fripple_lib_alias : Joined<["-"], "fripple-lib=">,
-    Visibility<[ClangOption, CLOption, CC1Option]>, Alias<fripple_lib>;
-
-def fdisable_ripple_lib : Flag<["-"], "fdisable-ripple-lib">,
-    HelpText<"Disable the use of Ripple bitcode libraries">;
-
 }
 
 //===----------------------------------------------------------------------===//

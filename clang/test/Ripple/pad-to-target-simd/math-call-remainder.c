@@ -15,7 +15,7 @@
 //
 // REQUIRES: hexagon-registered-target
 // RUN: %clang -S --target=hexagon-unknown-elf -mhvx -mv79 -mhvx-length=128B \
-// RUN:     -O2 -fenable-ripple -fdisable-ripple-lib \
+// RUN:     -O2 -fenable-ripple \
 // RUN:     -mllvm -ripple-pad-to-target-simd \
 // RUN:     -emit-llvm %s -o - 2>&1 | FileCheck %s
 

@@ -84,10 +84,6 @@ Ripple Driver and Language Options
 Ripple support is enabled via:
 
 - ``-fenable-ripple``: Enables Ripple transformation.
-- ``-fripple-lib=<path>``: Adds a file to the Ripple bitcode library path.
-- ``-fdisable-ripple-lib``: Disables use of Ripple bitcode libraries.
-
-These options are defined in ``Options.td`` and handled in ``Clang.cpp``.
 
 Ripple Diagnostics
 ------------------

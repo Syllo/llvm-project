@@ -1,7 +1,7 @@
 // UNSUPPORTED: cui
 // REQUIRES: hexagon-registered-target
-// RUN: %clang++ -g -S -fenable-ripple --target=hexagon -mhvx -mv81 -mhvx-qfloat -emit-llvm %s -mllvm -print-after=ripple -o - -mllvm -ripple-disable-link 2>&1 | FileCheck %s
-// RUN: %clang++ -g -S -x c -fenable-ripple --target=hexagon -mhvx -mv81 -mhvx-qfloat -emit-llvm %s -mllvm -print-after=ripple -o - -mllvm -ripple-disable-link 2>&1 | FileCheck %s
+// RUN: %clang++ -g -S -fenable-ripple --target=hexagon -mhvx -mv81 -mhvx-qfloat -emit-llvm %s -mllvm -print-after=ripple -o - 2>&1 | FileCheck %s
+// RUN: %clang++ -g -S -x c -fenable-ripple --target=hexagon -mhvx -mv81 -mhvx-qfloat -emit-llvm %s -mllvm -print-after=ripple -o - 2>&1 | FileCheck %s
 
 #include "ripple_test.h"
 

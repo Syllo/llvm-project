@@ -114,17 +114,6 @@ static cl::opt<bool> AnalyzeRipple(
 static cl::opt<bool> PadToTargetSIMDLength("ripple-pad-to-target-simd",
                                            cl::Hidden, cl::init(false));
 
-namespace llvm {
-namespace RippleCL {
-
-llvm::cl::list<std::string>
-    RippleLibs("ripple-lib",
-               llvm::cl::desc("Path to a ripple library file (LLVM IR)"),
-               llvm::cl::Hidden /* internal option for the time being */);
-
-} // namespace RippleCL
-} // namespace llvm
-
 namespace {
 
 raw_ostream &printBitVector(raw_ostream &OS, const BitVector &V) {

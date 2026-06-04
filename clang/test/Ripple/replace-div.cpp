@@ -1,10 +1,25 @@
-// UNSUPPORTED: cui
 // REQUIRES: hexagon-registered-target
-// REQUIRES: rt-lib
-// RUN: %clang -g -S -fenable-ripple --target=hexagon -mhvx -mv85 -emit-llvm -mllvm -print-after=ripple %s -o - -mllvm -ripple-disable-link 2>&1 | FileCheck %s
+// RUN: %clang -g -S -fenable-ripple --target=hexagon -mhvx -mv81 -emit-llvm -mllvm -print-after=ripple %s -o - 2>&1 | FileCheck %s
 
 #include "ripple_test.h"
+#include "ripple_hvx_test_types.h"
 #include <ripple_math.h>
+
+// Keep this test independent of compiler-rt and the Hexagon SDK.  The Ripple
+// pass only needs these vector-candidate declarations to recognize divisions
+// that it can replace.
+#define RIPPLE_VECTOR_CANDIDATE __attribute__((ripple_vector_candidate))
+
+extern "C" {
+extern RIPPLE_VECTOR_CANDIDATE v32u32 ripple_ew_pure_divu(v32u32, v32u32);
+extern RIPPLE_VECTOR_CANDIDATE v32i32 ripple_ew_pure_divi(v32i32, v32i32);
+extern RIPPLE_VECTOR_CANDIDATE v64u16 ripple_ew_pure_divu16(v64u16, v64u16);
+extern RIPPLE_VECTOR_CANDIDATE v64i16 ripple_ew_pure_divi16(v64i16, v64i16);
+#if __has_Float16__
+extern RIPPLE_VECTOR_CANDIDATE v64f16 ripple_ew_pure_divf16(v64f16, v64f16);
+#endif
+extern RIPPLE_VECTOR_CANDIDATE v32f32 ripple_ew_pure_divf(v32f32, v32f32);
+}
 
 #define N 1024
 #define VECTOR_LANE 0

@@ -49,3 +49,4 @@ void use_fwd_both_caller(void) { fwd_both_caller(); }
 // CHECK: attributes #[[ATTRS]] = {{{.*}}"ripple-vector-candidate"{{.*}}}
 // CHECK: attributes #[[NO_ATTRS]] = {
 // CHECK-NOT: "ripple-vector-candidate"
+// CHECK: }

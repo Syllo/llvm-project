@@ -1,8 +1,8 @@
 // REQUIRES: hexagon-registered-target || x86-registered-target || aarch64-registered-target
 
-// RUN: %if hexagon-registered-target %{ %clang -ffreestanding -S --target=hexagon -mhvx -mv81 -mhvx-length=128B -O2 -fenable-ripple -fdisable-ripple-lib -emit-llvm %s -o - | FileCheck %s -DINDEX_TYPE=i32 --check-prefixes=CHECK,HEXAGON,ROW-UNFOLDED %}
-// RUN: %if x86-registered-target %{ %clang -ffreestanding -S --target=x86_64-unknown-linux-gnu -O2 -fenable-ripple -fdisable-ripple-lib -emit-llvm %s -o - | FileCheck %s -DINDEX_TYPE=i64 --check-prefixes=CHECK,FOLDED,ROW-UNFOLDED %}
-// RUN: %if aarch64-registered-target %{ %clang -ffreestanding -S --target=aarch64-unknown-linux-gnu -O2 -fenable-ripple -fdisable-ripple-lib -emit-llvm %s -o - | FileCheck %s -DINDEX_TYPE=i64 --check-prefixes=CHECK,FOLDED,AARCH64 %}
+// RUN: %if hexagon-registered-target %{ %clang -ffreestanding -S --target=hexagon -mhvx -mv81 -mhvx-length=128B -O2 -fenable-ripple -emit-llvm %s -o - | FileCheck %s -DINDEX_TYPE=i32 --check-prefixes=CHECK,HEXAGON,ROW-UNFOLDED %}
+// RUN: %if x86-registered-target %{ %clang -ffreestanding -S --target=x86_64-unknown-linux-gnu -O2 -fenable-ripple -emit-llvm %s -o - | FileCheck %s -DINDEX_TYPE=i64 --check-prefixes=CHECK,FOLDED,ROW-UNFOLDED %}
+// RUN: %if aarch64-registered-target %{ %clang -ffreestanding -S --target=aarch64-unknown-linux-gnu -O2 -fenable-ripple -emit-llvm %s -o - | FileCheck %s -DINDEX_TYPE=i64 --check-prefixes=CHECK,FOLDED,AARCH64 %}
 
 #include "ripple_test.h"
 
