@@ -338,6 +338,47 @@ MATCHER_P(jobHasArgs, Substr, "") {
   return false;
 }
 
+TEST(ToolChainTest, VFSRippleIncludes) {
+  const struct {
+    const char *Triple;
+    const char *IncludeDir;
+  } Targets[] = {
+      {"hexagon", "/target/hexagon/lib/v68/include"},
+      {"x86_64-unknown-linux-gnu",
+       "/resource/lib/x86_64-unknown-linux-gnu/ripple/include"},
+  };
+
+  for (const auto &Target : Targets) {
+    for (bool HasIncludeDir : {false, true}) {
+      SCOPED_TRACE(Target.Triple);
+      SCOPED_TRACE(HasIncludeDir);
+      auto FS = llvm::makeIntrusiveRefCnt<llvm::vfs::InMemoryFileSystem>();
+      for (const char *Path : {"/bin/clang", "/test.c", "/target/.keep"})
+        FS->addFile(Path, 0, llvm::MemoryBuffer::getMemBuffer("\n"));
+      if (HasIncludeDir)
+        FS->addFile(std::string(Target.IncludeDir) + "/ripple-test.h", 0,
+                    llvm::MemoryBuffer::getMemBuffer("\n"));
+
+      DiagnosticOptions DiagOpts;
+      DiagnosticsEngine Diags(DiagnosticIDs::create(), DiagOpts,
+                              new SimpleDiagnosticConsumer);
+      Driver TheDriver("/bin/clang", Target.Triple, Diags,
+                       "clang LLVM compiler", FS);
+      std::unique_ptr<Compilation> C(TheDriver.BuildCompilation(
+          {"/bin/clang", "-fsyntax-only", "-fenable-ripple", "-B/target",
+           "-resource-dir", "/resource", "/test.c"}));
+      ASSERT_TRUE(C);
+      ASSERT_FALSE(Diags.hasErrorOccurred());
+      auto HasInclude = jobHasArgs(std::string("-I") + Target.IncludeDir);
+      if (HasIncludeDir)
+        EXPECT_THAT(C->getJobs(), testing::ElementsAre(HasInclude));
+      else
+        EXPECT_THAT(C->getJobs(),
+                    testing::ElementsAre(testing::Not(HasInclude)));
+    }
+  }
+}
+
 TEST(ToolChainTest, VFSGnuLibcxxPathNoSysroot) {
   DiagnosticOptions DiagOpts;
 

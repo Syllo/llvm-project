@@ -1,6 +1,6 @@
 // UNSUPPORTED: cui
 // REQUIRES: hexagon-registered-target
-// RUN: %clang++ -g -S -fenable-ripple --target=hexagon -mhvx -mv81 -emit-llvm %s -o - -mllvm -ripple-disable-link 2>&1 | FileCheck %s
+// RUN: %clang++ -g -S -fenable-ripple --target=hexagon -mhvx -mv81 -emit-llvm %s -o - 2>&1 | FileCheck %s
 
 // This test verifies that the Ripple compiler pass correctly replaces calls to
 // the hvx_*_vmpy_* / hvx_*_vmpyacc_* API functions (declared in

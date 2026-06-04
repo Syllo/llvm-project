@@ -8236,45 +8236,37 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
         CmdArgs.push_back(Args.MakeArgString(P));
       }
 
-      if (!Args.hasArg(options::OPT_fdisable_ripple_lib)) {
-        // Collect all the ripple's runtime libs (.bc files) available for the
-        // target.
-        std::vector<std::string> TargetRTLibs;
-        llvm::SmallString<256> RippleRTLibPath(D.ResourceDir);
-        llvm::sys::path::append(RippleRTLibPath, "lib", "ripple");
-        // On Hexagon, Ripple libraries are versioned by architecture.
-        if (TargetTriple.isHexagon())
-          llvm::sys::path::append(
-              RippleRTLibPath,
-              toolchains::HexagonToolChain::GetTargetCPUVersion(Args));
-        if (llvm::sys::fs::is_directory(RippleRTLibPath)) {
-          std::error_code EC;
-          for (llvm::sys::fs::directory_iterator File(RippleRTLibPath, EC),
-               DirEnd;
-               File != DirEnd && !EC; File.increment(EC)) {
-            if (llvm::sys::path::extension(File->path()) == ".bc") {
-              std::string FileName =
-                  llvm::sys::path::filename(File->path()).str();
-              TargetRTLibs.push_back(File->path());
-            }
+      {
+        llvm::SmallString<128> RippleIncludePath;
+        if (TargetTriple.isX86()) {
+          RippleIncludePath = TC.getDriver().ResourceDir;
+          llvm::sys::path::append(RippleIncludePath, "lib",
+                                  TargetTriple.getTriple(), "ripple",
+                                  "include");
+        } else if (TargetTriple.isHexagon()) {
+          const Driver &D = TC.getDriver();
+          auto &HTC =
+              static_cast<const toolchains::HexagonToolChain &>(getToolChain());
+          RippleIncludePath = HTC.getHexagonTargetDir(D.Dir, D.PrefixDirs);
+          StringRef CpuVer =
+              toolchains::HexagonToolChain::GetTargetCPUVersion(Args);
+          llvm::sys::path::append(RippleIncludePath, "hexagon", "lib", CpuVer);
+          if (auto G =
+                  toolchains::HexagonToolChain::getSmallDataThreshold(Args)) {
+            if (G.value() == 0)
+              llvm::sys::path::append(RippleIncludePath, "G0");
           }
-          // Sort the collected file paths alphabetically
-          std::sort(TargetRTLibs.begin(), TargetRTLibs.end());
-          // Note: Currently, the priority is alphabetical order.
-          // We probably need to establish a naming convention for the libraries
-          // and updating this part of the code accordingly.
+          llvm::sys::path::append(RippleIncludePath, "include");
         }
-        // If the user has already passed some ripple_libs, attach the RT libs
-        // to the end of the path list so that RT libs have lower priority
-        // compared to the user-defined external libraries. Each ripple_lib is
-        // passed as a separate -mllvm flag.
-        for (auto &PathVal : Args.getAllArgValues(options::OPT_fripple_lib)) {
-          CmdArgs.push_back("-mllvm");
-          CmdArgs.push_back(Args.MakeArgString("--ripple-lib=" + PathVal));
-        }
-        for (const auto &Lib : TargetRTLibs) {
-          CmdArgs.push_back("-mllvm");
-          CmdArgs.push_back(Args.MakeArgString("--ripple-lib=" + Lib));
+        if (!RippleIncludePath.empty()) {
+          auto Status = D.getVFS().status(RippleIncludePath);
+          // Command-line overlays are applied by the frontend. Preserve the
+          // path when an overlay may provide it even if the driver's VFS does
+          // not contain it yet.
+          if ((Status && Status->isDirectory()) ||
+              Args.hasArg(options::OPT_ivfsoverlay, options::OPT_vfsoverlay))
+            CmdArgs.push_back(
+                Args.MakeArgString("-I" + RippleIncludePath.str()));
         }
       }
       Args.AddLastArg(CmdArgs, options::OPT_fenable_ripple);

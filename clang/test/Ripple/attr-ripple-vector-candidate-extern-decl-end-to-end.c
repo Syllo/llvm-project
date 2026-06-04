@@ -1,6 +1,6 @@
 // REQUIRES: hexagon-registered-target || x86-registered-target
-// RUN: %if hexagon-registered-target %{ %clang -O2 -fenable-ripple --target=hexagon -mhvx -mv79 -mllvm -ripple-disable-link -emit-llvm -S %s -o - | FileCheck %s %}
-// RUN: %if x86-registered-target %{ %clang -O2 -fenable-ripple --target=x86_64-unknown-linux-gnu -mllvm -ripple-disable-link -emit-llvm -S %s -o - | FileCheck %s %}
+// RUN: %if hexagon-registered-target %{ %clang -O2 -fenable-ripple --target=hexagon -mhvx -mv79 -emit-llvm -S %s -o - | FileCheck %s %}
+// RUN: %if x86-registered-target %{ %clang -O2 -fenable-ripple --target=x86_64-unknown-linux-gnu -emit-llvm -S %s -o - | FileCheck %s %}
 
 #include <ripple.h>
 

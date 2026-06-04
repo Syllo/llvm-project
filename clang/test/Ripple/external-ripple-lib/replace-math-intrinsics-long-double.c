@@ -1,9 +1,54 @@
-// REQUIRES: target-x86_64
-// RUN: %clang -c -O2 -fenable-ripple -emit-llvm %S/external_library.c -o %t
-// RUN: %clang -O2 -fenable-ripple -emit-llvm -S -o - -ffast-math -fripple-lib %t -mllvm -ripple-disable-link %s | FileCheck %s --implicit-check-not="warning:"
+// REQUIRES: x86-registered-target
+// RUN: %clang --target=x86_64-unknown-linux-gnu -O2 -fenable-ripple -emit-llvm -S -o - -ffast-math %s | FileCheck %s --implicit-check-not="warning:"
 
 #include "../ripple_test.h"
 #include <ripple_math.h>
+
+// The old test loaded these candidates from external_library.c.  Keep the
+// test self-contained now that Ripple runtime libraries are header-only.
+typedef long double f128t8 __attribute__((vector_size(128)));
+typedef int32_t i32t8 __attribute__((vector_size(32)));
+#define RIPPLE_VECTOR_CANDIDATE __attribute__((ripple_vector_candidate))
+
+#define DECLARE_UNARY_MATH_CANDIDATE(NAME)                                    \
+  extern RIPPLE_VECTOR_CANDIDATE f128t8 ripple_ew_pure_##NAME##l(f128t8);
+#define DECLARE_BINARY_MATH_CANDIDATE(NAME)                                   \
+  extern RIPPLE_VECTOR_CANDIDATE f128t8 ripple_ew_pure_##NAME##l(f128t8,      \
+                                                                  f128t8);
+
+DECLARE_UNARY_MATH_CANDIDATE(sqrt)
+DECLARE_UNARY_MATH_CANDIDATE(asin)
+DECLARE_UNARY_MATH_CANDIDATE(acos)
+DECLARE_UNARY_MATH_CANDIDATE(atan)
+DECLARE_UNARY_MATH_CANDIDATE(sin)
+DECLARE_UNARY_MATH_CANDIDATE(cos)
+DECLARE_UNARY_MATH_CANDIDATE(tan)
+DECLARE_UNARY_MATH_CANDIDATE(sinh)
+DECLARE_UNARY_MATH_CANDIDATE(cosh)
+DECLARE_UNARY_MATH_CANDIDATE(tanh)
+DECLARE_UNARY_MATH_CANDIDATE(log)
+DECLARE_UNARY_MATH_CANDIDATE(log10)
+DECLARE_UNARY_MATH_CANDIDATE(log2)
+DECLARE_UNARY_MATH_CANDIDATE(exp)
+DECLARE_UNARY_MATH_CANDIDATE(exp2)
+DECLARE_UNARY_MATH_CANDIDATE(exp10)
+DECLARE_UNARY_MATH_CANDIDATE(fabs)
+DECLARE_UNARY_MATH_CANDIDATE(floor)
+DECLARE_UNARY_MATH_CANDIDATE(ceil)
+DECLARE_UNARY_MATH_CANDIDATE(trunc)
+DECLARE_UNARY_MATH_CANDIDATE(rint)
+DECLARE_UNARY_MATH_CANDIDATE(nearbyint)
+DECLARE_UNARY_MATH_CANDIDATE(round)
+DECLARE_UNARY_MATH_CANDIDATE(roundeven)
+
+DECLARE_BINARY_MATH_CANDIDATE(atan2)
+DECLARE_BINARY_MATH_CANDIDATE(pow)
+DECLARE_BINARY_MATH_CANDIDATE(copysign)
+
+extern RIPPLE_VECTOR_CANDIDATE f128t8 ripple_ew_pure_ldexpl(f128t8, i32t8);
+
+#undef DECLARE_UNARY_MATH_CANDIDATE
+#undef DECLARE_BINARY_MATH_CANDIDATE
 
 #define gen_check_unary_mathfn(N, OP, LONGTYPE)                                \
   void check_##OP(const LONGTYPE x[N], LONGTYPE y[N]) {                        \

@@ -2356,12 +2356,6 @@ public:
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
-namespace RippleCL {
-
-extern llvm::cl::list<std::string> RippleLibs;
-
-} // namespace RippleCL
-
 /**
  * @brief Returns `true` iff BranchingBB has exactly size two (immediate)
  * successors, and, exactly one of them exhibits a cycle through `BranchingBB`
