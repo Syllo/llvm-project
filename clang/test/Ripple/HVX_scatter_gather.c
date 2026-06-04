@@ -1,6 +1,6 @@
 // XFAIL: *
 // REQUIRES: hexagon-registered-target
-// RUN: %clang -g -S -fenable-ripple --target=hexagon -emit-llvm %s -o - -mllvm -ripple-disable-link  2>&1 | FileCheck %s
+// RUN: %clang -g -S -fenable-ripple --target=hexagon -emit-llvm %s -o - 2>&1 | FileCheck %s
 
 #include "ripple_test.h"
 // HVX_scatter_gather RT library declarations, inlined so this frontend test

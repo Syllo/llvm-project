@@ -26,7 +26,6 @@ add_llvm_component_library(LLVMipo
   IPO.cpp
   IROutliner.cpp
   InferFunctionAttrs.cpp
-  InlineBitcodeLibrary.cpp
   Inliner.cpp
   Instrumentor.cpp
   InstrumentorUtils.cpp
