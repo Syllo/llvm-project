@@ -126,26 +126,29 @@ PreservedAnalyses RippleModulePass::run(Module &M, ModuleAnalysisManager &MAM) {
     // We are progressing if we process some specialization or "normal
     // functions"
     SpecializationProgress = SpecializationsPendingProcessing.empty();
-    for (auto &Spec : make_early_inc_range(SpecializationsPendingProcessing)) {
+    {
+      SmallVector<Function *> ToProcess(
+          SpecializationsPendingProcessing.begin(),
+          SpecializationsPendingProcessing.end());
+      for (Function *F : ToProcess) {
+        unsigned NumberPendingBefore = SpecializationsPendingProcessing.size();
+        runRipplePassOnFunction(F);
+        bool HasNewSpecialization =
+            SpecializationsPendingProcessing.size() > NumberPendingBefore;
 
-      unsigned NumberPendingBefore = SpecializationsPendingProcessing.size();
-      runRipplePassOnFunction(Spec);
-      bool HasNewSpecialization =
-          SpecializationsPendingProcessing.size() > NumberPendingBefore;
+        if (PS == Ripple::ProcessingStatus::Success) {
+          SpecializationsPendingProcessing.erase(F);
+          F->eraseFromParent();
+          SpecializationProgress = true;
+        } else if (PS == Ripple::ProcessingStatus::ShapePropagationFailure ||
+                   PS == Ripple::ProcessingStatus::SemanticsCheckFailure)
+          EncounteredErrors = true;
 
-      if (PS == Ripple::ProcessingStatus::Success) {
-        Function *ToRemove = &*Spec;
-        SpecializationsPendingProcessing.erase(Spec);
-        ToRemove->eraseFromParent();
-        SpecializationProgress = true;
-      } else if (PS == Ripple::ProcessingStatus::ShapePropagationFailure ||
-                 PS == Ripple::ProcessingStatus::SemanticsCheckFailure)
-        EncounteredErrors = true;
-
-      // Insertions invalidate the iterator so we need to re-enter
-      if (HasNewSpecialization) {
-        SpecializationProgress = true;
-        break;
+        // Insertions invalidate the iterator so we need to re-enter
+        if (HasNewSpecialization) {
+          SpecializationProgress = true;
+          break;
+        }
       }
     }
     // Break when we are not progressing (specialization cycle) but continue on
