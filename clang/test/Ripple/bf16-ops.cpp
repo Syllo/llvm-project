@@ -4,7 +4,7 @@
 
 #include "ripple_test.h"
 // CHECK-LABEL: define dso_local void @_Z3addPDF16bS_S_(
-// CHECK-SAME: ptr noundef writeonly captures(none) [[C:%.*]], ptr noundef readonly captures(none) [[A:%.*]], ptr noundef readonly captures(none) [[B:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
+// CHECK-SAME: ptr nofree noundef writeonly captures(none) [[C:%.*]], ptr nofree noundef readonly captures(none) [[A:%.*]], ptr nofree noundef readonly captures(none) [[B:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:  [[TMP0:%.*]] = load <64 x bfloat>, ptr [[A]], align 2
 // CHECK:       ret void
@@ -16,7 +16,7 @@ void add(__bf16 *c, __bf16 *a, __bf16 *b) {
 }
 
 // CHECK-LABEL: define dso_local void @_Z6cmp_lePiPDF16bS0_(
-// CHECK-SAME: ptr noundef writeonly captures(none) [[C:%.*]], ptr noundef readonly captures(none) [[A:%.*]], ptr noundef readonly captures(none) [[B:%.*]]) local_unnamed_addr #[[ATTR0]] {
+// CHECK-SAME: ptr nofree noundef writeonly captures(none) [[C:%.*]], ptr nofree noundef readonly captures(none) [[A:%.*]], ptr nofree noundef readonly captures(none) [[B:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:  [[TMP0:%.*]] = load <64 x bfloat>, ptr [[A]], align 2
 // CHECK:       ret void
@@ -32,7 +32,7 @@ static size_t invert(size_t dst_id, size_t block_size) {
 }
 
 // CHECK-LABEL: define dso_local void @shuffle(
-// CHECK-SAME: ptr noundef writeonly captures(none) [[B:%.*]], ptr noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR1:[0-9]+]] {
+// CHECK-SAME: ptr nofree noundef writeonly captures(none) [[B:%.*]], ptr nofree noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR1:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = load <64 x bfloat>, ptr [[A]], align 2
 // CHECK:       ret void
@@ -44,7 +44,7 @@ extern "C" void shuffle(__bf16 *b, __bf16 *a) {
 }
 
 // CHECK-LABEL: define dso_local noundef bfloat @_Z9reduceaddPDF16b(
-// CHECK-SAME: ptr noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2:[0-9]+]] {
+// CHECK-SAME: ptr nofree noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:  [[TMP0:%.*]] = load <64 x bfloat>, ptr [[A]], align 2
 // CHECK:       ret bfloat [[CONV1_I:%.*]]
@@ -56,7 +56,7 @@ __bf16 reduceadd(__bf16 *a) {
 }
 
 // CHECK-LABEL: define dso_local noundef bfloat @_Z9reducemaxPDF16b(
-// CHECK-SAME: ptr noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2]] {
+// CHECK-SAME: ptr nofree noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:  [[TMP0:%.*]] = load <64 x bfloat>, ptr [[A]], align 2
 // CHECK:       ret bfloat [[CONV1_I:%.*]]
@@ -68,7 +68,7 @@ __bf16 reducemax(__bf16 *a) {
 }
 
 // CHECK-LABEL: define dso_local noundef bfloat @_Z13reducemaximumPDF16b(
-// CHECK-SAME: ptr noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2]] {
+// CHECK-SAME: ptr nofree noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:  [[TMP0:%.*]] = load <64 x bfloat>, ptr [[A]], align 2
 // CHECK:       ret bfloat [[CONV1_I:%.*]]
@@ -80,7 +80,7 @@ __bf16 reducemaximum(__bf16 *a) {
 }
 
 // CHECK-LABEL: define dso_local noundef bfloat @_Z9reduceminPDF16b(
-// CHECK-SAME: ptr noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2]] {
+// CHECK-SAME: ptr nofree noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:  [[TMP0:%.*]] = load <64 x bfloat>, ptr [[A]], align 2
 // CHECK:       ret bfloat [[CONV1_I:%.*]]
@@ -92,7 +92,7 @@ __bf16 reducemin(__bf16 *a) {
 }
 
 // CHECK-LABEL: define dso_local noundef bfloat @_Z13reduceminimumPDF16b(
-// CHECK-SAME: ptr noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2]] {
+// CHECK-SAME: ptr nofree noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:  [[TMP0:%.*]] = load <64 x bfloat>, ptr [[A]], align 2
 // CHECK:       ret bfloat [[CONV1_I:%.*]]
@@ -104,7 +104,7 @@ __bf16 reduceminimum(__bf16 *a) {
 }
 
 // CHECK-LABEL: define dso_local void @_Z5bcastPDF16bDF16b(
-// CHECK-SAME: ptr noundef writeonly captures(none) [[B:%.*]], bfloat noundef [[A:%.*]]) local_unnamed_addr #[[ATTR3:[0-9]+]] {
+// CHECK-SAME: ptr nofree noundef writeonly captures(none) [[B:%.*]], bfloat noundef [[A:%.*]]) local_unnamed_addr #[[ATTR3:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:  [[CONV_I:%.*]] = fpext bfloat [[A]] to float
 // CHECK:       ret void
@@ -116,7 +116,7 @@ void bcast(__bf16 *b, __bf16 a) {
 }
 
 // CHECK-LABEL: define dso_local noundef bfloat @_Z6slice0PDF16b(
-// CHECK-SAME: ptr noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2]] {
+// CHECK-SAME: ptr nofree noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:  [[TMP0:%.*]] = load <64 x bfloat>, ptr [[A]], align 2
 // CHECK:       ret bfloat [[TMP1:%.*]]
@@ -129,7 +129,7 @@ __bf16 slice0(__bf16 *a) {
 
 
 // CHECK-LABEL: define dso_local noundef bfloat @_Z6slice1PDF16b(
-// CHECK-SAME: ptr noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2]] {
+// CHECK-SAME: ptr nofree noundef readonly captures(none) [[A:%.*]]) local_unnamed_addr #[[ATTR2]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:  [[TMP0:%.*]] = load <64 x bfloat>, ptr [[A]], align 2
 // CHECK:       ret bfloat [[TMP1:%.*]]

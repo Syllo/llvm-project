@@ -19,7 +19,7 @@ extern v256f32 ripple_ret_t16x16f32_t1x16f32_t16f32_externf(v16f32 A, v16f32 B) 
 extern float externf(float, float);
 
 // CHECK-LABEL: define dso_local void @test(
-// CHECK-SAME: ptr noalias noundef readonly captures(none) [[A:%.*]], ptr noalias noundef readonly captures(none) [[B:%.*]], ptr noalias noundef writeonly captures(none) [[C:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
+// CHECK-SAME: ptr noalias nofree noundef readonly captures(none) [[A:%.*]], ptr noalias nofree noundef readonly captures(none) [[B:%.*]], ptr noalias nofree noundef writeonly captures(none) [[C:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca <16 x float>, align 64
 // CHECK-NEXT:    [[TMP1:%.*]] = alloca <16 x float>, align 64

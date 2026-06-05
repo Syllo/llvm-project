@@ -5,7 +5,7 @@
 #include "../ripple_test.h"
 
 // CHECK-LABEL: define dso_local void @check_padded_masked_load_store(
-// CHECK-SAME: i32 noundef [[N:%.*]], ptr noundef readonly captures(none) [[A:%.*]], ptr noundef writeonly captures(none) [[APB:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
+// CHECK-SAME: i32 noundef [[N:%.*]], ptr nofree noundef readonly captures(none) [[A:%.*]], ptr nofree noundef writeonly captures(none) [[APB:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[N_RIPPLE_BCAST_SPLATINSERT_PAD:%.*]] = insertelement <128 x i32> poison, i32 [[N]], i64 0
 // CHECK-NEXT:    [[N_RIPPLE_BCAST_SPLAT_PAD:%.*]] = shufflevector <128 x i32> [[N_RIPPLE_BCAST_SPLATINSERT_PAD]], <128 x i32> poison, <128 x i32> <i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
