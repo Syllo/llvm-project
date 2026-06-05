@@ -5,7 +5,7 @@
 #include "ripple_test.h"
 
 // CHECK-LABEL: define dso_local void @test_branch(
-// CHECK-SAME: ptr noundef readonly captures(none) [[F1:%.*]], ptr noundef readonly captures(none) [[F2:%.*]], ptr noundef readonly captures(none) [[F3:%.*]], ptr noundef writeonly captures(none) [[OUT:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
+// CHECK-SAME: ptr nofree noundef readonly captures(none) [[F1:%.*]], ptr nofree noundef readonly captures(none) [[F2:%.*]], ptr nofree noundef readonly captures(none) [[F3:%.*]], ptr nofree noundef writeonly captures(none) [[OUT:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = load <4 x i8>, ptr [[F1]], align 1
 // CHECK-NEXT:    [[UNMASKEDLOAD:%.*]] = load <4 x i8>, ptr [[F2]], align 1
@@ -32,7 +32,7 @@ void test_branch(uint8_t *f1, uint8_t *f2, uint8_t *f3, uint8_t *out) {
 }
 
 // CHECK-LABEL: define dso_local void @test_switch(
-// CHECK-SAME: ptr noundef readonly captures(none) [[F1:%.*]], ptr noundef readonly captures(none) [[F2:%.*]], ptr noundef readonly captures(none) [[F3:%.*]], ptr noundef readonly captures(none) [[F4:%.*]], ptr noundef writeonly captures(none) [[OUT:%.*]]) local_unnamed_addr #[[ATTR0]] {
+// CHECK-SAME: ptr nofree noundef readonly captures(none) [[F1:%.*]], ptr nofree noundef readonly captures(none) [[F2:%.*]], ptr nofree noundef readonly captures(none) [[F3:%.*]], ptr nofree noundef readonly captures(none) [[F4:%.*]], ptr nofree noundef writeonly captures(none) [[OUT:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = load <4 x i8>, ptr [[F1]], align 1
 // CHECK-NEXT:    [[UNMASKEDLOAD:%.*]] = load <4 x i8>, ptr [[F2]], align 1
