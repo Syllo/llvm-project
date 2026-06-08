@@ -82,27 +82,3 @@ entry:
   store float %val, ptr %out, align 4
   ret void
 }
-
-; Window too wide: indices span 9 distinct values [0..8] with NumElements=8.
-; genWindowLoadShuffle must bail out; the pass falls back to a masked gather.
-define void @window_too_wide_falls_back_to_gather(ptr readonly %A, ptr writeonly %B) {
-; CHECK-LABEL: define void @window_too_wide_falls_back_to_gather
-; CHECK: llvm.masked.gather
-entry:
-  %BS = call ptr @llvm.ripple.block.setshape.i64(i64 0, i64 8, i64 1, i64 1, i64 1, i64 1, i64 1, i64 1, i64 1, i64 1, i64 1)
-  %v0 = call i64 @llvm.ripple.block.index.i64(ptr %BS, i64 0)
-
-  ; Build idx(v0):
-  ; v0: 0  1  2  3  4  5  6  7
-  ; idx: 0  1  2  3  4  5  6  8   (PE7 → index 8, window size 9 > 8)
-
-  %is7 = icmp eq i64 %v0, 7
-  %idx = select i1 %is7, i64 8, i64 %v0
-
-  %ptr = getelementptr float, ptr %A, i64 %idx
-  %val = load float, ptr %ptr, align 4
-
-  %out = getelementptr float, ptr %B, i64 %v0
-  store float %val, ptr %out, align 4
-  ret void
-}

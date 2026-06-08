@@ -13,6 +13,7 @@
 #include "llvm/Transforms/Ripple/Ripple.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
@@ -39,6 +40,7 @@
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfoMetadata.h"
@@ -48,8 +50,10 @@
 #include "llvm/IR/FMF.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsRipple.h"
@@ -87,9 +91,11 @@
 #include <atomic>
 #include <bitset>
 #include <cassert>
+#include <cstdint>
 #include <cstdlib>
 #include <initializer_list>
 #include <iterator>
+#include <memory>
 #include <optional>
 #include <queue>
 #include <string>
@@ -961,6 +967,174 @@ Value *NDLoadStoreFactory::genUnstructuredLoad(LoadInst *Load, Value *Address,
   return GatheredVal;
 }
 
+Value *
+NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
+                                              const TensorShape &ToShape) {
+  IrBuilder.SetInsertPoint(Load);
+  auto *GEP = dyn_cast<GetElementPtrInst>(Address);
+  if (!GEP || GEP->getNumIndices() != 1) {
+    return nullptr;
+  }
+
+  Value *Index = GEP->idx_begin()->get();
+  SmallVector<int64_t> OriginalIndices;
+  if (auto *CDV = dyn_cast<ConstantDataVector>(Index)) {
+    for (unsigned Idx = 0; Idx < CDV->getNumElements(); ++Idx) {
+      OriginalIndices.push_back(CDV->getElementAsAPInt(Idx).getSExtValue());
+    }
+  } else if (auto *CV = dyn_cast<ConstantVector>(Index)) {
+    for (unsigned Idx = 0; Idx < CV->getNumOperands(); ++Idx) {
+      auto *C = dyn_cast<ConstantInt>(CV->getOperand(Idx));
+      if (!C) {
+        return nullptr;
+      }
+
+      OriginalIndices.push_back(C->getSExtValue());
+    }
+  } else {
+    return nullptr;
+  }
+
+  unsigned NumElementsToLoad = ToShape.flatShape();
+  if (OriginalIndices.size() != NumElementsToLoad) {
+    return nullptr;
+  }
+
+  // Get GEP Source Element Type
+  auto *SourceElementType = GEP->getSourceElementType();
+  const DataLayout &DL = GEP->getModule()->getDataLayout();
+  auto GEPSourceTypeBytes =
+      DL.getTypeAllocSize(SourceElementType).getFixedValue();
+
+  // Normalize GEP indices to byte offsets so all address comparisons use the
+  // same unit. GEP indices are scaled by the GEP source element type, while
+  // load adjacency is determined by the loaded element size.
+  SmallVector<int64_t> OriginalByteOffsets;
+  for (int64_t Idx : OriginalIndices) {
+    OriginalByteOffsets.push_back(Idx * GEPSourceTypeBytes);
+  }
+  SmallVector<int64_t> SortedByteOffsets = OriginalByteOffsets;
+  // Sort, and retain only unique indices to load
+  sort(SortedByteOffsets);
+  SortedByteOffsets.erase(
+      std::unique(SortedByteOffsets.begin(), SortedByteOffsets.end()),
+      SortedByteOffsets.end());
+
+  auto *ElementTy = Load->getType();
+  int64_t LoadElementSizeBytes = DL.getTypeStoreSize(ElementTy).getFixedValue();
+
+  // Build Load Windows
+  SmallVector<LoadWindow> Windows;
+  for (int64_t CurrentByteOffset : SortedByteOffsets) {
+    bool StartNewWindow = Windows.empty();
+
+    if (!StartNewWindow) {
+      int64_t PreviousByteOffset = Windows.back().LoadOffsets.back();
+      int64_t ExpectedByteOffset = PreviousByteOffset + LoadElementSizeBytes;
+      StartNewWindow = ExpectedByteOffset != CurrentByteOffset;
+    }
+
+    if (StartNewWindow) {
+      Windows.push_back(LoadWindow({CurrentByteOffset, {}}));
+    }
+
+    Windows.back().LoadOffsets.push_back(CurrentByteOffset);
+  }
+
+  // If every window contains a single element, this transformation
+  // provides no benefit over a gather.
+  bool HasCoalescingOpportunity =
+      llvm::any_of(Windows, [](const LoadWindow &Window) {
+        return Window.LoadOffsets.size() > 1;
+      });
+
+  if (!HasCoalescingOpportunity) {
+    return nullptr;
+  }
+
+  Value *BasePtr = GEP->getPointerOperand();
+  if (!BasePtr->getType()->isPointerTy()) {
+    BasePtr = llvm::getSplatValue(BasePtr);
+    if (!BasePtr) {
+      return nullptr;
+    }
+  }
+
+  auto *IndexVecTy = cast<VectorType>(Index->getType());
+  Type *IndexElementTy = IndexVecTy->getElementType();
+  auto *FullVecTy = VectorType::get(ElementTy, NumElementsToLoad, false);
+  Value *Result = PoisonValue::get(FullVecTy);
+  // Emit the Masked Load instruction per every Window
+  for (const LoadWindow &Window : Windows) {
+    // Window Base Offset was earlier normalized based on the GEP source element
+    // Type (offset x GEP Source Element Type Bytes).
+    // Hence, BaseOffset is now in bytes, rebuild gep with i8.
+    // Note we could also re-build with GEP's original source element type
+    // by dividing. i.e  Window.BaseOffset / GEPSourceTypeBytes
+    Value *WindowBaseOffset =
+        ConstantInt::get(IndexElementTy, Window.BaseOffset);
+    Value *WindowBasePtr =
+        IrBuilder.CreateGEP(IrBuilder.getInt8Ty(), BasePtr, WindowBaseOffset);
+    MyRipple.setRippleShape(WindowBasePtr, MyRipple.getRippleShape(BasePtr));
+
+    // This load mask for the current window-building algorithm guarantees
+    // strictly contiguous offsets starting at Window.BaseOffset. For
+    // future enhancement for window with holes, we can use offset to calculate
+    // the mask.
+    auto WindowWidth = Window.LoadOffsets.size();
+    SmallVector<Constant *> WindowLoadMask(NumElementsToLoad,
+                                           IrBuilder.getFalse());
+    for (size_t Lane = 0; Lane < WindowWidth; ++Lane) {
+      WindowLoadMask[Lane] = IrBuilder.getTrue();
+    }
+    auto WindowAlign = commonAlignment(Load->getAlign(), Window.BaseOffset);
+    Value *WindowFullLoad = IrBuilder.CreateMaskedLoad(
+        FullVecTy, WindowBasePtr, WindowAlign,
+        ConstantVector::get(WindowLoadMask), PoisonValue::get(FullVecTy),
+        "ripple.multiwindow.load");
+    MyRipple.setRippleShape(WindowFullLoad, ToShape);
+
+    DenseMap<int64_t, unsigned> OriginalOffsetToLocalWindowLane;
+    for (unsigned LocalLane = 0; LocalLane < WindowWidth; ++LocalLane) {
+      OriginalOffsetToLocalWindowLane[Window.LoadOffsets[LocalLane]] =
+          LocalLane;
+    }
+
+    SmallVector<int> ShuffleMask(NumElementsToLoad, llvm::PoisonMaskElem);
+    SmallVector<Constant *> SelectionMask(NumElementsToLoad,
+                                          IrBuilder.getFalse());
+    for (unsigned OriginalLane = 0; OriginalLane < OriginalByteOffsets.size();
+         ++OriginalLane) {
+      int64_t Offset = OriginalByteOffsets[OriginalLane];
+      auto It = OriginalOffsetToLocalWindowLane.find(Offset);
+      if (It == OriginalOffsetToLocalWindowLane.end()) {
+        continue;
+      }
+
+      ShuffleMask[OriginalLane] = It->second;
+      SelectionMask[OriginalLane] = IrBuilder.getTrue();
+    }
+
+    // Shuffle the current window's locally loaded lanes directly into their
+    // corresponding lanes in the original masked-gather result.
+    Value *PositionedWindow = IrBuilder.CreateShuffleVector(
+        WindowFullLoad, PoisonValue::get(WindowFullLoad->getType()),
+        ShuffleMask, "ripple.multiwindow.shuffle");
+    MyRipple.setRippleShape(PositionedWindow, ToShape);
+
+    // Merge the positioned window into the accumulated result.
+    // The selection mask is true only for result lanes owned by
+    // this window, so previously populated lanes are preserved
+    // while this window fills its corresponding lanes.
+    Result = IrBuilder.CreateSelect(ConstantVector::get(SelectionMask),
+                                    PositionedWindow, Result,
+                                    "ripple.multiwindow.select");
+    MyRipple.setRippleShape(Result, ToShape);
+  }
+
+  return Result;
+}
+
 Value *NDLoadStoreFactory::genWindowLoadShuffle(LoadInst *Load, Value *Address,
                                                 const TensorShape &ToShape) {
   IrBuilder.SetInsertPoint(Load);
@@ -1086,6 +1260,10 @@ Value *NDLoadStoreFactory::genLoadNoSplat(LoadInst *Load,
                  genWindowLoadShuffle(Load, DefaultAddress, ToShape)) {
     shuffleLoad->takeName(Load);
     return shuffleLoad;
+  } else if (Value *multiWindowshuffleLoad =
+                 genMultiWindowLoadShuffle(Load, DefaultAddress, ToShape)) {
+    multiWindowshuffleLoad->takeName(Load);
+    return multiWindowshuffleLoad;
   } else {
     return genUnstructuredLoad(Load, DefaultAddress, ToShape);
   }

@@ -601,6 +601,17 @@ public:
   }
 };
 
+/// @brief Represents a contiguous memory window that can be loaded
+///        using a single coalesced vector load.
+struct LoadWindow {
+  /// @brief Byte offset of the first element in the window,
+  ///        relative to the original base pointer.
+  int64_t BaseOffset;
+
+  /// @brief Sorted byte offsets that belong to this contiguous window.
+  SmallVector<int64_t> LoadOffsets;
+};
+
 inline raw_ostream &operator<<(raw_ostream &OS, const NDLoadStoreAttr &LSAttr) {
   LSAttr.print(OS);
   return OS;
@@ -665,6 +676,18 @@ private:
   /// @param ToShape the expected shape of the output tensor type.
   Value *genWindowLoadShuffle(LoadInst *Load, Value *Address,
                               const TensorShape &ToShape);
+
+  /// @brief Attempts to replace an irregular gather load with multiple
+  /// coalesced window loads.
+  /// Similar to genWindowLoadShuffle(), which handles the case where all
+  /// gather indices fit within a single contiguous window, this routine
+  /// handles the more general case where the indices can be partitioned
+  /// into multiple contiguous windows.
+  /// @param Load the original load instruction whose alignment is used as
+  ///        a template
+  /// @param ToShape the expected shape of the output tensor type.
+  Value *genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
+                                   const TensorShape &ToShape);
 
   /// @brief Applies mask @p mask to @p NdLoadStore, a n-d load or store.
   /// If \pNdLoadStore is already masked, use the and-combination of its
