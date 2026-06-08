@@ -17,7 +17,8 @@ entry:
   %arrayidx3 = getelementptr inbounds [10 x [10 x float]], ptr %A_tile, i64 0, i64 %1, i64 %0
   store float %2, ptr %arrayidx3, align 4, !tbaa !5
   %arrayidx5 = getelementptr inbounds [10 x [10 x float]], ptr %A_tile, i64 0, i64 %0, i64 %1
-  ; CHECK: call <100 x float> @llvm.masked.gather.v100f32.v100p0
+  ; CHECK-NOT: @llvm.masked.gather
+  ; CHECK: shufflevector <100 x float>
   %3 = load float, ptr %arrayidx5, align 4, !tbaa !5
   %arrayidx7 = getelementptr inbounds [10 x float], ptr %B, i64 %0, i64 %1
   ; CHECK: call void @llvm.masked.scatter.v100f32.v100p0
