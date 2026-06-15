@@ -2253,6 +2253,26 @@ void Ripple::padToTargetSIMDWidth() {
     EVT EVTType = TLI->getValueType(DL, TypeV, true);
     assert(EVTType.isVector());
 
+    // For i1 vectors, getMinimumVF is calibrated for data registers and gives a
+    // unnecessarily wide pad target (e.g. v1024i1 on HVX instead of v64i1 for
+    // v33i1). Use TLI type legalization, which consults the actual predicate
+    // register class tables.
+    if (EVTType.getScalarSizeInBits() == 1) {
+      EVT LegalVT = TLI->getLegalTypeToTransformTo(F.getContext(), EVTType);
+      if (LegalVT.getVectorMinNumElements() <
+          EVTType.getVectorMinNumElements()) {
+        // Branch taken for large i1-vector lengths, we use VectorFactor times
+        // the legal vector type of a single predicate vector register.
+        auto VectorFactor = divideCeil(EVTType.getVectorMinNumElements(),
+                                       LegalVT.getVectorMinNumElements());
+        LegalVT =
+            EVT::getVectorVT(F.getContext(), LegalVT.getScalarType(),
+                             VectorFactor * LegalVT.getVectorMinNumElements(),
+                             LegalVT.isScalableVector());
+      }
+      return std::make_pair(EVTType, LegalVT);
+    }
+
     auto VectorFactor =
         targetTransformInfo.getMinimumVF(EVTType.getScalarSizeInBits(), false)
             .getFixedValue();
