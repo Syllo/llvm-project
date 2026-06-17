@@ -3903,7 +3903,7 @@ void Ripple::genVectorInstructions() {
     irBuilder.SetInsertPoint(Call);
     // Create a vectorized Intrinsic with arguments that should be vectorized
     Twine Name = ReturnType->isVoidTy() ? Twine("") : vectorizedName(Call);
-    CallInst *VecCall = irBuilder.CreateIntrinsic(
+    Value *VecCall = irBuilder.CreateIntrinsic(
         ReturnType, VectorIntrId, BcastedArgs,
         isa<FPMathOperator>(Call) ? Call : nullptr, Name);
 
@@ -5999,7 +5999,7 @@ Value *Ripple::genMultiDimReduction(Intrinsic::ID reductionId, Value *vector,
         Args.push_back(NeutralElement);
       }
       Args.push_back(SelectedValue);
-      CallInst *ReductionCall = irBuilder.CreateIntrinsic(
+      Value *ReductionCall = irBuilder.CreateIntrinsic(
           vector->getType()->getScalarType(), *IntrinsicId, Args, {},
           Twine(vector->getName()) + ".ripple.reduction");
       setRippleShape(ReductionCall, ScalarShape);
