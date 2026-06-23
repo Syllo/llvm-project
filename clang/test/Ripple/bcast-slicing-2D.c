@@ -5,7 +5,7 @@
 #include "ripple_test.h"
 
 // CHECK-LABEL: define dso_local void @f(
-// CHECK-SAME: ptr noundef writeonly captures(none) [[TMP:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
+// CHECK-SAME: ptr nofree noundef writeonly captures(none) [[TMP:%.*]]) local_unnamed_addr #{{[0-9]+}} {
 // CHECK:    store <16 x i32> splat (i32 42), ptr [[TMP]], align 4
 // CHECK-NEXT:    ret void
 //
