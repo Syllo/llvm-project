@@ -1,4 +1,4 @@
-; RUN: opt -passes='module(function(mem2reg,mergereturn),ripple,function(dce))' -S < %s | FileCheck %s --implicit-check-not="warning:"
+; RUN: opt -passes='module(function(mem2reg),ripple,function(dce))' -S < %s | FileCheck %s --implicit-check-not="warning:"
 define dso_local void @foo(ptr noundef %aptr) #0 {
 entry:
   %aptr.addr = alloca ptr, align 8

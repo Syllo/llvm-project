@@ -1,4 +1,4 @@
-; RUN: opt -passes='module(function(mem2reg,mergereturn),ripple,function(dce))' -S %s | FileCheck %s --implicit-check-not="warning:"
+; RUN: opt -passes='module(function(mem2reg),ripple,function(dce))' -S %s | FileCheck %s --implicit-check-not="warning:"
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
 define dso_local void @_Z3foomPf(i64 noundef %N, ptr noundef %a) #0 {

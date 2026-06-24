@@ -1,4 +1,4 @@
-; RUN: opt -passes='module(function(mem2reg,mergereturn),ripple,function(dce,instcombine))' -S %s | FileCheck %s --implicit-check-not="warning:"
+; RUN: opt -passes='module(function(mem2reg),ripple,function(dce,instcombine))' -S %s | FileCheck %s --implicit-check-not="warning:"
 
 ; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite, inaccessiblemem: readwrite) uwtable
 define dso_local void @foo(ptr nocapture noundef readonly %a, ptr nocapture noundef readonly %b, ptr nocapture noundef writeonly %apb, ptr nocapture noundef readonly %c, ptr nocapture noundef readonly %d, ptr nocapture noundef writeonly %cpd) local_unnamed_addr #0 {
