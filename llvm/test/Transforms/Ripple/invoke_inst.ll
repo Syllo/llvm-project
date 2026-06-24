@@ -1,4 +1,4 @@
-; RUN: opt -passes='module(function(mem2reg,mergereturn),ripple,function(dce))' -S < %s | FileCheck %s --implicit-check-not="warning:"
+; RUN: opt -passes='module(function(mem2reg),ripple,function(dce))' -S < %s | FileCheck %s --implicit-check-not="warning:"
 ; Function Attrs: mustprogress uwtable
 define dso_local noundef float @_Z3fooi(i32 noundef %idx) local_unnamed_addr #0 personality ptr @__gxx_personality_v0 {
 entry:

@@ -1,4 +1,4 @@
-; RUN: opt -passes='module(function(mem2reg,mergereturn),ripple,function(dce))' -S < %s 2>&1 | FileCheck %s
+; RUN: opt -passes='module(function(mem2reg),ripple,function(dce))' -S < %s 2>&1 | FileCheck %s
 
 ; CHECK-NOT: warning
 ; CHECK-NOT: error

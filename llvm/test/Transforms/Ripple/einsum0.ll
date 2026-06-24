@@ -1,4 +1,4 @@
-; RUN: opt -passes='module(function(mem2reg,mergereturn),ripple,function(dce))' -S %s | FileCheck %s --implicit-check-not="warning:"
+; RUN: opt -passes='module(function(mem2reg),ripple,function(dce))' -S %s | FileCheck %s --implicit-check-not="warning:"
 
 ; Function Attrs: mustprogress noinline optnone uwtable
 define dso_local void @_Z22nkctv_nkvw_nctw_dram_0PKhS0_Phfififimmmmmm(ptr noundef %aptr, ptr noundef %bptr, ptr noundef %cptr, float noundef %a_scale, i32 noundef %a_offset, float noundef %b_scale, i32 noundef %b_offset, float noundef %c_scale, i32 noundef %c_offset, i64 noundef %N, i64 noundef %K, i64 noundef %C, i64 noundef %T, i64 noundef %V, i64 noundef %W) #0 {
