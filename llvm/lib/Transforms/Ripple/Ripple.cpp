@@ -1203,6 +1203,29 @@ Value *NDLoadStoreFactory::genWindowLoadShuffle(LoadInst *Load, Value *Address,
     return nullptr;
   }
 
+  // The address GEP's index operand may be expressed in two different unit
+  // systems: byte offsets, when the address was materialized as a byte-stride
+  // (i8) GEP, or source-element offsets, when the original element-typed GEP
+  // was preserved. Everything downstream (window size, mask width, shuffle
+  // indices) operates in load-element units, so normalize via bytes:
+  //   element_idx = (raw_idx * SrcSize) / EltSize
+  // SrcSize is 1 for an i8-stride GEP and equals EltSize for an element-typed
+  // GEP. Bail when a per-lane byte offset isn't a whole multiple of EltSize.
+  const DataLayout &DL = Mod.getDataLayout();
+  Type *ElementTy = Load->getType();
+  uint64_t EltSize = DL.getTypeAllocSize(ElementTy);
+  uint64_t SrcSize = DL.getTypeAllocSize(GEP->getSourceElementType());
+  if (EltSize == 0 || SrcSize == 0)
+    return nullptr;
+  for (int64_t &Idx : Indices) {
+    int64_t Bytes;
+    if (llvm::MulOverflow(Idx, static_cast<int64_t>(SrcSize), Bytes))
+      return nullptr;
+    if (Bytes % static_cast<int64_t>(EltSize) != 0)
+      return nullptr;
+    Idx = Bytes / static_cast<int64_t>(EltSize);
+  }
+
   // Calculate the min and max value in the vector of indices
   int64_t Min = *llvm::min_element(Indices);
   int64_t Max = *llvm::max_element(Indices);
@@ -1225,17 +1248,17 @@ Value *NDLoadStoreFactory::genWindowLoadShuffle(LoadInst *Load, Value *Address,
     }
   }
 
-  // Rebuild a scalar GEP at the minimum index to form the contiguous window
-  // base
+  // Rebuild a byte-strided GEP at the minimum offset to form the contiguous
+  // window base, matching the i8-stride invariant used elsewhere in Ripple.
   auto *IndexVecTy = cast<VectorType>(Index->getType());
   Type *IndexElementTy = IndexVecTy->getElementType();
-  Value *MinIndex = ConstantInt::get(IndexElementTy, Min);
+  int64_t MinBytes = Min * static_cast<int64_t>(EltSize);
+  Value *MinByteOffset = ConstantInt::get(IndexElementTy, MinBytes);
   Value *WindowBase =
-      IrBuilder.CreateGEP(GEP->getSourceElementType(), BasePtr, MinIndex);
+      IrBuilder.CreateGEP(IrBuilder.getInt8Ty(), BasePtr, MinByteOffset);
   MyRipple.setRippleShape(WindowBase, MyRipple.getRippleShape(BasePtr));
 
   // Load the contiguous window as a vector starting from the minimum address.
-  Type *ElementTy = Load->getType();
   Type *VecTy =
       VectorType::get(ElementTy, NumElementsToLoad, /*scalable=*/false);
   Value *WindowLoad;
