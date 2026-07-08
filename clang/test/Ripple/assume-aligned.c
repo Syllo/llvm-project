@@ -29,7 +29,7 @@ void check_alignment_2D_slice_partial(size_t begin, size_t end, size_t chunks,
 
 // CHECK-LABEL: void @check_alignment_2D_slice_partial
 // CHECK: for.body{{[0-9]+}}:
-// CHECK: [[LD:%.*]] = load <128 x float>, ptr {{.*}}, align 4
+// CHECK: [[LD:%.*]] = load <128 x float>, ptr {{.*}}, align 8
 
 // After that test, everything should be aligned
 // CHECK-LABEL: void @check_alignment_scalar
