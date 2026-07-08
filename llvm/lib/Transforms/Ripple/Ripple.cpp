@@ -122,6 +122,16 @@ llvm::cl::list<std::string>
 
 namespace {
 
+raw_ostream &printBitVector(raw_ostream &OS, const BitVector &V) {
+  OS << '{';
+  StringRef Separator;
+  for (unsigned Idx : V.set_bits()) {
+    OS << Separator << Idx;
+    Separator = ", ";
+  }
+  return OS << '}';
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 ///                             Local Classes                                ///
 ////////////////////////////////////////////////////////////////////////////////
@@ -1338,8 +1348,8 @@ Value *NDLoadStoreFactory::genLoad(LoadInst *Load, LinearSeries &AddressSeries,
   BitVector SplatDims = AddressShape.requiredSplat(ToShape);
   SplatDims |= SeriesSplat;
   Value *VectorLoad;
-  if (!SplatDims.empty()) {
-    // LLVM_DEBUG(dbgs() << "Splat dims: " << SplatDims << '\n');
+  if (SplatDims.any()) {
+    LLVM_DEBUG(printBitVector(dbgs() << "Splat dims: ", SplatDims) << '\n');
     // Create a load without the splatting/broadcasting
     LinearSeries SplatFreeSeries = AddressSeries.removeSlopes(SeriesSplat);
     // Temporary local LS used for load optimization needs to be instantiated
@@ -1530,8 +1540,16 @@ Ripple::replacementValueAndShape(Value *V) const {
     }
   } else if (Argument *Arg = dyn_cast<Argument>(V)) {
     // When we are specializing this function, the original arguments are
-    // duplicated, with the ripple arguments following the original ones
+    // duplicated, with the Ripple arguments following the original ones. Only
+    // the original arguments in the first half map to distinct Ripple
+    // replacements. A Ripple argument in the second half must not need
+    // replacement.
     if (isPendingRippleSpecialization(F)) {
+      if (Arg->getArgNo() >= F.arg_size() / 2)
+        report_fatal_error("Only original arguments from the first half of a "
+                           "pending Ripple specialization should require "
+                           "replacement; accessing a ripple argument here is a "
+                           "compiler bug");
       Argument *ReplacementArg = F.getArg(Arg->getArgNo() + F.arg_size() / 2);
       return {ReplacementArg, &getRippleShape(ReplacementArg)};
     }
@@ -1937,8 +1955,7 @@ IntrinsicInst *Ripple::rippleSliceIntrinsic(Instruction *I) {
 
 IntrinsicInst *Ripple::rippleIntrinsicsWithBlockShapeOperand(Instruction *I) {
   return intrinsicWithId(I, {Intrinsic::ripple_broadcast,
-                             Intrinsic::ripple_stack,
-                             Intrinsic::ripple_reshape,
+                             Intrinsic::ripple_stack, Intrinsic::ripple_reshape,
                              Intrinsic::ripple_block_getsize,
                              Intrinsic::ripple_block_index});
 }
@@ -3931,6 +3948,8 @@ void Ripple::genVectorInstructions() {
       // used in the function, however here we want this load's shape instead
       // since we broadcasted before the store(s) that clobbers this load
       PointerOpSeries = getSplatSeries(ThisAlloca, ToShape, ToShape);
+    } else if (isPendingRippleSpecialization(F) && isa<Argument>(LoadPtr)) {
+      PointerOpSeries = getSplatSeries(LoadPtr, *LoadShape, *LoadShape);
     } else {
       PointerOpSeries =
           getCachedSeries(dyn_cast<Instruction>(Load->getPointerOperand()));
@@ -3980,10 +3999,12 @@ void Ripple::genVectorInstructions() {
           VectorPtr->getType()->getScalarType()->isPointerTy()))
       report_fatal_error("Expected a vector of pointers for vector store");
 
-    // Here we load from a set of addresses defined by a Linear Series.
-    // The result is a tensor whose shape is that of the Linear Series.
+    // Here we store to a set of addresses defined by a Linear Series.
+    // If the store pointer is an argument, there is no cached instruction
+    // series and the unstructured store path below uses the vector pointer
+    // directly.
     auto Series =
-        getCachedSeries(cast<Instruction>(Store->getPointerOperand()));
+        getCachedSeries(dyn_cast<Instruction>(Store->getPointerOperand()));
     Value *NewStore;
 
     if (*VectorShape != ToShape) {
