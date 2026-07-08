@@ -28,6 +28,7 @@
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/MemoryLocation.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Analysis/VectorUtils.h"
 #include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
@@ -2835,7 +2836,14 @@ void Ripple::padToTargetSIMDWidth() {
 
         SmallVector<Value *> Operands(IntrnscInst->arg_begin(),
                                       IntrnscInst->arg_end());
-        unsigned PaddedLength = GetMaxPaddedLength(Operands);
+        bool HasAllScalarArgs =
+            IntrnscInst->getIntrinsicID() == Intrinsic::get_active_lane_mask;
+        assert((HasAllScalarArgs ||
+                any_of(Operands,
+                       [](Value *V) { return V->getType()->isVectorTy(); })) &&
+               "Unhandled intrinsic with all scalar operands.");
+        unsigned PaddedLength = HasAllScalarArgs ? GetPaddedLength(IntrnscInst)
+                                                 : GetMaxPaddedLength(Operands);
         if (IntrnscInst->getType()->isVectorTy()) {
           PaddedLength = std::max(PaddedLength, GetPaddedLength(IntrnscInst));
         }
@@ -2855,6 +2863,7 @@ void Ripple::padToTargetSIMDWidth() {
         case Intrinsic::masked_store:
         case Intrinsic::masked_scatter:
         case Intrinsic::masked_gather:
+        case Intrinsic::get_active_lane_mask:
           break;
         default:
           if (auto VectorIntrnscId =
@@ -3293,6 +3302,28 @@ void Ripple::padToTargetSIMDWidth() {
                                 PaddedMask->getName() + ".pad");
 
         irBuilder.CreateMaskedScatter(NewVals, NewPtrs, AlignVal, NewMask);
+        InstructionsToRemove.push_back(IntrnscInst);
+      } else if (IntrnscInst->getIntrinsicID() ==
+                 Intrinsic::get_active_lane_mask) {
+        // llvm.get.active.lane.mask takes two scalar operands (base, bound)
+        // and produces a vector mask; only the mask result type needs to be
+        // padded, the scalar operands are passed through unchanged.
+        auto PaddedLength = GetPaddedLength(IntrnscInst);
+        auto *NewMaskTy =
+            VectorType::get(irBuilder.getInt1Ty(), PaddedLength, false);
+
+        irBuilder.SetInsertPoint(IntrnscInst);
+        auto *NewActiveLaneMask = irBuilder.CreateIntrinsic(
+            NewMaskTy, Intrinsic::get_active_lane_mask,
+            {IntrnscInst->getArgOperand(0), IntrnscInst->getArgOperand(1)}, {},
+            IntrnscInst->getName() + ".pad");
+
+        LLVM_DEBUG(dbgs() << "[PadToTargetSIMD] get.active.lane.mask, "
+                          << *IntrnscInst << " was replaced with "
+                          << *NewActiveLaneMask << "\n";);
+
+        InstToPadded.insert_or_assign({IntrnscInst, PaddedLength},
+                                      NewActiveLaneMask);
         InstructionsToRemove.push_back(IntrnscInst);
       } else if (auto *ReduceI =
                      intrinsicWithId(I, {Intrinsic::vector_reduce_add,
@@ -4133,11 +4164,58 @@ void Ripple::genVectorInstructions() {
 
   auto processComparisons = [&](CmpInst *cmp,
                                 const TensorShape &toShape) -> void {
-    auto bcastOps = tensorizedOperandsAndBroadcast(cmp, toShape);
-    assert(bcastOps.size() == 2);
     irBuilder.SetInsertPoint(cmp);
-    Value *vectorCompare = irBuilder.CreateCmp(
-        cmp->getPredicate(), bcastOps[0], bcastOps[1], vectorizedName(cmp));
+    Value *vectorCompare = nullptr;
+
+    // Try to lower a 1-D unit-stride ULT comparison to get_active_lane_mask,
+    // which is more efficient than a generic vector compare on some targets.
+    // Pattern: (base + stepVector) < scalarBound
+    //          => get_active_lane_mask(base, scalarBound)
+    // LinearSeries = slope * StepVector + Base
+    const TargetLowering *TLI =
+        TM ? TM->getSubtargetImpl(F)->getTargetLowering() : nullptr;
+    auto maskTy = VectorType::get(irBuilder.getInt1Ty(), toShape.flatShape(),
+                                  /*Scalable*/ false);
+    if (TLI &&
+        !TLI->shouldExpandGetActiveLaneMask(
+            EVT::getEVT(maskTy), EVT::getEVT(cmp->getOperand(0)->getType())) &&
+        toShape.nonEmptyDims().count() == 1 &&
+        (cmp->getPredicate() == ICmpInst::ICMP_ULT ||
+         cmp->getPredicate() == ICmpInst::ICMP_UGT)) {
+
+      bool isULT = cmp->getPredicate() == ICmpInst::ICMP_ULT;
+
+      auto *cmpOp0 = dyn_cast<Instruction>(cmp->getOperand(isULT ? 0 : 1));
+      const LinearSeries *LS = getLinseriesFor(cmpOp0);
+      if (LS && LS->isUnitStrideWithScalarBase()) {
+        auto [cmpOp1, cmpOp1Shape] =
+            getTensorUse(cmp->getOperandUse(isULT ? 1 : 0));
+        if (cmpOp1Shape->isScalar()) {
+          // get_active_lane_mask is only semantically equivalent to this
+          // `icmp ult` if `(i + vectorIndex)` cannot overflow for any lane
+          // index. We can check for overflow using the add's operands, even if
+          // one of them is ripple_block_index, because it has constant range
+          // metadata.
+          Value *base = LS->getBase();
+          Value *addOp0, *addOp1;
+          if (match(base, m_AddLike(m_Value(addOp0), m_Value(addOp1))) &&
+              computeOverflowForUnsignedAdd(addOp0, addOp1,
+                                            SQ.getWithInstruction(cmp)) ==
+                  OverflowResult::NeverOverflows)
+            vectorCompare = irBuilder.CreateIntrinsic(
+                maskTy, Intrinsic::get_active_lane_mask, {base, cmpOp1}, {},
+                vectorizedName(cmp));
+        }
+      }
+    }
+
+    if (!vectorCompare) {
+      // Fall back to a generic vector comparison with broadcast operands.
+      auto bcastOps = tensorizedOperandsAndBroadcast(cmp, toShape);
+      assert(bcastOps.size() == 2);
+      vectorCompare = irBuilder.CreateCmp(cmp->getPredicate(), bcastOps[0],
+                                          bcastOps[1], vectorizedName(cmp));
+    }
     setReplacementFor(cmp, vectorCompare, toShape);
   };
 
@@ -8268,6 +8346,27 @@ bool LinearSeries::hasZeroSlopes() const {
              return C->isZero();
            return false;
          });
+}
+
+bool LinearSeries::isUnitStrideWithScalarBase() const {
+  if (getSlopeShape().isScalar() || getBaseShape().isVector())
+    return false;
+  bool HasUnitSlope = false;
+  for (Value *V : slopes()) {
+    auto *Slope = dyn_cast<ConstantInt>(V);
+    if (!Slope)
+      return false;
+    if (Slope->isZero())
+      continue;
+    if (Slope->isOne()) {
+      if (HasUnitSlope)
+        return false;
+      HasUnitSlope = true;
+      continue;
+    }
+    return false;
+  }
+  return HasUnitSlope;
 }
 
 bool LinearSeries::isScalarOrSplat() const {
