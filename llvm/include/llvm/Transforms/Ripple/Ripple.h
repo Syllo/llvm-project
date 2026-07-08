@@ -511,6 +511,10 @@ public:
   /// @brief Whether this affine series is a scalar or a splat of a scalar
   bool isScalarOrSplat() const;
 
+  /// @brief Returns true if the base is scalar and the slope is vector and only
+  /// a single slope is one, rest (if any) are zero.
+  bool isUnitStrideWithScalarBase() const;
+
   /// @brief returns the integer type to be used by the slopes w.r.t. the base.
   /// If the base is already of integer type, returns it, else the base is of
   /// pointer type and returns the integer type used to index pointers (index of
