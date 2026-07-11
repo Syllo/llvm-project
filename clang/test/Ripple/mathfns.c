@@ -130,20 +130,20 @@ gen_check_unary_mathfn(64, logf16, _Float16);
 
 gen_check_unary_mathfn(32, isnanf, float);
 // CHECK: @check_isnanf
-// CHECK: <32 x i1> @llvm.is.fpclass.v32f32(<32 x float> %{{[0-9]+}}, i32 3)
+// CHECK: <32 x i1> @llvm.is.fpclass.v32f32(<32 x float> %{{[0-9]+}}, /* (nan) */ i32 3)
 // CHECK: ret
 
 gen_check_unary_mathfn(16, isnan, double);
 // CHECK: @check_isnan
-// CHECK: <16 x i1> @llvm.is.fpclass.v16f64(<16 x double> %{{[0-9]+}}, i32 3)
+// CHECK: <16 x i1> @llvm.is.fpclass.v16f64(<16 x double> %{{[0-9]+}}, /* (nan) */ i32 3)
 // CHECK: ret
 
 gen_check_unary_mathfn(32, isinff, float);
 // CHECK: @check_isinff
-// CHECK: <32 x i1> @llvm.is.fpclass.v32f32(<32 x float> %{{[0-9]+}}, i32 516)
+// CHECK: <32 x i1> @llvm.is.fpclass.v32f32(<32 x float> %{{[0-9]+}}, /* (inf) */ i32 516)
 // CHECK: ret
 
 gen_check_unary_mathfn(16, isinf, double);
 // CHECK: @check_isinf
-// CHECK: <16 x i1> @llvm.is.fpclass.v16f64(<16 x double> %{{[0-9]+}}, i32 516)
+// CHECK: <16 x i1> @llvm.is.fpclass.v16f64(<16 x double> %{{[0-9]+}}, /* (inf) */ i32 516)
 // CHECK: ret
