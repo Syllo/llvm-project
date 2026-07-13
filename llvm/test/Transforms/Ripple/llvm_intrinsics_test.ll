@@ -21,10 +21,10 @@ entry:
   %idx = tail call i64 @llvm.ripple.block.index.i64(ptr %BS, i64 0)
   %in_ptr = getelementptr inbounds i16, ptr %in_array, i64 %idx
   %val = load i16, ptr %in_ptr, align 2
-  ; CHECK: .ripple.call.loop.body.call.block:
-  ; CHECK: %[[RESULT:.*]] = extractelement <64 x i16> %.ripple.LS.instance, i64 %ripple.scalarcall.iterator
-  ; CHECK: call float @llvm.convert.from.arbitrary.fp.f32.i16(i16 %[[RESULT]], metadata !"Float6E3M2FN")
-  %result = call float @llvm.convert.from.arbitrary.fp.f32.i16(i16 %val, metadata !"Float6E3M2FN")
+  ; CHECK: %[[LOAD:.*]] = load <64 x half>, ptr %in_array
+  ; CHECK: %[[RESULT:.*]] = fpext <64 x half> %[[LOAD]] to <64 x float>
+  %half = bitcast i16 %val to half
+  %result = fpext half %half to float
   %out_ptr = getelementptr inbounds float, ptr %dest, i64 %idx
   store float %result, ptr %out_ptr, align 4
   ret void
