@@ -1323,6 +1323,8 @@ Value *NDLoadStoreFactory::genLoadNoSplat(LoadInst *Load,
     VectorLoad->takeName(Load);
     // TODO: Take ripple_aligned() into account.
     VectorLoad->setAlignment(Load->getAlign());
+    if (MDNode *NT = Load->getMetadata(LLVMContext::MD_nontemporal))
+      VectorLoad->setMetadata(LLVMContext::MD_nontemporal, NT);
     return VectorLoad;
   } else if (Value *shuffleLoad =
                  genWindowLoadShuffle(Load, DefaultAddress, ToShape)) {
@@ -1421,6 +1423,8 @@ Value *NDLoadStoreFactory::genStore(StoreInst *Store, Value *Val,
     StoreInst *VecStore = IrBuilder.CreateStore(Val, AddressSeries.getBase());
     MyRipple.setRippleShape(static_cast<Value *>(VecStore), ToShape);
     VecStore->setAlignment(Store->getAlign());
+    if (MDNode *NT = Store->getMetadata(LLVMContext::MD_nontemporal))
+      VecStore->setMetadata(LLVMContext::MD_nontemporal, NT);
     VectorStore = VecStore;
   } else {
     return genUnstructuredStore(Store, Val, DefaultAddress, ToShape);
