@@ -57,7 +57,9 @@
 #include "llvm/IR/IntrinsicsRipple.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
+#include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
+#include "llvm/IR/PassManager.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/TrackingMDRef.h"
 #include "llvm/IR/Type.h"
@@ -1944,16 +1946,32 @@ IntrinsicInst *Ripple::rippleReinterpIntrinsics(Instruction *I) {
           Intrinsic::ripple_reinterp_f32, Intrinsic::ripple_reinterp_f64});
 }
 
+bool llvm::isRippleReduction(Intrinsic::ID ID) {
+  switch (ID) {
+  case Intrinsic::ripple_reduce_add:
+  case Intrinsic::ripple_reduce_mul:
+  case Intrinsic::ripple_reduce_and:
+  case Intrinsic::ripple_reduce_or:
+  case Intrinsic::ripple_reduce_xor:
+  case Intrinsic::ripple_reduce_smax:
+  case Intrinsic::ripple_reduce_smin:
+  case Intrinsic::ripple_reduce_umax:
+  case Intrinsic::ripple_reduce_umin:
+  case Intrinsic::ripple_reduce_fadd:
+  case Intrinsic::ripple_reduce_fmul:
+  case Intrinsic::ripple_reduce_fmin:
+  case Intrinsic::ripple_reduce_fmax:
+  case Intrinsic::ripple_reduce_fminimum:
+  case Intrinsic::ripple_reduce_fmaximum:
+    return true;
+  default:
+    return false;
+  }
+}
+
 IntrinsicInst *Ripple::rippleReduceIntrinsics(Instruction *I) {
-  return intrinsicWithId(
-      I, {Intrinsic::ripple_reduce_add, Intrinsic::ripple_reduce_mul,
-          Intrinsic::ripple_reduce_and, Intrinsic::ripple_reduce_or,
-          Intrinsic::ripple_reduce_xor, Intrinsic::ripple_reduce_smax,
-          Intrinsic::ripple_reduce_smin, Intrinsic::ripple_reduce_umax,
-          Intrinsic::ripple_reduce_umin, Intrinsic::ripple_reduce_fadd,
-          Intrinsic::ripple_reduce_fmul, Intrinsic::ripple_reduce_fmin,
-          Intrinsic::ripple_reduce_fmax, Intrinsic::ripple_reduce_fminimum,
-          Intrinsic::ripple_reduce_fmaximum});
+  auto *II = dyn_cast_if_present<IntrinsicInst>(I);
+  return II && isRippleReduction(II->getIntrinsicID()) ? II : nullptr;
 }
 
 IntrinsicInst *Ripple::rippleShuffleIntrinsics(Instruction *I) {
@@ -2461,6 +2479,66 @@ void Ripple::padToTargetSIMDWidth() {
       auto *NewVType =
           VectorType::get(VType->getScalarType(), PaddedLength, false);
       return ConstantAggregateZero::get(NewVType);
+    }
+    if (auto *C = dyn_cast<Constant>(V)) {
+      // Preserve constant-expression GEP structure when possible. This keeps
+      // GEP flags/inrange information attached to the GEP instead of hiding the
+      // whole expression behind a shuffle of the final pointer vector.
+      if (auto *GEP = dyn_cast<GEPOperator>(C)) {
+        auto padConstantOperand = [&](Value *Operand) -> Constant * {
+          auto *C = dyn_cast<Constant>(Operand);
+          if (!C)
+            return nullptr;
+
+          auto *FVTy = dyn_cast<FixedVectorType>(C->getType());
+          if (!FVTy)
+            return C;
+          if (FVTy->getNumElements() == PaddedLength)
+            return C;
+          if (FVTy->getNumElements() > PaddedLength)
+            return nullptr;
+
+          SmallVector<int> MaskEls;
+          for (unsigned IEl = 0; IEl < PaddedLength; ++IEl)
+            MaskEls.push_back(IEl < FVTy->getNumElements() ? IEl : -1);
+
+          auto *Poison = cast<Constant>(PoisonValue::get(C->getType()));
+          return ConstantExpr::getShuffleVector(C, Poison, MaskEls);
+        };
+
+        if (Constant *NewPointer =
+                padConstantOperand(GEP->getPointerOperand())) {
+          SmallVector<Constant *, 4> NewIndices;
+          bool CanRebuildGEP = true;
+          for (auto &Idx : GEP->indices()) {
+            Constant *NewIndex = padConstantOperand(Idx.get());
+            if (!NewIndex) {
+              CanRebuildGEP = false;
+              break;
+            }
+            NewIndices.push_back(NewIndex);
+          }
+
+          if (CanRebuildGEP)
+            return ConstantExpr::getGetElementPtr(
+                GEP->getSourceElementType(), NewPointer, NewIndices,
+                GEP->getNoWrapFlags(), GEP->getInRange());
+        }
+      }
+
+      // Generic constant fallback: some constants are not ConstantVector-like
+      // aggregates we can rebuild element-by-element. Pad them by shuffling the
+      // original lanes with poison for the newly added lanes. The result
+      // remains a constant and keeps the original value unchanged for every
+      // existing lane.
+      if (auto *FVTy = dyn_cast<FixedVectorType>(C->getType())) {
+        SmallVector<int> MaskEls;
+        for (unsigned IEl = 0; IEl < PaddedLength; ++IEl)
+          MaskEls.push_back(IEl < FVTy->getNumElements() ? IEl : -1);
+
+        auto *Poison = cast<Constant>(PoisonValue::get(C->getType()));
+        return ConstantExpr::getShuffleVector(C, Poison, MaskEls);
+      }
     }
     if (auto *I = dyn_cast<Instruction>(V)) {
       if (auto It = InstToPadded.find({I, PaddedLength});
@@ -6907,6 +6985,22 @@ Ripple::ConstructedSeries Ripple::getLinearSeriesFor(Instruction *I) {
       // (ax + b) + (cx + d) => (a + c)x + (b + d)
       LeftSlopeOp = [&](unsigned idx) { return LhsSeries.LS->getSlope(idx); };
       RightSlopeOp = [&](unsigned idx) { return RhsSeries.LS->getSlope(idx); };
+    } else if (BinOp->getOpcode() == Instruction::Or &&
+               cast<PossiblyDisjointInst>(BinOp)->isDisjoint()) {
+      IRBFun = [&](Value *Lhs, Value *Rhs) {
+        return irBuilder.CreateAdd(Lhs, Rhs, "ripple.LS.slope.disjoint.or",
+                                   /*HasNUW=*/true, /*HasNSW=*/true);
+      };
+
+      // Per LangRef's `or` instruction semantics, `or disjoint` carries the IR
+      // promise that no bit is set in both operands. If that promise is
+      // violated the result is poison; otherwise no carry can occur, so the
+      // operation is equivalent to fixed-width two's-complement addition with
+      // nuw/nsw. InstCombine may use this form for expressions like
+      // `i + ripple_id` after range analysis proves the ripple lanes fit in the
+      // low bits.
+      LeftSlopeOp = [&](unsigned idx) { return LhsSeries.LS->getSlope(idx); };
+      RightSlopeOp = [&](unsigned idx) { return RhsSeries.LS->getSlope(idx); };
     } else {
       // Cannot pass through a LinearSeries
       return {};
@@ -8918,8 +9012,9 @@ void Ripple::visitAllInstructionsBeingClobberedBy(
   }
 }
 
-void Ripple::visitAllClobberingInstructions(
-    MemoryUse *Use, std::function<bool(Instruction *)> Apply,
+static void visitAllClobberingInstructionsImpl(
+    MemoryUse *Use, MemorySSA &MemSSA, MemorySSAWalker &MemSSAWalker,
+    AAResults &AA, DominatorTree &DT, std::function<bool(Instruction *)> Apply,
     bool VisitUnreachableFromEntry) {
   Instruction *UseInst = Use->getMemoryInst();
   auto UseLocationOpt = MemoryLocation::getOrNone(UseInst);
@@ -8927,7 +9022,8 @@ void Ripple::visitAllClobberingInstructions(
     return;
   auto &UseLocation = *UseLocationOpt;
 
-  // Start with the first clobber (which may be a Phi or Def)
+  // Start with the nearest MemorySSA clobber. It may be a MemoryPhi when
+  // several control-flow paths can define the loaded memory.
   std::queue<MemoryAccess *> WorkQueue;
   WorkQueue.push(MemSSAWalker.getClobberingMemoryAccess(Use));
 
@@ -8945,28 +9041,41 @@ void Ripple::visitAllClobberingInstructions(
 
     if (MemSSA.isLiveOnEntryDef(Access))
       continue;
-    else if (MemoryPhi *Phi = dyn_cast<MemoryPhi>(Access))
+    else if (MemoryPhi *Phi = dyn_cast<MemoryPhi>(Access)) {
+      // Visit each incoming path of the phi: every incoming access may be a
+      // reaching clobber for this load.
       for (auto &IncomingVal : Phi->incoming_values()) {
         auto *IncomingAccess = cast<MemoryAccess>(IncomingVal);
         WorkQueue.push(IncomingAccess);
       }
-    else if (MemoryDef *Def = dyn_cast<MemoryDef>(Access)) {
+    } else if (MemoryDef *Def = dyn_cast<MemoryDef>(Access)) {
       Instruction *MemInst = Def->getMemoryInst();
       if (auto DefLocation = MemoryLocation::getOrNone(MemInst))
         if (AA.isMustAlias(UseLocation, *DefLocation) &&
             (VisitUnreachableFromEntry ||
-             domTree.isReachableFromEntry(MemInst->getParent()))) {
+             DT.isReachableFromEntry(MemInst->getParent()))) {
+          // Report exact aliasing defs to the caller. Returning true asks us
+          // to keep walking to older reaching definitions.
           if (Apply(MemInst))
             continue;
           else
             return;
         }
+      // This def does not fully explain the loaded location, so keep walking
+      // to the access that defined memory before it.
       WorkQueue.push(Def->getDefiningAccess());
     } else {
       auto *Use = cast<MemoryUse>(Access);
       WorkQueue.push(Use->getDefiningAccess());
     }
   }
+}
+
+void Ripple::visitAllClobberingInstructions(
+    MemoryUse *Use, std::function<bool(Instruction *)> Apply,
+    bool VisitUnreachableFromEntry) {
+  visitAllClobberingInstructionsImpl(Use, MemSSA, MemSSAWalker, AA, domTree,
+                                     Apply, VisitUnreachableFromEntry);
 }
 
 std::pair<AliasResult, AllocaInst *>
@@ -10636,102 +10745,177 @@ Ripple::getSpecializationMaskShape(llvm::iterator_range<IteratorT> Args) const {
   return TensorShape::broadcastShapeFromAll(ArgShapes);
 }
 
+RippleBlockShapeLookupResult llvm::findRippleBlockShapeIntrinsic(
+    const Use &RippleBlockShapePtr, MemorySSA &MSSA, DominatorTree &DT,
+    bool DetectAmbiguity, bool VisitUnreachableFromEntry) {
+  MemorySSAWalker *Walker = MSSA.getWalker();
+  if (!Walker)
+    return {};
+
+  AAResults &AA = MSSA.getAA();
+
+  auto getRippleSetShape = [](Value *V) -> IntrinsicInst * {
+    if (!V)
+      return nullptr;
+    return intrinsicWithId(dyn_cast<Instruction>(V),
+                           {Intrinsic::ripple_block_setshape});
+  };
+
+  auto incomingSource = [](PHINode *PHI, unsigned Incoming) -> Instruction * {
+    if (auto *IncomingI =
+            dyn_cast<Instruction>(PHI->getIncomingValue(Incoming)))
+      return IncomingI;
+    return PHI->getIncomingBlock(Incoming)->getTerminator();
+  };
+
+  // Avoid infinite recursion through pointer cycles or repeated loads.
+  SmallPtrSet<Value *, 8> Visited;
+  std::function<RippleBlockShapeLookupResult(Value *)> findBlockShape;
+  findBlockShape = [&](Value *BSPtr) -> RippleBlockShapeLookupResult {
+    if (!BSPtr)
+      return {};
+
+    // Treat no-op pointer casts as transparent block-shape carriers. The
+    // producer is still the underlying ripple_block_setshape intrinsic.
+    BSPtr = BSPtr->stripPointerCasts();
+    if (!Visited.insert(BSPtr).second || !BSPtr->getType()->isPointerTy())
+      return {};
+
+    // Most likely case in SSA.
+    if (IntrinsicInst *II = getRippleSetShape(BSPtr))
+      return RippleBlockShapeLookupResult(II);
+
+    // Most likely case in O0, coming from clang.
+    if (auto *LoadBS = dyn_cast<LoadInst>(BSPtr)) {
+      auto *Use = dyn_cast_or_null<MemoryUse>(MSSA.getMemoryAccess(LoadBS));
+      if (!Use)
+        return {};
+
+      RippleBlockShapeLookupResult Result;
+      Instruction *UnresolvedClobber = nullptr;
+      Instruction *UnresolvedAccess = nullptr;
+      visitAllClobberingInstructionsImpl(
+          Use, MSSA, *Walker, AA, DT,
+          [&](Instruction *Clobber) -> bool {
+            LLVM_DEBUG(dbgs() << "Visiting clobber " << *Clobber << "\n");
+            auto markUnresolvedClobber = [&](Instruction *Access) -> bool {
+              if (!DetectAmbiguity)
+                return true;
+              // An exact clobber that is not a usable block-shape store is
+              // still a possible source. If we already found a shape, that
+              // makes the load ambiguous.
+              if (Result.BlockShape) {
+                Result = RippleBlockShapeLookupResult(
+                    Access, Result.FirstAmbiguousSource, Clobber);
+                return false;
+              }
+              UnresolvedClobber = Clobber;
+              UnresolvedAccess = Access;
+              return true;
+            };
+
+            auto *Store = dyn_cast<StoreInst>(Clobber);
+            if (!Store)
+              return markUnresolvedClobber(LoadBS);
+
+            // Clang at O0 usually materializes the block-shape pointer through
+            // memory. A clobber can store the setshape directly, or it can
+            // store a value loaded from another block-shape slot; recurse for
+            // that.
+            Value *StoredValue = Store->getValueOperand()->stripPointerCasts();
+            RippleBlockShapeLookupResult Found;
+            Instruction *AmbiguousAccess = LoadBS;
+            if (IntrinsicInst *II = getRippleSetShape(StoredValue)) {
+              LLVM_DEBUG(dbgs()
+                         << "Found BS stored by clobber " << *II << "\n");
+              Found = RippleBlockShapeLookupResult(II);
+            } else if (auto *Load = dyn_cast<LoadInst>(StoredValue)) {
+              Found = findBlockShape(Load);
+              AmbiguousAccess = Load;
+            }
+
+            if (Found.Ambiguous) {
+              Result = Found;
+              return false;
+            }
+            if (!Found.BlockShape)
+              return markUnresolvedClobber(AmbiguousAccess);
+
+            // With ambiguity detection enabled, continue after the first shape
+            // so we can diagnose a second reaching source instead of silently
+            // choosing one.
+            if (DetectAmbiguity && Result.BlockShape) {
+              Result = RippleBlockShapeLookupResult(
+                  AmbiguousAccess, Result.FirstAmbiguousSource, Store);
+              return false;
+            }
+            if (DetectAmbiguity && UnresolvedClobber) {
+              Result = RippleBlockShapeLookupResult(UnresolvedAccess, Store,
+                                                    UnresolvedClobber);
+              return false;
+            }
+
+            Result.BlockShape = Found.BlockShape;
+            Result.FirstAmbiguousSource = Store;
+            // Stop after the first found shape unless the caller asked us to
+            // keep looking for ambiguity.
+            return DetectAmbiguity;
+          },
+          VisitUnreachableFromEntry);
+
+      return Result;
+    }
+
+    if (DetectAmbiguity)
+      if (auto *PHI = dyn_cast<PHINode>(BSPtr))
+        if (PHI->getNumIncomingValues() >= 2)
+          return RippleBlockShapeLookupResult(
+              dyn_cast<Instruction>(RippleBlockShapePtr.getUser()),
+              incomingSource(PHI, 0), incomingSource(PHI, 1));
+
+    return {};
+  };
+
+  return findBlockShape(RippleBlockShapePtr.get());
+}
+
 template <bool ReportAmbiguity>
 IntrinsicInst *
 Ripple::getBlockShapeIntrinsicHelper(const Use &RippleBlockShapePtr) {
-  std::array<Instruction *, 2> Clobbering = {};
-  auto diagnoseAmbiguity = [this, &Clobbering](const Instruction *BSAccess) {
-    {
-      DiagnosticInfoRippleWithLoc DI(
-          DS_Error, F, sanitizeRippleLocation(BSAccess),
-          "block shape access is ambiguous (multiple shapes apply)");
-      F.getContext().diagnose(DI);
-    }
-    {
-      DiagnosticInfoRippleWithLoc DI(DS_Note, F,
-                                     sanitizeRippleLocation(Clobbering[0]),
-                                     "can come from here");
-      F.getContext().diagnose(DI);
-    }
-    {
-      DiagnosticInfoRippleWithLoc DI(
-          DS_Note, F, sanitizeRippleLocation(Clobbering[1]), "and here");
-      F.getContext().diagnose(DI);
-    }
-  };
-  // Avoid infinite visits w/ cycles
-  SmallPtrSet<Value *, 8> Visited;
-  std::function<IntrinsicInst *(Value *)> getBlockShapeIntrinsicHelper;
-  getBlockShapeIntrinsicHelper = [&](Value *BSPtr) -> IntrinsicInst * {
-    if (!Visited.insert(BSPtr).second || !BSPtr->getType()->isPointerTy())
-      return nullptr;
-    // Most likely case in SSA
-    if (auto *II = intrinsicWithId(dyn_cast<Instruction>(BSPtr),
-                                   {Intrinsic::ripple_block_setshape})) {
-      return II;
-      // Most likely case in O0, coming from clang
-    } else if (const auto *LoadBS = dyn_cast<LoadInst>(BSPtr)) {
-      IntrinsicInst *BS = nullptr;
-      visitAllClobberingInstructions(
-          cast<MemoryUse>(MemSSA.getMemoryAccess(LoadBS)),
-          [&BS, &Clobbering, &diagnoseAmbiguity, &getBlockShapeIntrinsicHelper,
-           LoadBS](Instruction *Clobber) -> bool {
-            LLVM_DEBUG(dbgs() << "Visiting clobber " << *Clobber << "\n");
-            if (auto *Store = dyn_cast<StoreInst>(Clobber)) {
-              Value *RippleSetShape = Store->getValueOperand();
-              if (auto *II =
-                      intrinsicWithId(dyn_cast<Instruction>(RippleSetShape),
-                                      {Intrinsic::ripple_block_setshape})) {
-                LLVM_DEBUG(dbgs()
-                           << "Found BS stored by clobber " << *II << "\n");
-                if (ReportAmbiguity && BS) {
-                  // Multiple clobbers
-                  Clobbering[1] = Store;
-                  diagnoseAmbiguity(LoadBS);
-                  BS = nullptr;
-                  return false;
-                }
-                Clobbering[0] = Store;
-                BS = II;
-                // Continue only if we look for ambiguity (another clobber)
-                return ReportAmbiguity;
-              } else if (auto *Load = dyn_cast<LoadInst>(RippleSetShape)) {
-                IntrinsicInst *FoundBS = getBlockShapeIntrinsicHelper(Load);
-                if (ReportAmbiguity && BS && FoundBS) {
-                  // Multiple clobber on the same value, we have a problem
-                  Clobbering[1] = Store;
-                  diagnoseAmbiguity(Load);
-                  BS = nullptr;
-                  return false;
-                }
-                Clobbering[0] = Store;
-                BS = FoundBS;
-                // Continue if BS is not found or looking for ambiguity
-                return ReportAmbiguity || !BS;
-              }
-            }
-            return true;
-          });
-      return BS;
-    } else if (ReportAmbiguity) {
-      if (auto *PHI = dyn_cast<PHINode>(BSPtr)) {
-        if (PHI->getNumIncomingValues() >= 2) {
-          if (auto *IncomingI = dyn_cast<Instruction>(PHI->getIncomingValue(0)))
-            Clobbering[0] = IncomingI;
-          else
-            Clobbering[0] = PHI->getIncomingBlock(0)->getTerminator();
-          if (auto *IncomingI = dyn_cast<Instruction>(PHI->getIncomingValue(1)))
-            Clobbering[1] = IncomingI;
-          else
-            Clobbering[1] = PHI->getIncomingBlock(1)->getTerminator();
-          diagnoseAmbiguity(
-              dyn_cast<Instruction>(RippleBlockShapePtr.getUser()));
-        }
+  RippleBlockShapeLookupResult Lookup = findRippleBlockShapeIntrinsic(
+      RippleBlockShapePtr, MemSSA, domTree, ReportAmbiguity);
+
+  if (ReportAmbiguity && Lookup.Ambiguous) {
+    auto diagnoseAmbiguity = [this, &Lookup](const Instruction *BSAccess) {
+      if (!BSAccess || !Lookup.FirstAmbiguousSource ||
+          !Lookup.SecondAmbiguousSource)
+        return;
+
+      {
+        DiagnosticInfoRippleWithLoc DI(
+            DS_Error, F, sanitizeRippleLocation(BSAccess),
+            "block shape access is ambiguous (multiple shapes apply)");
+        F.getContext().diagnose(DI);
       }
-    }
+      {
+        DiagnosticInfoRippleWithLoc DI(
+            DS_Note, F, sanitizeRippleLocation(Lookup.FirstAmbiguousSource),
+            "can come from here");
+        F.getContext().diagnose(DI);
+      }
+      {
+        DiagnosticInfoRippleWithLoc DI(
+            DS_Note, F, sanitizeRippleLocation(Lookup.SecondAmbiguousSource),
+            "and here");
+        F.getContext().diagnose(DI);
+      }
+    };
+    diagnoseAmbiguity(Lookup.AmbiguousAccess);
+  }
+
+  if (Lookup.Ambiguous)
     return nullptr;
-  };
-  return getBlockShapeIntrinsicHelper(RippleBlockShapePtr);
+  return Lookup.BlockShape;
 }
 
 TensorShape::DimSize

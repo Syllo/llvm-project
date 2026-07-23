@@ -90,6 +90,39 @@ class DbgRecord;
 class DIBuilder;
 class DILocalVariable;
 
+struct RippleBlockShapeLookupResult {
+  IntrinsicInst *BlockShape = nullptr;
+  bool Ambiguous = false;
+  Instruction *AmbiguousAccess = nullptr;
+  Instruction *FirstAmbiguousSource = nullptr;
+  Instruction *SecondAmbiguousSource = nullptr;
+
+  RippleBlockShapeLookupResult() = default;
+  explicit RippleBlockShapeLookupResult(IntrinsicInst *BlockShape)
+      : BlockShape(BlockShape) {}
+  RippleBlockShapeLookupResult(Instruction *AmbiguousAccess,
+                               Instruction *FirstAmbiguousSource,
+                               Instruction *SecondAmbiguousSource)
+      : Ambiguous(true), AmbiguousAccess(AmbiguousAccess),
+        FirstAmbiguousSource(FirstAmbiguousSource),
+        SecondAmbiguousSource(SecondAmbiguousSource) {}
+
+  explicit operator bool() const { return BlockShape && !Ambiguous; }
+};
+
+/// @brief Try to locate the ripple_block_setshape intrinsic that defines a
+/// ripple block-shape pointer use.
+///
+/// If @p DetectAmbiguity is true, the lookup keeps walking after the first
+/// reaching block shape to detect multiple possible reaching sources.
+RippleBlockShapeLookupResult
+findRippleBlockShapeIntrinsic(const Use &RippleBlockShapePtr, MemorySSA &MSSA,
+                              DominatorTree &DT, bool DetectAmbiguity = false,
+                              bool VisitUnreachableFromEntry = false);
+
+/// @brief Returns true if @p ID is a Ripple reduction intrinsic.
+bool isRippleReduction(Intrinsic::ID ID);
+
 /// @brief Tensor shape (shape w/ fixed number of dimensions)
 /// @tparam SizeTy The type used to store dimension sizes
 ///

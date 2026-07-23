@@ -29,6 +29,7 @@ set(LLVM_LINK_COMPONENTS
   Passes
   Plugins
   ProfileData
+  RippleAPIPreprocess
   ScalarOpts
   Support
   Target
