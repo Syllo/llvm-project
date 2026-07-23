@@ -282,6 +282,7 @@
 #include "llvm/Transforms/Instrumentation/ThreadSanitizer.h"
 #include "llvm/Transforms/Instrumentation/TypeSanitizer.h"
 #include "llvm/Transforms/ObjCARC.h"
+#include "llvm/Transforms/Ripple/Preprocess/RippleAPIPreprocess.h"
 #include "llvm/Transforms/Ripple/Preprocess/RippleFPExtFPTrunc.h"
 #include "llvm/Transforms/Ripple/Preprocess/RippleFPExtFPTruncRevert.h"
 #include "llvm/Transforms/Ripple/RippleModulePass.h"
