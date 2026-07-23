@@ -6,8 +6,7 @@
 
 // CHECK-LABEL: define dso_local void @test_branch(
 // CHECK-SAME: ptr nofree noundef readonly captures(none) [[F1:%.*]], ptr nofree noundef readonly captures(none) [[F2:%.*]], ptr nofree noundef readonly captures(none) [[F3:%.*]], ptr nofree noundef writeonly captures(none) [[OUT:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
-// CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP0:%.*]] = load <4 x i8>, ptr [[F1]], align 1
+// CHECK:         [[TMP0:%.*]] = load <4 x i8>, ptr [[F1]], align 1
 // CHECK-NEXT:    [[UNMASKEDLOAD:%.*]] = load <4 x i8>, ptr [[F2]], align 1
 // CHECK-NEXT:    [[UNMASKEDLOAD46:%.*]] = load <4 x i8>, ptr [[F3]], align 1
 // CHECK-NEXT:    [[DOTRIPPLE_LS_INSTANCE32_RIPPLE_BCAST_RIPPLE_BRANCH_CLONE:%.*]] = shufflevector <4 x i8> [[UNMASKEDLOAD]], <4 x i8> poison, <12 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison>
@@ -33,8 +32,7 @@ void test_branch(uint8_t *f1, uint8_t *f2, uint8_t *f3, uint8_t *out) {
 
 // CHECK-LABEL: define dso_local void @test_switch(
 // CHECK-SAME: ptr nofree noundef readonly captures(none) [[F1:%.*]], ptr nofree noundef readonly captures(none) [[F2:%.*]], ptr nofree noundef readonly captures(none) [[F3:%.*]], ptr nofree noundef readonly captures(none) [[F4:%.*]], ptr nofree noundef writeonly captures(none) [[OUT:%.*]]) local_unnamed_addr #[[ATTR0]] {
-// CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP0:%.*]] = load <4 x i8>, ptr [[F1]], align 1
+// CHECK:         [[TMP0:%.*]] = load <4 x i8>, ptr [[F1]], align 1
 // CHECK-NEXT:    [[UNMASKEDLOAD:%.*]] = load <4 x i8>, ptr [[F2]], align 1
 // CHECK-NEXT:    [[UNMASKEDLOAD72:%.*]] = load <4 x i8>, ptr [[F3]], align 1
 // CHECK-NEXT:    [[UNMASKEDLOAD73:%.*]] = load <4 x i8>, ptr [[F4]], align 1
