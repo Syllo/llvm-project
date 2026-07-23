@@ -1,3 +1,4 @@
+add_subdirectory(RippleAPIPreprocess)
 add_subdirectory(RippleSESE)
 add_subdirectory(RippleFPExtFPTrunc)
 add_subdirectory(RippleFPExtFPTruncRevert)
