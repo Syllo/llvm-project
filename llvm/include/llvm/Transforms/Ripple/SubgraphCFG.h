@@ -39,6 +39,7 @@ class SubgraphCFG;
 struct SubgraphBB {
   BasicBlock *BB = nullptr;
   const SubgraphCFG *G = nullptr;
+  unsigned Number = ~0u;
 
   /// GenericDomTree requires NodeRef->getParent() to return a pointer to the
   /// parent type. We return our SubgraphCFG*, so the builder enumerates nodes
@@ -98,11 +99,13 @@ public:
       llvm_unreachable("Entry basic block cannot be part of the ignored set");
 
     // Create all SubgraphBB nodes for non-ignored basic blocks.
+    unsigned Num = 0;
     for (BasicBlock &B : F) {
       if (Ignore.count(&B))
         continue;
-      Map[&B] = SubgraphBB{&B, this};
+      Map[&B] = SubgraphBB{&B, this, Num++};
     }
+    NumNodes = Num;
   }
 
   SubgraphCFG(const SubgraphCFG &) = delete;
@@ -124,6 +127,7 @@ public:
   const SubgraphBB *getEntry() const { return get(&F.getEntryBlock()); }
 
   /// Iteration over filtered nodes.
+  unsigned getMaxNumber() const { return NumNodes; }
   node_iterator nodes_begin() { return node_iterator(Map.begin()); }
   node_iterator nodes_end() { return node_iterator(Map.end()); }
   size_t size() const { return Map.size(); }
@@ -140,6 +144,7 @@ public:
 private:
   Function &F;
   MapType Map;
+  unsigned NumNodes = 0;
 };
 
 /// Iterator implementation that wraps succ_iterator or pred_iterator and skips
@@ -267,6 +272,26 @@ template <> struct GraphTraits<subgraphcfg::SubgraphBB *> {
   static ChildIteratorType child_end(NodeRef N) {
     return ChildIteratorType(succ_end(N->BB), succ_end(N->BB), N->getParent());
   }
+  static unsigned getNumber(NodeRef N) { return N->Number; }
+};
+
+/// Const GraphTraits specialization for forward CFG traversal.
+/// The dominator tree builder queries getNumber() through a const node pointer.
+template <> struct GraphTraits<const subgraphcfg::SubgraphBB *> {
+  using NodeRef = const subgraphcfg::SubgraphBB *;
+  using ChildIteratorType =
+      subgraphcfg::SubgraphEdgeIterator<succ_iterator,
+                                        std::bidirectional_iterator_tag>;
+
+  static NodeRef getEntryNode(NodeRef N) { return N; }
+  static ChildIteratorType child_begin(NodeRef N) {
+    return ChildIteratorType(succ_begin(N->BB), succ_end(N->BB),
+                             N->getParent());
+  }
+  static ChildIteratorType child_end(NodeRef N) {
+    return ChildIteratorType(succ_end(N->BB), succ_end(N->BB), N->getParent());
+  }
+  static unsigned getNumber(NodeRef N) { return N->Number; }
 };
 
 /// GraphTraits specialization for inverse CFG traversal (for PDT).
@@ -286,6 +311,7 @@ template <> struct GraphTraits<Inverse<subgraphcfg::SubgraphBB *>> {
     return ChildIteratorType(pred_end(N.Graph->BB), pred_end(N.Graph->BB),
                              N.Graph->getParent());
   }
+  static unsigned getNumber(NodeRef N) { return N->Number; }
 };
 
 /// Graph-level traits for node enumeration over the subgraph view.
@@ -305,6 +331,10 @@ struct GraphTraits<subgraphcfg::SubgraphCFG *>
     return G->nodes_end();
   }
   static size_t size(subgraphcfg::SubgraphCFG *G) { return G->size(); }
+  static unsigned getMaxNumber(subgraphcfg::SubgraphCFG *G) {
+    return G->getMaxNumber();
+  }
+  static unsigned getNumberEpoch(subgraphcfg::SubgraphCFG *G) { return 0; }
 };
 
 /// Inverse graph-level traits for PostDominatorTree construction.
@@ -324,6 +354,12 @@ struct GraphTraits<Inverse<subgraphcfg::SubgraphCFG *>>
   }
   static size_t size(Inverse<subgraphcfg::SubgraphCFG *> G) {
     return G.Graph->size();
+  }
+  static unsigned getMaxNumber(Inverse<subgraphcfg::SubgraphCFG *> G) {
+    return G.Graph->getMaxNumber();
+  }
+  static unsigned getNumberEpoch(Inverse<subgraphcfg::SubgraphCFG *> G) {
+    return 0;
   }
 };
 
