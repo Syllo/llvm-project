@@ -96,23 +96,55 @@ _decl_hvx_vdeals(_Float16, f16);
 
 #ifndef __cplusplus
 
-#define __hvx_vdeal_anyint(Type, T, chunk_size, val)                           \
-  ((Type)(sizeof(Type) == 1                                                    \
-              ? hvx_vdeal_##T##8((val), (chunk_size))                          \
-              : (sizeof(Type) == 2                                             \
-                     ? hvx_vdeal_##T##16((val), (chunk_size))                  \
-                     : (sizeof(Type) == 4                                      \
-                            ? hvx_vdeal_##T##32((val), (chunk_size))           \
-                            : hvx_vdeal_##T##64((val), (chunk_size))))))
+#define _decl_hvx_vdeal_anyint(CT, Name, T)                                    \
+  RIPPLE_INTRIN_INLINE CT __ripple_hvx_vdeal_##Name(CT val,                    \
+                                                    size_t chunk_size) {       \
+    RIPPLE_STATIC_ASSERT(sizeof(CT) == 1 || sizeof(CT) == 2 ||                 \
+                             sizeof(CT) == 4 || sizeof(CT) == 8,               \
+                         "unsupported scalar size");                           \
+    switch (sizeof(CT)) {                                                      \
+    case 1:                                                                    \
+      return (CT)hvx_vdeal_##T##8((val), (chunk_size));                        \
+    case 2:                                                                    \
+      return (CT)hvx_vdeal_##T##16((val), (chunk_size));                       \
+    case 4:                                                                    \
+      return (CT)hvx_vdeal_##T##32((val), (chunk_size));                       \
+    case 8:                                                                    \
+      return (CT)hvx_vdeal_##T##64((val), (chunk_size));                       \
+    }                                                                          \
+  }                                                                            \
+                                                                               \
+  RIPPLE_INTRIN_INLINE CT __ripple_hvx_vshuff_##Name(CT val,                   \
+                                                     size_t chunk_size) {      \
+    RIPPLE_STATIC_ASSERT(sizeof(CT) == 1 || sizeof(CT) == 2 ||                 \
+                             sizeof(CT) == 4 || sizeof(CT) == 8,               \
+                         "unsupported scalar size");                           \
+    switch (sizeof(CT)) {                                                      \
+    case 1:                                                                    \
+      return (CT)hvx_vshuff_##T##8((val), (chunk_size));                       \
+    case 2:                                                                    \
+      return (CT)hvx_vshuff_##T##16((val), (chunk_size));                      \
+    case 4:                                                                    \
+      return (CT)hvx_vshuff_##T##32((val), (chunk_size));                      \
+    case 8:                                                                    \
+      return (CT)hvx_vshuff_##T##64((val), (chunk_size));                      \
+    }                                                                          \
+  }
 
-#define __hvx_vshuff_anyint(Type, T, chunk_size, val)                          \
-  ((Type)(sizeof(Type) == 1                                                    \
-              ? hvx_vshuff_##T##8((val), (chunk_size))                         \
-              : (sizeof(Type) == 2                                             \
-                     ? hvx_vshuff_##T##16((val), (chunk_size))                 \
-                     : (sizeof(Type) == 4                                      \
-                            ? hvx_vshuff_##T##32((val), (chunk_size))          \
-                            : hvx_vshuff_##T##64((val), (chunk_size))))))
+_decl_hvx_vdeal_anyint(char, char_i, i);
+_decl_hvx_vdeal_anyint(char, char_u, u);
+_decl_hvx_vdeal_anyint(signed char, schar, i);
+_decl_hvx_vdeal_anyint(unsigned char, uchar, u);
+_decl_hvx_vdeal_anyint(signed short, sshort, i);
+_decl_hvx_vdeal_anyint(unsigned short, ushort, u);
+_decl_hvx_vdeal_anyint(signed int, sint, i);
+_decl_hvx_vdeal_anyint(unsigned int, uint, u);
+_decl_hvx_vdeal_anyint(signed long, slong, i);
+_decl_hvx_vdeal_anyint(unsigned long, ulong, u);
+_decl_hvx_vdeal_anyint(signed long long, sllong, i);
+_decl_hvx_vdeal_anyint(unsigned long long, ullong, u);
+
+#undef _decl_hvx_vdeal_anyint
 
 #if __has_bf16__
 #define hvx_vdeal_extra_bf16(src, chunk_size)                                  \
@@ -137,20 +169,18 @@ _decl_hvx_vdeals(_Float16, f16);
 #define __hvx_vdeal(src, chunk_size)                                           \
   _Generic((src),                                                              \
       char: __ripple_char_is_signed                                            \
-          ? __hvx_vdeal_anyint(char, i, chunk_size, src)                       \
-          : __hvx_vdeal_anyint(char, u, chunk_size, src),                      \
-      signed char: __hvx_vdeal_anyint(signed char, i, chunk_size, src),        \
-      unsigned char: __hvx_vdeal_anyint(unsigned char, u, chunk_size, src),    \
-      signed short: __hvx_vdeal_anyint(signed short, i, chunk_size, src),      \
-      unsigned short: __hvx_vdeal_anyint(unsigned short, u, chunk_size, src),  \
-      signed int: __hvx_vdeal_anyint(signed int, i, chunk_size, src),          \
-      unsigned int: __hvx_vdeal_anyint(unsigned int, u, chunk_size, src),      \
-      signed long: __hvx_vdeal_anyint(signed long, i, chunk_size, src),        \
-      unsigned long: __hvx_vdeal_anyint(unsigned long, u, chunk_size, src),    \
-      signed long long: __hvx_vdeal_anyint(signed long long, i, chunk_size,    \
-                                           src),                               \
-      unsigned long long: __hvx_vdeal_anyint(unsigned long long, u,            \
-                                             chunk_size, src),                 \
+          ? __ripple_hvx_vdeal_char_i((src), (chunk_size))                     \
+          : __ripple_hvx_vdeal_char_u((src), (chunk_size)),                    \
+      signed char: __ripple_hvx_vdeal_schar((src), (chunk_size)),              \
+      unsigned char: __ripple_hvx_vdeal_uchar((src), (chunk_size)),            \
+      signed short: __ripple_hvx_vdeal_sshort((src), (chunk_size)),            \
+      unsigned short: __ripple_hvx_vdeal_ushort((src), (chunk_size)),          \
+      signed int: __ripple_hvx_vdeal_sint((src), (chunk_size)),                \
+      unsigned int: __ripple_hvx_vdeal_uint((src), (chunk_size)),              \
+      signed long: __ripple_hvx_vdeal_slong((src), (chunk_size)),              \
+      unsigned long: __ripple_hvx_vdeal_ulong((src), (chunk_size)),            \
+      signed long long: __ripple_hvx_vdeal_sllong((src), (chunk_size)),        \
+      unsigned long long: __ripple_hvx_vdeal_ullong((src), (chunk_size)),      \
       float: hvx_vdeal_f32((src), (chunk_size)),                               \
       double: hvx_vdeal_f64((src), (chunk_size))                               \
           hvx_vdeal_extra_f16(src, (chunk_size))                               \
@@ -159,20 +189,18 @@ _decl_hvx_vdeals(_Float16, f16);
 #define __hvx_vshuff(src, chunk_size)                                          \
   _Generic((src),                                                              \
       char: __ripple_char_is_signed                                            \
-          ? __hvx_vshuff_anyint(char, i, chunk_size, src)                      \
-          : __hvx_vshuff_anyint(char, u, chunk_size, src),                     \
-      signed char: __hvx_vshuff_anyint(signed char, i, chunk_size, src),       \
-      unsigned char: __hvx_vshuff_anyint(unsigned char, u, chunk_size, src),   \
-      signed short: __hvx_vshuff_anyint(signed short, i, chunk_size, src),     \
-      unsigned short: __hvx_vshuff_anyint(unsigned short, u, chunk_size, src), \
-      signed int: __hvx_vshuff_anyint(signed int, i, chunk_size, src),         \
-      unsigned int: __hvx_vshuff_anyint(unsigned int, u, chunk_size, src),     \
-      signed long: __hvx_vshuff_anyint(signed long, i, chunk_size, src),       \
-      unsigned long: __hvx_vshuff_anyint(unsigned long, u, chunk_size, src),   \
-      signed long long: __hvx_vshuff_anyint(signed long long, i, chunk_size,   \
-                                            src),                              \
-      unsigned long long: __hvx_vshuff_anyint(unsigned long long, u,           \
-                                              chunk_size, src),                \
+          ? __ripple_hvx_vshuff_char_i((src), (chunk_size))                    \
+          : __ripple_hvx_vshuff_char_u((src), (chunk_size)),                   \
+      signed char: __ripple_hvx_vshuff_schar((src), (chunk_size)),             \
+      unsigned char: __ripple_hvx_vshuff_uchar((src), (chunk_size)),           \
+      signed short: __ripple_hvx_vshuff_sshort((src), (chunk_size)),           \
+      unsigned short: __ripple_hvx_vshuff_ushort((src), (chunk_size)),         \
+      signed int: __ripple_hvx_vshuff_sint((src), (chunk_size)),               \
+      unsigned int: __ripple_hvx_vshuff_uint((src), (chunk_size)),             \
+      signed long: __ripple_hvx_vshuff_slong((src), (chunk_size)),             \
+      unsigned long: __ripple_hvx_vshuff_ulong((src), (chunk_size)),           \
+      signed long long: __ripple_hvx_vshuff_sllong((src), (chunk_size)),       \
+      unsigned long long: __ripple_hvx_vshuff_ullong((src), (chunk_size)),     \
       float: hvx_vshuff_f32((src), (chunk_size)),                              \
       double: hvx_vshuff_f64((src), (chunk_size))                              \
           hvx_vshuff_extra_bf16((src), (chunk_size))                           \
@@ -225,6 +253,9 @@ _decl_hvx_vdeals(_Float16, f16);
 #define _decl_hvx_vdeals_spec_int(CT, UI)                                      \
   [[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static CT __hvx_vdeal(            \
       CT Val, size_t chunk_size) {                                             \
+    RIPPLE_STATIC_ASSERT(sizeof(CT) == 1 || sizeof(CT) == 2 ||                 \
+                             sizeof(CT) == 4 || sizeof(CT) == 8,               \
+                         "unsupported scalar size");                           \
     switch (sizeof(Val)) {                                                     \
     case 1:                                                                    \
       return hvx_vdeal_##UI##8((Val), (chunk_size));                           \
@@ -234,13 +265,14 @@ _decl_hvx_vdeals(_Float16, f16);
       return hvx_vdeal_##UI##32((Val), (chunk_size));                          \
     case 8:                                                                    \
       return hvx_vdeal_##UI##64((Val), (chunk_size));                          \
-    default:                                                                   \
-      __builtin_unreachable();                                                 \
     }                                                                          \
   }                                                                            \
                                                                                \
   [[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static CT __hvx_vshuff(           \
       CT Val, size_t chunk_size) {                                             \
+    RIPPLE_STATIC_ASSERT(sizeof(CT) == 1 || sizeof(CT) == 2 ||                 \
+                             sizeof(CT) == 4 || sizeof(CT) == 8,               \
+                         "unsupported scalar size");                           \
     switch (sizeof(Val)) {                                                     \
     case 1:                                                                    \
       return hvx_vshuff_##UI##8((Val), (chunk_size));                          \
@@ -250,8 +282,6 @@ _decl_hvx_vdeals(_Float16, f16);
       return hvx_vshuff_##UI##32((Val), (chunk_size));                         \
     case 8:                                                                    \
       return hvx_vshuff_##UI##64((Val), (chunk_size));                         \
-    default:                                                                   \
-      __builtin_unreachable();                                                 \
     }                                                                          \
   }
 

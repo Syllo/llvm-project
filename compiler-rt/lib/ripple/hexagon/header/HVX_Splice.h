@@ -120,48 +120,74 @@ __decl_hvx_lsplice(64, f16, 1)
 #define __extra_f16_splice(left, right, start)
 #define __extra_f16_lsplice(left, right, start)
 #endif
-#define __hvx_splice_anyint(Type, T, start, left, right)                       \
-  ((Type)(sizeof(Type) == 1                                                    \
-              ? hvx_splice_##T##8((left), (right), (start))                    \
-              : (sizeof(Type) == 2                                             \
-                     ? hvx_splice_##T##16((left), (right), (start))            \
-                     : (sizeof(Type) == 4                                      \
-                            ? hvx_splice_##T##32((left), (right), (start))     \
-                            : hvx_splice_##T##64((left), (right), (start))))))
-#define __hvx_lsplice_anyint(Type, T, start, left, right)                      \
-  ((Type)(sizeof(Type) == 1                                                    \
-              ? hvx_lsplice_##T##8((left), (right), (start))                   \
-              : (sizeof(Type) == 2                                             \
-                     ? hvx_lsplice_##T##16((left), (right), (start))           \
-                     : (sizeof(Type) == 4                                      \
-                            ? hvx_lsplice_##T##32((left), (right), (start))    \
-                            : hvx_lsplice_##T##64((left), (right),             \
-                                                  (start))))))
+#define _decl_hvx_splice_anyint(CT, Name, T)                                   \
+  RIPPLE_INTRIN_INLINE CT __ripple_hvx_splice_##Name(CT left, CT right,        \
+                                                     size_t start) {           \
+    RIPPLE_STATIC_ASSERT(sizeof(CT) == 1 || sizeof(CT) == 2 ||                 \
+                             sizeof(CT) == 4 || sizeof(CT) == 8,               \
+                         "unsupported scalar size");                           \
+    switch (sizeof(CT)) {                                                      \
+    case 1:                                                                    \
+      return (CT)hvx_splice_##T##8((left), (right), (start));                  \
+    case 2:                                                                    \
+      return (CT)hvx_splice_##T##16((left), (right), (start));                 \
+    case 4:                                                                    \
+      return (CT)hvx_splice_##T##32((left), (right), (start));                 \
+    case 8:                                                                    \
+      return (CT)hvx_splice_##T##64((left), (right), (start));                 \
+    }                                                                          \
+  }                                                                            \
+                                                                               \
+  RIPPLE_INTRIN_INLINE CT __ripple_hvx_lsplice_##Name(CT left, CT right,       \
+                                                      size_t start) {          \
+    RIPPLE_STATIC_ASSERT(sizeof(CT) == 1 || sizeof(CT) == 2 ||                 \
+                             sizeof(CT) == 4 || sizeof(CT) == 8,               \
+                         "unsupported scalar size");                           \
+    switch (sizeof(CT)) {                                                      \
+    case 1:                                                                    \
+      return (CT)hvx_lsplice_##T##8((left), (right), (start));                 \
+    case 2:                                                                    \
+      return (CT)hvx_lsplice_##T##16((left), (right), (start));                \
+    case 4:                                                                    \
+      return (CT)hvx_lsplice_##T##32((left), (right), (start));                \
+    case 8:                                                                    \
+      return (CT)hvx_lsplice_##T##64((left), (right), (start));                \
+    }                                                                          \
+  }
+
+    // clang-format off
+_decl_hvx_splice_anyint(char, char_i, i);
+_decl_hvx_splice_anyint(char, char_u, u);
+_decl_hvx_splice_anyint(signed char, schar, i);
+_decl_hvx_splice_anyint(unsigned char, uchar, u);
+_decl_hvx_splice_anyint(signed short, sshort, i);
+_decl_hvx_splice_anyint(unsigned short, ushort, u);
+_decl_hvx_splice_anyint(signed int, sint, i);
+_decl_hvx_splice_anyint(unsigned int, uint, u);
+_decl_hvx_splice_anyint(signed long, slong, i);
+_decl_hvx_splice_anyint(unsigned long, ulong, u);
+_decl_hvx_splice_anyint(signed long long, sllong, i);
+_decl_hvx_splice_anyint(unsigned long long, ullong, u);
+// clang-format on
+
+#undef _decl_hvx_splice_anyint
+
 #define hvx_splice(left, right, start)                                         \
   _Generic((left),                                                             \
       char: __ripple_char_is_signed                                            \
-          ? __hvx_splice_anyint(char, i, (start), (left), (right))             \
-          : __hvx_splice_anyint(char, u, (start), (left), (right)),            \
-      signed char: __hvx_splice_anyint(signed char, i, (start), (left),        \
-                                       (right)),                               \
-      unsigned char: __hvx_splice_anyint(unsigned char, u, (start), (left),    \
-                                         (right)),                             \
-      signed short: __hvx_splice_anyint(signed short, i, (start), (left),      \
-                                        (right)),                              \
-      unsigned short: __hvx_splice_anyint(unsigned short, u, (start), (left),  \
-                                          (right)),                            \
-      signed int: __hvx_splice_anyint(signed int, i, (start), (left),          \
-                                      (right)),                                \
-      unsigned int: __hvx_splice_anyint(unsigned int, u, (start), (left),      \
-                                        (right)),                              \
-      signed long: __hvx_splice_anyint(signed long, i, (start), (left),        \
-                                       (right)),                               \
-      unsigned long: __hvx_splice_anyint(unsigned long, u, (start), (left),    \
-                                         (right)),                             \
-      signed long long: __hvx_splice_anyint(signed long long, i, (start),      \
-                                            (left), (right)),                  \
-      unsigned long long: __hvx_splice_anyint(unsigned long long, u, (start),  \
-                                              (left), (right)),                \
+          ? __ripple_hvx_splice_char_i((left), (right), (start))               \
+          : __ripple_hvx_splice_char_u((left), (right), (start)),              \
+      signed char: __ripple_hvx_splice_schar((left), (right), (start)),        \
+      unsigned char: __ripple_hvx_splice_uchar((left), (right), (start)),      \
+      signed short: __ripple_hvx_splice_sshort((left), (right), (start)),      \
+      unsigned short: __ripple_hvx_splice_ushort((left), (right), (start)),    \
+      signed int: __ripple_hvx_splice_sint((left), (right), (start)),          \
+      unsigned int: __ripple_hvx_splice_uint((left), (right), (start)),        \
+      signed long: __ripple_hvx_splice_slong((left), (right), (start)),        \
+      unsigned long: __ripple_hvx_splice_ulong((left), (right), (start)),      \
+      signed long long: __ripple_hvx_splice_sllong((left), (right), (start)),  \
+      unsigned long long: __ripple_hvx_splice_ullong((left), (right),          \
+                                                     (start)),                 \
       float: hvx_splice_f32((left), (right), (start)),                         \
       double: hvx_splice_f64((left), (right), (start)),                        \
       __extra_bf16_splice((left), (right), (start)),                           \
@@ -169,28 +195,19 @@ __decl_hvx_lsplice(64, f16, 1)
 #define hvx_lsplice(left, right, start)                                        \
   _Generic((left),                                                             \
       char: __ripple_char_is_signed                                            \
-          ? __hvx_lsplice_anyint(char, i, (start), (left), (right))            \
-          : __hvx_lsplice_anyint(char, u, (start), (left), (right)),           \
-      signed char: __hvx_lsplice_anyint(signed char, i, (start), (left),       \
-                                        (right)),                              \
-      unsigned char: __hvx_lsplice_anyint(unsigned char, u, (start), (left),   \
-                                          (right)),                            \
-      signed short: __hvx_lsplice_anyint(signed short, i, (start), (left),     \
-                                         (right)),                             \
-      unsigned short: __hvx_lsplice_anyint(unsigned short, u, (start), (left), \
-                                           (right)),                           \
-      signed int: __hvx_lsplice_anyint(signed int, i, (start), (left),         \
-                                       (right)),                               \
-      unsigned int: __hvx_lsplice_anyint(unsigned int, u, (start), (left),     \
-                                         (right)),                             \
-      signed long: __hvx_lsplice_anyint(signed long, i, (start), (left),       \
-                                        (right)),                              \
-      unsigned long: __hvx_lsplice_anyint(unsigned long, u, (start), (left),   \
-                                          (right)),                            \
-      signed long long: __hvx_lsplice_anyint(signed long long, i, (start),     \
-                                             (left), (right)),                 \
-      unsigned long long: __hvx_lsplice_anyint(unsigned long long, u, (start), \
-                                               (left), (right)),               \
+          ? __ripple_hvx_lsplice_char_i((left), (right), (start))              \
+          : __ripple_hvx_lsplice_char_u((left), (right), (start)),             \
+      signed char: __ripple_hvx_lsplice_schar((left), (right), (start)),       \
+      unsigned char: __ripple_hvx_lsplice_uchar((left), (right), (start)),     \
+      signed short: __ripple_hvx_lsplice_sshort((left), (right), (start)),     \
+      unsigned short: __ripple_hvx_lsplice_ushort((left), (right), (start)),   \
+      signed int: __ripple_hvx_lsplice_sint((left), (right), (start)),         \
+      unsigned int: __ripple_hvx_lsplice_uint((left), (right), (start)),       \
+      signed long: __ripple_hvx_lsplice_slong((left), (right), (start)),       \
+      unsigned long: __ripple_hvx_lsplice_ulong((left), (right), (start)),     \
+      signed long long: __ripple_hvx_lsplice_sllong((left), (right), (start)), \
+      unsigned long long: __ripple_hvx_lsplice_ullong((left), (right),         \
+                                                      (start)),                \
       float: hvx_lsplice_f32((left), (right), (start)),                        \
       double: hvx_lsplice_f64((left), (right), (start)),                       \
       __extra_bf16_lsplice((left), (right), (start)),                          \
@@ -224,6 +241,9 @@ hvx_splice(const char left, const char right, size_t start) {
 #define _decl_hvx_splice_spec_int(CT, UI)                                      \
   [[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static CT hvx_splice(             \
       CT left, CT right, size_t start) {                                       \
+    RIPPLE_STATIC_ASSERT(sizeof(CT) == 1 || sizeof(CT) == 2 ||                 \
+                             sizeof(CT) == 4 || sizeof(CT) == 8,               \
+                         "unsupported scalar size");                           \
     switch (sizeof(left)) {                                                    \
     case 1:                                                                    \
       return hvx_splice_##UI##8(left, right, start);                           \
@@ -233,8 +253,6 @@ hvx_splice(const char left, const char right, size_t start) {
       return hvx_splice_##UI##32(left, right, start);                          \
     case 8:                                                                    \
       return hvx_splice_##UI##64(left, right, start);                          \
-    default:                                                                   \
-      __builtin_unreachable();                                                 \
     }                                                                          \
   }
 // clang-format off
@@ -278,6 +296,9 @@ hvx_lsplice(const char left, const char right, size_t start) {
 #define _decl_hvx_lsplice_spec_int(CT, UI)                                     \
   [[gnu::always_inline]] RIPPLE_MAYBE_UNUSED static CT hvx_lsplice(            \
       CT left, CT right, size_t start) {                                       \
+    RIPPLE_STATIC_ASSERT(sizeof(CT) == 1 || sizeof(CT) == 2 ||                 \
+                             sizeof(CT) == 4 || sizeof(CT) == 8,               \
+                         "unsupported scalar size");                           \
     switch (sizeof(left)) {                                                    \
     case 1:                                                                    \
       return hvx_lsplice_##UI##8(left, right, start);                          \
@@ -287,8 +308,6 @@ hvx_lsplice(const char left, const char right, size_t start) {
       return hvx_lsplice_##UI##32(left, right, start);                         \
     case 8:                                                                    \
       return hvx_lsplice_##UI##64(left, right, start);                         \
-    default:                                                                   \
-      __builtin_unreachable();                                                 \
     }                                                                          \
   }
 // clang-format off
