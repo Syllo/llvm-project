@@ -39,6 +39,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Ripple/Preprocess/RippleAlgebraicTransformsPreprocess.h"
 #include "llvm/Transforms/Ripple/Preprocess/RippleFPExtFPTrunc.h"
 #include "llvm/Transforms/Ripple/Preprocess/RippleFPExtFPTruncRevert.h"
 #include "llvm/Transforms/Ripple/Preprocess/RippleSESE.h"
@@ -78,6 +79,10 @@ PreservedAnalyses RippleModulePass::run(Module &M, ModuleAnalysisManager &MAM) {
   DenseSet<AssertingVH<Function>> SpecializationsAvailable;
 
   FunctionPassManager FPM;
+  // Revisit combines after pending specializations acquire their return shapes,
+  // and process newly created specializations before vectorizing them.
+  FPM.addPass(RippleAlgebraicTransformsPreprocessPass(
+      TM, PS, SpecializationsPendingProcessing, SpecializationsAvailable));
   FPM.addPass(RippleSESEPass(TM, PS, SpecializationsPendingProcessing,
                              SpecializationsAvailable));
   if (!OnlySESE)
