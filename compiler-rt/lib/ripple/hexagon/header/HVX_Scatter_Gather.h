@@ -78,11 +78,6 @@ _decl_hvx_gather_16(_Float16, f16);
 #undef _decl_hvx_gather_16
 
 #ifndef __cplusplus
-#define both_gathers(gather_fn, dst, src, index, region_size)                  \
-  _Generic((index),                                                            \
-      int16_t: gather_fn##_16((dst), (src), (index), (region_size)),           \
-      int32_t: gather_fn((dst), (src), (index), (region_size)))
-
 #if __has_bf16__
 #define __extra_bf16_gather(dst, src, index, region_size)                      \
   , __bf16 : hvx_gather_bf16((dst), (src), (index), (region_size))
@@ -99,14 +94,20 @@ _decl_hvx_gather_16(_Float16, f16);
 
 #define hvx_gather(dst, src, index, region_size)                               \
   _Generic((src),                                                              \
-      char *: hvx_gather_i8((dst), (src), (index), (region_size)),             \
-      int16_t *: both_gathers(hvx_gather_i16, (dst), (src), (index),           \
-                              (region_size)),                                  \
+      char *: _Generic((index),                                                \
+          int16_t: hvx_gather_i8_16((dst), (src), (index), (region_size)),     \
+          int32_t: hvx_gather_i8((dst), (src), (index), (region_size))),       \
+      int16_t *: _Generic((index),                                             \
+          int16_t: hvx_gather_i16_16((dst), (src), (index), (region_size)),    \
+          int32_t: hvx_gather_i16((dst), (src), (index), (region_size))),      \
       int32_t *: hvx_gather_i32((dst), (src), (index), (region_size)),         \
       int64_t *: hvx_gather_i64((dst), (src), (index), (region_size)),         \
-      uint8_t *: hvx_gather_u8((dst), (src), (index), (region_size)),          \
-      uint16_t *: both_gathers(hvx_gather_u16, (dst), (src), (index),          \
-                               (region_size)),                                 \
+      uint8_t *: _Generic((index),                                             \
+          int16_t: hvx_gather_u8_16((dst), (src), (index), (region_size)),     \
+          int32_t: hvx_gather_u8((dst), (src), (index), (region_size))),       \
+      uint16_t *: _Generic((index),                                            \
+          int16_t: hvx_gather_u16_16((dst), (src), (index), (region_size)),    \
+          int32_t: hvx_gather_u16((dst), (src), (index), (region_size))),      \
       uint32_t *: hvx_gather_u32((dst), (src), (index), (region_size)),        \
       uint64_t *: hvx_gather_u64((dst), (src), (index), (region_size)),        \
       float *: hvx_gather_f32((dst), (src), (index), (region_size)),           \
@@ -1014,11 +1015,6 @@ _decl_unsigned_scatter_16(8, 128)
 #undef HVX_GATHER_SYNC
 
 #ifndef __cplusplus
-#define both_scatters(scatter_fn, dst, index, src, region_size)                \
-  _Generic((index),                                                            \
-      int16_t: scatter_fn##_16((dst), (index), (src), (region_size)),          \
-      int32_t: scatter_fn((dst), (index), (src), (region_size)))
-
 #if __has_bf16__
 #define __extra_bf16_scatter(dst, index, src, region_size)                     \
   , __bf16 : hvx_scatter_bf16((dst), (index), (src), (region_size))
@@ -1035,12 +1031,20 @@ _decl_unsigned_scatter_16(8, 128)
 
 #define hvx_scatter(dst, index, src, region_size)                              \
   _Generic((src),                                                              \
-      int8_t: hvx_scatter_i8((dst), (index), (src), (region_size)),            \
-      int16_t: both_scatters(hvx_scatter_i16, dst, index, src, region_size),   \
+      int8_t: _Generic((index),                                                \
+          int16_t: hvx_scatter_i8_16((dst), (index), (src), (region_size)),    \
+          int32_t: hvx_scatter_i8((dst), (index), (src), (region_size))),      \
+      int16_t: _Generic((index),                                               \
+          int16_t: hvx_scatter_i16_16((dst), (index), (src), (region_size)),   \
+          int32_t: hvx_scatter_i16((dst), (index), (src), (region_size))),     \
       int32_t: hvx_scatter_i32((dst), (index), (src), (region_size)),          \
       int64_t: hvx_scatter_i64((dst), (index), (src), (region_size)),          \
-      uint8_t: hvx_scatter_u8((dst), (index), (src), (region_size)),           \
-      uint16_t: both_scatters(hvx_scatter_u16, dst, index, src, region_size),  \
+      uint8_t: _Generic((index),                                               \
+          int16_t: hvx_scatter_u8_16((dst), (index), (src), (region_size)),    \
+          int32_t: hvx_scatter_u8((dst), (index), (src), (region_size))),      \
+      uint16_t: _Generic((index),                                              \
+          int16_t: hvx_scatter_u16_16((dst), (index), (src), (region_size)),   \
+          int32_t: hvx_scatter_u16((dst), (index), (src), (region_size))),     \
       uint32_t: hvx_scatter_u32((dst), (index), (src), (region_size)),         \
       uint64_t: hvx_scatter_u64((dst), (index), (src), (region_size)),         \
       float: hvx_scatter_f32((dst), (index), (src), (region_size)),            \
