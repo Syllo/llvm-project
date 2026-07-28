@@ -14,6 +14,10 @@ add_llvm_component_library(LLVMRipple
   Core
   RippleBase
   RippleSESE
+  Demangle
+  IRReader
+  MC
+  RippleAlgebraicTransformsPreprocess
   RippleFPExtFPTrunc
   RippleFPExtFPTruncRevert
   Support
