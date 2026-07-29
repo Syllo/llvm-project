@@ -1483,6 +1483,25 @@ __attribute__((always_inline)) static char ripple_reshape(ripple_block_t BS,
 // The destination type is fixed by the macro name; the source type is
 // resolved by _Generic on Val. Mirrors the C++ overload sets produced by
 // spec_reinterp_to_all_src below.
+//
+// Reinterp is a bit-cast, not a value-preserving conversion, so (unlike
+// reduce/reshape/shuffle) we never route bf16 through an f32 round-trip on
+// soft-bf16 targets -- that would change the bit pattern. We simply omit
+// the f16/bf16 cases on targets where the type isn't available at all.
+#if __has_bf16__
+#define __extra_bf16_ripple_reinterp(DST, BS, Val)                           \
+  , __bf16 : __builtin_ripple_reinterp_##DST##_bf16((BS), (Val))
+#else
+#define __extra_bf16_ripple_reinterp(DST, BS, Val)
+#endif
+
+#if __has_Float16__
+#define __extra_f16_ripple_reinterp(DST, BS, Val)                            \
+  , _Float16 : __builtin_ripple_reinterp_##DST##_f16((BS), (Val))
+#else
+#define __extra_f16_ripple_reinterp(DST, BS, Val)
+#endif
+
 #define __ripple_reinterp_to_dst(DST, BS, Val)                                \
   RIPPLE_DISABLE_GENERIC_WARNING                                              \
   _Generic((Val),                                                             \
@@ -1496,7 +1515,11 @@ __attribute__((always_inline)) static char ripple_reshape(ripple_block_t BS,
       signed int: __builtin_ripple_reinterp_##DST##_i32((BS), (Val)),         \
       unsigned int: __builtin_ripple_reinterp_##DST##_u32((BS), (Val)),       \
       signed long long: __builtin_ripple_reinterp_##DST##_i64((BS), (Val)),   \
-      unsigned long long: __builtin_ripple_reinterp_##DST##_u64((BS), (Val))) \
+      unsigned long long: __builtin_ripple_reinterp_##DST##_u64((BS), (Val)), \
+      float: __builtin_ripple_reinterp_##DST##_f32((BS), (Val)),              \
+      double: __builtin_ripple_reinterp_##DST##_f64((BS), (Val))              \
+          __extra_bf16_ripple_reinterp(DST, (BS), (Val))                     \
+              __extra_f16_ripple_reinterp(DST, (BS), (Val)))                 \
   RIPPLE_REENABLE_GENERIC_WARNING
 
 #define ripple_reinterp_i8(BS, Val)  __ripple_reinterp_to_dst(i8,  (BS), (Val))
@@ -1507,6 +1530,15 @@ __attribute__((always_inline)) static char ripple_reshape(ripple_block_t BS,
 #define ripple_reinterp_u32(BS, Val) __ripple_reinterp_to_dst(u32, (BS), (Val))
 #define ripple_reinterp_i64(BS, Val) __ripple_reinterp_to_dst(i64, (BS), (Val))
 #define ripple_reinterp_u64(BS, Val) __ripple_reinterp_to_dst(u64, (BS), (Val))
+#define ripple_reinterp_f32(BS, Val) __ripple_reinterp_to_dst(f32, (BS), (Val))
+#define ripple_reinterp_f64(BS, Val) __ripple_reinterp_to_dst(f64, (BS), (Val))
+#if __has_Float16__
+#define ripple_reinterp_f16(BS, Val) __ripple_reinterp_to_dst(f16, (BS), (Val))
+#endif
+#if __has_bf16__
+#define ripple_reinterp_bf16(BS, Val)                                        \
+  __ripple_reinterp_to_dst(bf16, (BS), (Val))
+#endif
 
 #else // defined(__cplusplus)
 
@@ -1530,6 +1562,11 @@ __attribute__((always_inline)) static char ripple_reshape(ripple_block_t BS,
   }
 
 // Emit all source-type overloads for one fixed destination type.
+// NOTE: signed/unsigned long are listed separately from long long -- on
+// LP64 targets they're distinct 64-bit types, and since we now also have a
+// double overload competing for the conversion rank, an int64_t argument
+// (== long on Linux/macOS) needs an exact-match overload of its own or the
+// call becomes ambiguous between the long-long and double candidates.
 #define spec_reinterp_to_all_src(DST_CT, DST_BUILTIN)                          \
   spec_reinterp_to_char(DST_CT, DST_BUILTIN);                                  \
   spec_reinterp_to(DST_CT, DST_BUILTIN, signed char, i8);                      \
@@ -1538,8 +1575,31 @@ __attribute__((always_inline)) static char ripple_reshape(ripple_block_t BS,
   spec_reinterp_to(DST_CT, DST_BUILTIN, unsigned short, u16);                  \
   spec_reinterp_to(DST_CT, DST_BUILTIN, signed int, i32);                      \
   spec_reinterp_to(DST_CT, DST_BUILTIN, unsigned int, u32);                    \
+  spec_reinterp_to(DST_CT, DST_BUILTIN, signed long, i64);                     \
+  spec_reinterp_to(DST_CT, DST_BUILTIN, unsigned long, u64);                   \
   spec_reinterp_to(DST_CT, DST_BUILTIN, signed long long, i64);                \
-  spec_reinterp_to(DST_CT, DST_BUILTIN, unsigned long long, u64);
+  spec_reinterp_to(DST_CT, DST_BUILTIN, unsigned long long, u64);              \
+  spec_reinterp_to(DST_CT, DST_BUILTIN, float, f32);                           \
+  spec_reinterp_to(DST_CT, DST_BUILTIN, double, f64);                          \
+  __ripple_reinterp_extra_float_src(DST_CT, DST_BUILTIN)
+
+#if __has_Float16__
+#define __ripple_reinterp_extra_f16_src(DST_CT, DST_BUILTIN)                   \
+  spec_reinterp_to(DST_CT, DST_BUILTIN, _Float16, f16);
+#else
+#define __ripple_reinterp_extra_f16_src(DST_CT, DST_BUILTIN)
+#endif
+
+#if __has_bf16__
+#define __ripple_reinterp_extra_bf16_src(DST_CT, DST_BUILTIN)                  \
+  spec_reinterp_to(DST_CT, DST_BUILTIN, __bf16, bf16);
+#else
+#define __ripple_reinterp_extra_bf16_src(DST_CT, DST_BUILTIN)
+#endif
+
+#define __ripple_reinterp_extra_float_src(DST_CT, DST_BUILTIN)                 \
+  __ripple_reinterp_extra_f16_src(DST_CT, DST_BUILTIN)                         \
+  __ripple_reinterp_extra_bf16_src(DST_CT, DST_BUILTIN)
 
 spec_reinterp_to_all_src(signed char, i8);
 spec_reinterp_to_all_src(unsigned char, u8);
@@ -1549,10 +1609,21 @@ spec_reinterp_to_all_src(signed int, i32);
 spec_reinterp_to_all_src(unsigned int, u32);
 spec_reinterp_to_all_src(signed long long, i64);
 spec_reinterp_to_all_src(unsigned long long, u64);
+spec_reinterp_to_all_src(float, f32);
+spec_reinterp_to_all_src(double, f64);
+#if __has_Float16__
+spec_reinterp_to_all_src(_Float16, f16);
+#endif
+#if __has_bf16__
+spec_reinterp_to_all_src(__bf16, bf16);
+#endif
 
 #undef spec_reinterp_to_all_src
-#undef spec_reinterp_to_all
 #undef spec_reinterp_to
+#undef spec_reinterp_to_char
+#undef __ripple_reinterp_extra_float_src
+#undef __ripple_reinterp_extra_f16_src
+#undef __ripple_reinterp_extra_bf16_src
 
 #endif // defined(__cplusplus)
 

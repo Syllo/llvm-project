@@ -53,21 +53,29 @@ def int_ripple_stack : DefaultAttrsIntrinsic<[llvm_any_ty], [llvm_ptr_ty, LLVMMa
 def int_ripple_reshape : DefaultAttrsIntrinsic<[llvm_any_ty], [llvm_ptr_ty, LLVMMatchType<0>],
                             [IntrNoMem, IntrWillReturn]>;
 
-def int_ripple_reinterp_i8  : DefaultAttrsIntrinsic<[llvm_i8_ty],  [llvm_ptr_ty, llvm_anyint_ty],
+def int_ripple_reinterp_i8  : DefaultAttrsIntrinsic<[llvm_i8_ty],  [llvm_ptr_ty, llvm_any_ty],
                                [IntrNoMem, IntrWillReturn]>;
-def int_ripple_reinterp_u8  : DefaultAttrsIntrinsic<[llvm_i8_ty],  [llvm_ptr_ty, llvm_anyint_ty],
+def int_ripple_reinterp_u8  : DefaultAttrsIntrinsic<[llvm_i8_ty],  [llvm_ptr_ty, llvm_any_ty],
                                [IntrNoMem, IntrWillReturn]>;
-def int_ripple_reinterp_i16 : DefaultAttrsIntrinsic<[llvm_i16_ty], [llvm_ptr_ty, llvm_anyint_ty],
+def int_ripple_reinterp_i16 : DefaultAttrsIntrinsic<[llvm_i16_ty], [llvm_ptr_ty, llvm_any_ty],
                                [IntrNoMem, IntrWillReturn]>;
-def int_ripple_reinterp_u16 : DefaultAttrsIntrinsic<[llvm_i16_ty], [llvm_ptr_ty, llvm_anyint_ty],
+def int_ripple_reinterp_u16 : DefaultAttrsIntrinsic<[llvm_i16_ty], [llvm_ptr_ty, llvm_any_ty],
                                [IntrNoMem, IntrWillReturn]>;
-def int_ripple_reinterp_i32 : DefaultAttrsIntrinsic<[llvm_i32_ty], [llvm_ptr_ty, llvm_anyint_ty],
+def int_ripple_reinterp_i32 : DefaultAttrsIntrinsic<[llvm_i32_ty], [llvm_ptr_ty, llvm_any_ty],
                                [IntrNoMem, IntrWillReturn]>;
-def int_ripple_reinterp_u32 : DefaultAttrsIntrinsic<[llvm_i32_ty], [llvm_ptr_ty, llvm_anyint_ty],
+def int_ripple_reinterp_u32 : DefaultAttrsIntrinsic<[llvm_i32_ty], [llvm_ptr_ty, llvm_any_ty],
                                [IntrNoMem, IntrWillReturn]>;
-def int_ripple_reinterp_i64 : DefaultAttrsIntrinsic<[llvm_i64_ty], [llvm_ptr_ty, llvm_anyint_ty],
+def int_ripple_reinterp_i64 : DefaultAttrsIntrinsic<[llvm_i64_ty], [llvm_ptr_ty, llvm_any_ty],
                                [IntrNoMem, IntrWillReturn]>;
-def int_ripple_reinterp_u64 : DefaultAttrsIntrinsic<[llvm_i64_ty], [llvm_ptr_ty, llvm_anyint_ty],
+def int_ripple_reinterp_u64 : DefaultAttrsIntrinsic<[llvm_i64_ty], [llvm_ptr_ty, llvm_any_ty],
+                               [IntrNoMem, IntrWillReturn]>;
+def int_ripple_reinterp_f16  : DefaultAttrsIntrinsic<[llvm_half_ty],   [llvm_ptr_ty, llvm_any_ty],
+                               [IntrNoMem, IntrWillReturn]>;
+def int_ripple_reinterp_bf16 : DefaultAttrsIntrinsic<[llvm_bfloat_ty], [llvm_ptr_ty, llvm_any_ty],
+                               [IntrNoMem, IntrWillReturn]>;
+def int_ripple_reinterp_f32  : DefaultAttrsIntrinsic<[llvm_float_ty],  [llvm_ptr_ty, llvm_any_ty],
+                               [IntrNoMem, IntrWillReturn]>;
+def int_ripple_reinterp_f64  : DefaultAttrsIntrinsic<[llvm_double_ty], [llvm_ptr_ty, llvm_any_ty],
                                [IntrNoMem, IntrWillReturn]>;
 
 // RIpple tensor reduction operator;

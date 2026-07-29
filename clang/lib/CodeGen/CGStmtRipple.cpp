@@ -495,7 +495,7 @@ RValue CodeGenFunction::emitRippleBuiltin(const CallExpr *E,
     /// Reinterp-specific Builtins Begin
 
 #define RIPPLE_REINTERP_CASE(Suffix)                                         \
-  CASE_RIPPLE_ALL_INT_BUILTIN(reinterp_##Suffix) {                           \
+  CASE_RIPPLE_ALL_INT_FLOAT_BUILTIN(reinterp_##Suffix) {                    \
     Value *BlockShape = EmitScalarExpr(E->getArg(0));                        \
     Value *FromEl = EmitScalarExpr(E->getArg(1));                            \
     llvm::Function *F = CGM.getIntrinsic(                                    \
@@ -512,6 +512,10 @@ RValue CodeGenFunction::emitRippleBuiltin(const CallExpr *E,
     RIPPLE_REINTERP_CASE(u32)
     RIPPLE_REINTERP_CASE(i64)
     RIPPLE_REINTERP_CASE(u64)
+    RIPPLE_REINTERP_CASE(f16)
+    RIPPLE_REINTERP_CASE(bf16)
+    RIPPLE_REINTERP_CASE(f32)
+    RIPPLE_REINTERP_CASE(f64)
 
 #undef RIPPLE_REINTERP_CASE
 
