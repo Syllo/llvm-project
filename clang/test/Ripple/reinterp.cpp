@@ -80,3 +80,48 @@ void reinterp_i16_to_u32(const int16_t *input, uint32_t *output) {
 
   // CHECK: load <32 x i32>, ptr %input
 }
+
+void reinterp_f32_to_i32(const float *input, int32_t *output) {
+  auto BS_src = ripple_set_block_shape(0, 32);
+  size_t v0 = ripple_id(BS_src, 0);
+  float val = input[v0];
+
+  // 32 x f32 = 128 bytes -> 32 x i32
+  auto BS_dst = ripple_set_block_shape(0, 32);
+  size_t v0_dst = ripple_id(BS_dst, 0);
+  int32_t result = ripple_reinterp_i32(BS_dst, val);
+  result = result * 2;
+  output[v0_dst] = result;
+
+  // CHECK: load <32 x i32>, ptr %input
+}
+
+void reinterp_i64_to_f64(const int64_t *input, double *output) {
+  auto BS_src = ripple_set_block_shape(0, 16);
+  size_t v0 = ripple_id(BS_src, 0);
+  int64_t val = input[v0];
+
+  // 16 x i64 = 128 bytes -> 16 x f64
+  auto BS_dst = ripple_set_block_shape(0, 16);
+  size_t v0_dst = ripple_id(BS_dst, 0);
+  double result = ripple_reinterp_f64(BS_dst, val);
+  result = result * 2;
+  output[v0_dst] = result;
+
+  // CHECK: load <16 x double>, ptr %input
+}
+
+void reinterp_f32_to_f64(const float *input, double *output) {
+  auto BS_src = ripple_set_block_shape(0, 32);
+  size_t v0 = ripple_id(BS_src, 0);
+  float val = input[v0];
+
+  // 32 x f32 = 128 bytes -> 16 x f64
+  auto BS_dst = ripple_set_block_shape(0, 16);
+  size_t v0_dst = ripple_id(BS_dst, 0);
+  double result = ripple_reinterp_f64(BS_dst, val);
+  result = result * 2;
+  output[v0_dst] = result;
+
+  // CHECK: load <16 x double>, ptr %input
+}
