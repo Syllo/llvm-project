@@ -208,50 +208,74 @@ def RippleReshape : Builtin, RippleAllTypesTemplate {
   let Prototype = "T(void *, T)";
 }
 
-def RippleReinterpI8 : Builtin, RippleIntTypesTemplate {
+def RippleReinterpI8 : Builtin, RippleAllTypesTemplate {
   let Spellings = ["__builtin_ripple_reinterp_i8_"];
   let Attributes = [NoThrow, CustomTypeChecking];
   let Prototype = "char(void *, T)";
 }
 
-def RippleReinterpI16 : Builtin, RippleIntTypesTemplate {
+def RippleReinterpI16 : Builtin, RippleAllTypesTemplate {
   let Spellings = ["__builtin_ripple_reinterp_i16_"];
   let Attributes = [NoThrow, CustomTypeChecking];
   let Prototype = "short(void *, T)";
 }
 
-def RippleReinterpI32 : Builtin, RippleIntTypesTemplate {
+def RippleReinterpI32 : Builtin, RippleAllTypesTemplate {
   let Spellings = ["__builtin_ripple_reinterp_i32_"];
   let Attributes = [NoThrow, CustomTypeChecking];
   let Prototype = "int32_t(void *, T)";
 }
 
-def RippleReinterpI64 : Builtin, RippleIntTypesTemplate {
+def RippleReinterpI64 : Builtin, RippleAllTypesTemplate {
   let Spellings = ["__builtin_ripple_reinterp_i64_"];
   let Attributes = [NoThrow, CustomTypeChecking];
   let Prototype = "int64_t(void *, T)";
 }
 
-def RippleReinterpU8 : Builtin, RippleIntTypesTemplate {
+def RippleReinterpU8 : Builtin, RippleAllTypesTemplate {
   let Spellings = ["__builtin_ripple_reinterp_u8_"];
   let Attributes = [NoThrow, CustomTypeChecking];
   let Prototype = "unsigned char(void *, T)";
 }
 
-def RippleReinterpU16 : Builtin, RippleIntTypesTemplate {
+def RippleReinterpU16 : Builtin, RippleAllTypesTemplate {
   let Spellings = ["__builtin_ripple_reinterp_u16_"];
   let Attributes = [NoThrow, CustomTypeChecking];
   let Prototype = "unsigned short(void *, T)";
 }
 
-def RippleReinterpU32 : Builtin, RippleIntTypesTemplate {
+def RippleReinterpU32 : Builtin, RippleAllTypesTemplate {
   let Spellings = ["__builtin_ripple_reinterp_u32_"];
   let Attributes = [NoThrow, CustomTypeChecking];
   let Prototype = "uint32_t (void *, T)";
 }
 
-def RippleReinterpU64 : Builtin, RippleIntTypesTemplate {
+def RippleReinterpU64 : Builtin, RippleAllTypesTemplate {
   let Spellings = ["__builtin_ripple_reinterp_u64_"];
   let Attributes = [NoThrow, CustomTypeChecking];
   let Prototype = "uint64_t (void *, T)";
+}
+
+def RippleReinterpF16 : Builtin, RippleAllTypesTemplate {
+  let Spellings = ["__builtin_ripple_reinterp_f16_"];
+  let Attributes = [NoThrow, CustomTypeChecking];
+  let Prototype = "_Float16(void *, T)";
+}
+
+def RippleReinterpBF16 : Builtin, RippleAllTypesTemplate {
+  let Spellings = ["__builtin_ripple_reinterp_bf16_"];
+  let Attributes = [NoThrow, CustomTypeChecking];
+  let Prototype = "__bf16(void *, T)";
+}
+
+def RippleReinterpF32 : Builtin, RippleAllTypesTemplate {
+  let Spellings = ["__builtin_ripple_reinterp_f32_"];
+  let Attributes = [NoThrow, CustomTypeChecking];
+  let Prototype = "float(void *, T)";
+}
+
+def RippleReinterpF64 : Builtin, RippleAllTypesTemplate {
+  let Spellings = ["__builtin_ripple_reinterp_f64_"];
+  let Attributes = [NoThrow, CustomTypeChecking];
+  let Prototype = "double(void *, T)";
 }

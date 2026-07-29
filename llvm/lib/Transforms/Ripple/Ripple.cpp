@@ -1939,7 +1939,9 @@ IntrinsicInst *Ripple::rippleReinterpIntrinsics(Instruction *I) {
       I, {Intrinsic::ripple_reinterp_i8,  Intrinsic::ripple_reinterp_u8,
           Intrinsic::ripple_reinterp_i16, Intrinsic::ripple_reinterp_u16,
           Intrinsic::ripple_reinterp_i32, Intrinsic::ripple_reinterp_u32,
-          Intrinsic::ripple_reinterp_i64, Intrinsic::ripple_reinterp_u64});
+          Intrinsic::ripple_reinterp_i64, Intrinsic::ripple_reinterp_u64,
+          Intrinsic::ripple_reinterp_f16, Intrinsic::ripple_reinterp_bf16,
+          Intrinsic::ripple_reinterp_f32, Intrinsic::ripple_reinterp_f64});
 }
 
 IntrinsicInst *Ripple::rippleReduceIntrinsics(Instruction *I) {
@@ -3839,6 +3841,10 @@ void Ripple::genVectorInstructions() {
   processRippleReinterp(irBuilder.getInt32Ty(), u32)
   processRippleReinterp(irBuilder.getInt64Ty(), i64)
   processRippleReinterp(irBuilder.getInt64Ty(), u64)
+  processRippleReinterp(irBuilder.getHalfTy(),   f16)
+  processRippleReinterp(irBuilder.getBFloatTy(), bf16)
+  processRippleReinterp(irBuilder.getFloatTy(),  f32)
+  processRippleReinterp(irBuilder.getDoubleTy(), f64)
 #undef processRippleReinterp
 
   auto processRippleReductions = [&](IntrinsicInst *rippleReduction,
@@ -4706,6 +4712,10 @@ void Ripple::genVectorInstructions() {
       case Intrinsic::ripple_reinterp_u32: processRippleReinterpu32(rippleReinterp, toShape); break;
       case Intrinsic::ripple_reinterp_i64: processRippleReinterpi64(rippleReinterp, toShape); break;
       case Intrinsic::ripple_reinterp_u64: processRippleReinterpu64(rippleReinterp, toShape); break;
+      case Intrinsic::ripple_reinterp_f16:  processRippleReinterpf16(rippleReinterp,  toShape); break;
+      case Intrinsic::ripple_reinterp_bf16: processRippleReinterpbf16(rippleReinterp, toShape); break;
+      case Intrinsic::ripple_reinterp_f32:  processRippleReinterpf32(rippleReinterp,  toShape); break;
+      case Intrinsic::ripple_reinterp_f64:  processRippleReinterpf64(rippleReinterp,  toShape); break;
       default: llvm_unreachable("Not a Ripple reinterp instruction");
       }
     } else if (IntrinsicInst *rippleReduction = rippleReduceIntrinsics(call)) {
@@ -8134,6 +8144,19 @@ Error Ripple::checkRippleReinterpIntrinsics(IntrinsicInst *I) {
 
     case Intrinsic::ripple_reinterp_i64:
     case Intrinsic::ripple_reinterp_u64:
+      BitSize = 64;
+      break;
+
+    case Intrinsic::ripple_reinterp_f16:
+    case Intrinsic::ripple_reinterp_bf16:
+      BitSize = 16;
+      break;
+
+    case Intrinsic::ripple_reinterp_f32:
+      BitSize = 32;
+      break;
+
+    case Intrinsic::ripple_reinterp_f64:
       BitSize = 64;
       break;
 
