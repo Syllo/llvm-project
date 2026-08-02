@@ -17,36 +17,33 @@ install(
 # __________________________ Environment detection _____________________________
 
 # QuRT
+
+include(../ripple-hexagon.cmake)
+
 set(HEXAGON_SDK_ROOT $ENV{HEXAGON_SDK_ROOT})
 if(NOT "${HEXAGON_SDK_ROOT}" STREQUAL "")
-  message(NOTICE "--> Using HEXAGON_SDK_ROOT: ${HEXAGON_SDK_ROOT}")
+  message(NOTICE "Using HEXAGON_SDK_ROOT: ${HEXAGON_SDK_ROOT}")
+  if ("${HEXAGON_ARCH_VERSION}" STREQUAL "")
+    set(HEXAGON_ARCH_VERSION $ENV{HEXAGON_ARCH_VERSION})
+  endif()
   if(NOT "${HEXAGON_ARCH_VERSION}" STREQUAL "")
-    message(NOTICE "--> Target HEXAGON_ARCH_VERSION: ${HEXAGON_ARCH_VERSION}")
-    # HEXAGON ARCH VERSION FORMAT:
-    # v##HEXAGON_VERSION##_##HEXAGON_MINOR_VERSION
-    string(REGEX MATCH "^v([0-9]+)t?(_([0-9]+))?" HEXAGON_VERSION_MATCHED
-             ${HEXAGON_ARCH_VERSION})
-    set(HEXAGON_VERSION ${CMAKE_MATCH_1})
-    if (HEXAGON_VERSION GREATER_EQUAL 81)
-      set(COMPUTE_FOLDER "v81")
-    elseif(HEXAGON_VERSION EQUAL 71)
-      set (COMPUTE_FOLDER "v69")
-    elseif(HEXAGON_VERSION EQUAL 77)
-      set (COMPUTE_FOLDER "v75")
-    else()
-      set(COMPUTE_FOLDER "${HEXAGON_ARCH_VERSION}")
-    endif()
-    message(NOTICE "compute dir is ${HEXAGON_SDK_ROOT}/rtos/qurt/compute${COMPUTE_FOLDER}")
+    message(NOTICE "Targeting HEXAGON_ARCH_VERSION: ${HEXAGON_ARCH_VERSION}")
+    set_hexagon_version_info(
+      "${HEXAGON_ARCH_VERSION}"
+      HEXAGON_VERSION_FLAGS
+      QURT_COMPUTE_PATH)
+
     set(_hexagon_qurt_dir
-      "${HEXAGON_SDK_ROOT}/rtos/qurt/compute${COMPUTE_FOLDER}/include/qurt"
+      "${HEXAGON_SDK_ROOT}/rtos/qurt/${QURT_COMPUTE_PATH}/include/qurt"
     )
+    message(NOTICE "compute dir is ${_hexagon_qurt_dir}")
     if(EXISTS "${_hexagon_qurt_dir}" AND IS_DIRECTORY "${_hexagon_qurt_dir}")
       message(STATUS "Found QuRT include folder: ${_hexagon_qurt_dir}")
       set(HEXAGON_QURT_INCLUDE_DIR
         "${_hexagon_qurt_dir}/" CACHE PATH "QuRT include directory" FORCE
       )
     else()
-      message(NOTICE "No QuRT include folder found in the Hexagon SDK")
+      message(WARNING "No QuRT include folder found in the Hexagon SDK")
     endif()
   else()
     message(WARNING "Hexagon SDK root found, but HEXAGON_ARCH_VERSION undefined")
@@ -71,7 +68,6 @@ set(HEXAGON_FLAGS
     -O2
     -Wall
     -m${HEXAGON_ARCH_VERSION}
-    -mhvx
     -Wno-gnu-include-next
     -fenable-ripple
     )
