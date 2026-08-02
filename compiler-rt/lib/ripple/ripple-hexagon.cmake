@@ -1,0 +1,44 @@
+include_guard()
+
+# _______________________ Common utils _________________________________________
+
+function(set_hexagon_version_info HEXAGON_ARCH_VERSION HEXAGON_FLAGS_OUT QURT_COMPUTE_PATH_OUT)
+  # HEXAGON ARCH VERSION FORMAT:
+  # v##HEXAGON_MAJOR_VERSION##_##HEXAGON_MINOR_VERSION##
+  string(REGEX MATCH "^v([0-9]+)t?(_([0-9]+))?" HEXAGON_VERSION_MATCHED
+         "${HEXAGON_ARCH_VERSION}")
+
+  set(HEXAGON_MAJOR_VERSION "${CMAKE_MATCH_1}")
+
+  set(_HEXAGON_FLAGS
+      -DHEXAGON_MAJOR_VERSION=${HEXAGON_MAJOR_VERSION})
+
+  if(CMAKE_MATCH_3)
+    set(HEXAGON_MINOR_VERSION "${CMAKE_MATCH_3}")
+    list(APPEND _HEXAGON_FLAGS
+         -DHEXAGON_MINOR_VERSION=${HEXAGON_MINOR_VERSION})
+  else()
+    set(HEXAGON_MINOR_VERSION 0)
+    list(APPEND _HEXAGON_FLAGS
+         -DHEXAGON_MINOR_VERSION=0)
+  endif()
+
+  if(HEXAGON_MAJOR_VERSION STREQUAL "71")
+    set(QURT_COMPUTE_PATH computev69)
+  elseif(HEXAGON_MAJOR_VERSION STREQUAL "77")
+    set(QURT_COMPUTE_PATH computev75)
+  elseif(HEXAGON_MAJOR_VERSION STREQUAL "83"
+         OR HEXAGON_MAJOR_VERSION STREQUAL "85")
+    set(QURT_COMPUTE_PATH computev81)
+  else()
+    set(QURT_COMPUTE_PATH computev${HEXAGON_MAJOR_VERSION})
+  endif()
+
+  set(${HEXAGON_FLAGS_OUT}
+      ${_HEXAGON_FLAGS}
+      PARENT_SCOPE)
+
+  set(${QURT_COMPUTE_PATH_OUT}
+      ${QURT_COMPUTE_PATH}
+      PARENT_SCOPE)
+endfunction()
