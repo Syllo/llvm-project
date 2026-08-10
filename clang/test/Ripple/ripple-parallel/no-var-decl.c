@@ -1,5 +1,5 @@
 // REQUIRES: target-x86_64 || target-aarch64 || target=hexagon{{.*}}
-// RUN: %clang -S -Xclang -disable-llvm-passes -emit-llvm -fenable-ripple %s -o - | FileCheck %s
+// RUN: %clang -S -Xclang -disable-llvm-passes -emit-llvm -fenable-ripple -fno-discard-value-names %s -o - | FileCheck %s
 
 #include "../ripple_test.h"
 
@@ -17,4 +17,3 @@ void vecadd_subarray(int N, int start, int end, float x[__restrict 1][N],
     xpy[0][i] = x[0][i] + y[0][i];
   }
 }
-
