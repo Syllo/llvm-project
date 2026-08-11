@@ -12,7 +12,6 @@
 //===------------------------------------------------------------------------===
 
 #include "__ripple_func_attribs.h"
-#include "ripple_qhmath_hvx.h"
 #include <hexagon_types.h>
 
 //===------------------------------------------------------------------------===
@@ -25,7 +24,7 @@ struct ripple_int_div_results {
 };
 
 // unsigned uh division; produces result and remainder
-RIPPLE_INTRIN_INLINE ripple_int_div_results
+RIPPLE_INTRIN_INLINE struct ripple_int_div_results
 ripple_integer_div_rem_uh(HVX_Vector n, HVX_Vector d) {
   const HVX_Vector const1 = Q6_Vh_vsplat_R(0x0001);
   const HVX_Vector const2 = Q6_Vh_vsplat_R(0x0002);
@@ -85,20 +84,22 @@ ripple_integer_div_rem_uh(HVX_Vector n, HVX_Vector d) {
     div = Q6_V_vmux_QVV(change, temp_div, div);
     ///////////////////////////////////////
   }
-  return {div, rem};
+  struct ripple_int_div_results result = {div, rem};
+  return result;
 }
 
 // signed h division
 // +n, +d : keep the uh result
 // flipped signs: flip the sign of div
 // -n: make the modulus negative
-RIPPLE_INTRIN_INLINE ripple_int_div_results
+RIPPLE_INTRIN_INLINE struct ripple_int_div_results
 ripple_integer_div_rem_h(HVX_Vector n, HVX_Vector d) {
   const HVX_Vector const0 = Q6_V_vzero();
 
   HVX_Vector nabs = Q6_Vh_vabs_Vh(n);
   HVX_Vector dabs = Q6_Vh_vabs_Vh(d);
-  ripple_int_div_results abs_result = ripple_integer_div_rem_uh(nabs, dabs);
+  struct ripple_int_div_results abs_result =
+      ripple_integer_div_rem_uh(nabs, dabs);
 
   HVX_Vector negRem = Q6_Vh_vsub_VhVh(const0, abs_result.rem);
   HVX_VectorPred negN = Q6_Q_vcmp_gt_VhVh(const0, n);
@@ -110,7 +111,8 @@ ripple_integer_div_rem_h(HVX_Vector n, HVX_Vector d) {
   HVX_Vector negDiv = Q6_Vh_vsub_VhVh(const0, abs_result.div);
   HVX_Vector div = Q6_V_vmux_QVV(oppSign, negDiv, abs_result.div);
 
-  return {div, rem};
+  struct ripple_int_div_results result = {div, rem};
+  return result;
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector ripple_integer_div_uh(HVX_Vector n,
@@ -137,7 +139,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_integer_rem_h(HVX_Vector n,
 //===------------------------------------------------------------------------===
 
 // unsigned uw division; produces result and remainder
-RIPPLE_INTRIN_INLINE ripple_int_div_results
+RIPPLE_INTRIN_INLINE struct ripple_int_div_results
 ripple_integer_div_rem_uw(HVX_Vector n, HVX_Vector d) {
   const HVX_Vector const1 = Q6_V_vsplat_R(0x00000001);
   const HVX_Vector const2 = Q6_V_vsplat_R(0x00000002);
@@ -197,20 +199,22 @@ ripple_integer_div_rem_uw(HVX_Vector n, HVX_Vector d) {
     div = Q6_V_vmux_QVV(change, temp_div, div);
     ///////////////////////////////////////
   }
-  return {div, rem};
+  struct ripple_int_div_results result = {div, rem};
+  return result;
 }
 
 // signed w division
 // +n, +d : keep the uw result
 // flipped signs: flip the sign of div
 // -n: make the modulus negative
-RIPPLE_INTRIN_INLINE ripple_int_div_results
+RIPPLE_INTRIN_INLINE struct ripple_int_div_results
 ripple_integer_div_rem_w(HVX_Vector n, HVX_Vector d) {
   const HVX_Vector const0 = Q6_V_vzero();
 
   HVX_Vector nabs = Q6_Vw_vabs_Vw(n);
   HVX_Vector dabs = Q6_Vw_vabs_Vw(d);
-  ripple_int_div_results abs_result = ripple_integer_div_rem_uw(nabs, dabs);
+  struct ripple_int_div_results abs_result =
+      ripple_integer_div_rem_uw(nabs, dabs);
 
   HVX_Vector negRem = Q6_Vw_vsub_VwVw(const0, abs_result.rem);
   HVX_VectorPred negN = Q6_Q_vcmp_gt_VwVw(const0, n);
@@ -222,7 +226,8 @@ ripple_integer_div_rem_w(HVX_Vector n, HVX_Vector d) {
   HVX_Vector negDiv = Q6_Vw_vsub_VwVw(const0, abs_result.div);
   HVX_Vector div = Q6_V_vmux_QVV(oppSign, negDiv, abs_result.div);
 
-  return {div, rem};
+  struct ripple_int_div_results result = {div, rem};
+  return result;
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector ripple_integer_div_uw(HVX_Vector n,

@@ -12,8 +12,8 @@
 //===------------------------------------------------------------------------===
 
 #include "__ripple_func_attribs.h"
-#include "ripple_qhmath_hvx.h"
 #include <hexagon_types.h>
+#include <stdbool.h>
 
 // for some util functions
 #include "ripple_exp_f32_f16_hvx.h"
@@ -21,8 +21,8 @@
 
 //===------------------------------------------------------------------------===
 // This header defines several internal implementations of vector sinh and cosh
-// All functions are templated: you can choose to compile the overflow-handling
-// code (safe=true) or not.
+// The boolean arguments select overflow handling and approximation variants.
+// Callers pass constants so unused paths are removed after inlining.
 //
 // As a rule, the overflow-handling code makes the function 20% slower.
 //
@@ -33,8 +33,7 @@
 // almost a copy expf32 up to a certain point
 // changed the bias to automatically divide exp by 2:
 // 1056964608 = 126 * (2 ^ 23), instead of 1065353216
-template <bool safe = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_coshf32_hvx(HVX_Vector x) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_coshf32_hvx(HVX_Vector x, bool safe) {
   const HVX_Vector mask007FFFFF = Q6_V_vsplat_R(0x007fffff);
   const HVX_Vector mask000000FF = Q6_V_vsplat_R(0x000000ff);
   const HVX_Vector const00800000 = Q6_V_vsplat_R(0x00800000);
@@ -65,13 +64,13 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_coshf32_hvx(HVX_Vector x) {
 
   // exp: compute and perform shift on u
   HVX_Vector shift = Q6_Vw_vmin_VwVw(Q6_Vw_vsub_VwVw(const126, exp), const31);
-  if constexpr (safe) {
+  if (safe) {
     isInf =
         Q6_Q_vcmp_gt_VwVw(constNeg7, shift); // if we had to shift too far left,
                                              // we are overflowing the exponent
   }
   u = Q6_Vw_vasr_VwVw(u, shift);
-  if constexpr (safe) {
+  if (safe) {
     HVX_VectorPred overMax = Q6_Q_vcmp_gt_VuwVuw(u, constMaxU);
     isInf =
         Q6_Q_or_QQ(isInf, overMax); // if it's positive and too large, go to inf
@@ -88,7 +87,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_coshf32_hvx(HVX_Vector x) {
   u = _ripple_internal_Vsf_vadd_VsfVsf(u, usmall);
 
   // now, call on isInf:
-  if constexpr (safe) {
+  if (safe) {
     u = Q6_V_vmux_QVV(isInf, constInf, u);
   }
 
@@ -98,8 +97,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_coshf32_hvx(HVX_Vector x) {
 // almost a copy expf32 up to a certain point
 // changed the bias to automatically divide exp by 2:
 // 1056964608 = 126 * (2 ^ 23), instead of 1065353216
-template <bool safe = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinhf32_hvx(HVX_Vector x) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinhf32_hvx(HVX_Vector x, bool safe) {
   const HVX_Vector maskSignBit = Q6_V_vsplat_R(0x80000000);
 
   const HVX_Vector mask007FFFFF = Q6_V_vsplat_R(0x007fffff);
@@ -133,13 +131,13 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinhf32_hvx(HVX_Vector x) {
 
   // exp: compute and perform shift on u
   HVX_Vector shift = Q6_Vw_vmin_VwVw(Q6_Vw_vsub_VwVw(const126, exp), const31);
-  if constexpr (safe) {
+  if (safe) {
     isInf =
         Q6_Q_vcmp_gt_VwVw(constNeg7, shift); // if we had to shift too far left,
                                              // we are overflowing the exponent
   }
   u = Q6_Vw_vasr_VwVw(u, shift);
-  if constexpr (safe) {
+  if (safe) {
     HVX_VectorPred overMax = Q6_Q_vcmp_gt_VuwVuw(u, constMaxU);
     isInf = Q6_Q_or_QQ(
         isInf, overMax); // if it's too large, go to inf; sign corrected later
@@ -156,7 +154,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinhf32_hvx(HVX_Vector x) {
   u = _ripple_internal_Vsf_vsub_VsfVsf(u, usmall);
 
   // now, call on isInf:
-  if constexpr (safe) {
+  if (safe) {
     u = Q6_V_vmux_QVV(isInf, constInf, u);
   }
 
@@ -167,28 +165,28 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinhf32_hvx(HVX_Vector x) {
 
 //===------------------------------------------------------------------------===
 
-template <bool safe = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_coshf16_hvx_promote(HVX_Vector x) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_coshf16_hvx_promote(HVX_Vector x,
+                                                           bool safe) {
   HVX_VectorPair sfx = _ripple_internal_Wsf_vcvt_Vhf(x);
 
   HVX_Vector hiRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_coshf32_hvx<safe>(Q6_V_hi_W(sfx)), Q6_V_vzero());
+      ripple_coshf32_hvx(Q6_V_hi_W(sfx), safe), Q6_V_vzero());
   HVX_Vector loRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_coshf32_hvx<safe>(Q6_V_lo_W(sfx)), Q6_V_vzero());
+      ripple_coshf32_hvx(Q6_V_lo_W(sfx), safe), Q6_V_vzero());
 
   HVX_VectorPair qfres = Q6_W_vcombine_VV(hiRes, loRes);
   HVX_Vector res = Q6_Vhf_equals_Wqf32(qfres);
   return res;
 }
 
-template <bool safe = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinhf16_hvx_promote(HVX_Vector x) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinhf16_hvx_promote(HVX_Vector x,
+                                                           bool safe) {
   HVX_VectorPair sfx = _ripple_internal_Wsf_vcvt_Vhf(x);
 
   HVX_Vector hiRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_sinhf32_hvx<safe>(Q6_V_hi_W(sfx)), Q6_V_vzero());
+      ripple_sinhf32_hvx(Q6_V_hi_W(sfx), safe), Q6_V_vzero());
   HVX_Vector loRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_sinhf32_hvx<safe>(Q6_V_lo_W(sfx)), Q6_V_vzero());
+      ripple_sinhf32_hvx(Q6_V_lo_W(sfx), safe), Q6_V_vzero());
 
   HVX_VectorPair qfres = Q6_W_vcombine_VV(hiRes, loRes);
   HVX_Vector res = Q6_Vhf_equals_Wqf32(qfres);
@@ -198,8 +196,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinhf16_hvx_promote(HVX_Vector x) {
 // almost a copy expf16 up to a certain point
 // changed the bias to automatically divide exp by 2:
 // 14336 = 14 * (2 ^ 10), instead of 15360
-template <bool safe = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_coshf16_hvx(HVX_Vector x) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_coshf16_hvx(HVX_Vector x, bool safe) {
   // the splated values are repeated twice because vsplat consumes a 4 byte word
   const HVX_Vector mask03FF = Q6_V_vsplat_R(0x03FF03FF);
   const HVX_Vector mask001F = Q6_V_vsplat_R(0x001F001F);
@@ -236,13 +233,13 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_coshf16_hvx(HVX_Vector x) {
   // exp: compute and perform shift on u
   HVX_Vector shift = Q6_Vh_vsub_VhVh(const14, exp);
 
-  if constexpr (safe) {
+  if (safe) {
     isInf =
         Q6_Q_vcmp_gt_VhVh(constNeg4, shift); // if we had to shift too far left,
                                              // we are overflowing the exponent
   }
   u = Q6_Vh_vasr_VhVh(u, shift);
-  if constexpr (safe) {
+  if (safe) {
     HVX_VectorPred overMax = Q6_Q_vcmp_gt_VuhVuh(u, constMaxU);
     isInf =
         Q6_Q_or_QQ(isInf, overMax); // if it's positive and too large, go to inf
@@ -256,7 +253,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_coshf16_hvx(HVX_Vector x) {
 
   // let go of all the vector predicate registers; Inf and 0 are unaffected by
   // the polynomial
-  if constexpr (safe) {
+  if (safe) {
     u = Q6_V_vmux_QVV(isInf, constInf, u);
   }
   u = _ripple_exp_helper_polynomial_f16(u);
@@ -266,8 +263,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_coshf16_hvx(HVX_Vector x) {
 }
 
 // almost a copy expf16 up to a certain point
-template <bool safe = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinhf16_hvx(HVX_Vector x) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinhf16_hvx(HVX_Vector x, bool safe) {
   const HVX_Vector maskSignBit = Q6_V_vsplat_R(0x80008000);
 
   // the splated values are repeated twice because vsplat consumes a 4 byte word
@@ -307,13 +303,13 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinhf16_hvx(HVX_Vector x) {
   // exp: compute and perform shift on u
   HVX_Vector shift = Q6_Vh_vsub_VhVh(const14, exp);
 
-  if constexpr (safe) {
+  if (safe) {
     isInf =
         Q6_Q_vcmp_gt_VhVh(constNeg4, shift); // if we had to shift too far left,
                                              // we are overflowing the exponent
   }
   u = Q6_Vh_vasr_VhVh(u, shift);
-  if constexpr (safe) {
+  if (safe) {
     HVX_VectorPred overMax = Q6_Q_vcmp_gt_VuhVuh(u, constMaxU);
     isInf = Q6_Q_or_QQ(
         isInf, overMax); // if it's too large, go to inf; sign corrected later
@@ -327,7 +323,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinhf16_hvx(HVX_Vector x) {
 
   // let go of all the vector predicate registers; Inf and 0 are unaffected by
   // the polynomial
-  if constexpr (safe) {
+  if (safe) {
     u = Q6_V_vmux_QVV(isInf, constInf, u);
   }
   u = _ripple_exp_helper_polynomial_f16(u);

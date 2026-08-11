@@ -13,13 +13,13 @@
 
 #include "__ripple_func_attribs.h"
 #include "ripple_internal_utils_hvx.h"
-#include "ripple_qhmath_hvx.h"
 #include <hexagon_types.h>
+#include <stdbool.h>
 
 //===------------------------------------------------------------------------===
 // This header defines several internal implementations of vector exp
-// All functions are templated: you can choose to compile the overflow-handling
-// code (safe=true) or not.
+// The boolean arguments select overflow handling and approximation variants.
+// Callers pass constants so unused paths are removed after inlining.
 //
 // As a rule, the overflow-handling code makes the function twice as slow.
 //
@@ -57,8 +57,8 @@ _ripple_exp_helper_polynomial_f32(HVX_Vector u) {
 //  Magic numbers:
 //  12102203.0f ~= 2^23 / ln(2)
 //  1065353216 ~= 127 * (2^23)
-template <bool safe>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf32_hvx_schraudolph(HVX_Vector x) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf32_hvx_schraudolph(HVX_Vector x,
+                                                              bool safe) {
   const HVX_Vector mask007FFFFF = Q6_V_vsplat_R(0x007fffff);
   const HVX_Vector mask000000FF = Q6_V_vsplat_R(0x000000ff);
   const HVX_Vector const00800000 = Q6_V_vsplat_R(0x00800000);
@@ -92,7 +92,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf32_hvx_schraudolph(HVX_Vector x) {
   HVX_VectorPred overflow;
   HVX_VectorPred isZero;
   HVX_VectorPred isInf;
-  if constexpr (safe) {
+  if (safe) {
     overflow =
         Q6_Q_vcmp_gt_VwVw(constNeg7, shift); // if we had to shift too far left,
                                              // we are overflowing the exponent
@@ -102,7 +102,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf32_hvx_schraudolph(HVX_Vector x) {
 
   // compute the shift, then some more safety code
   u = Q6_Vw_vasr_VwVw(u, shift);
-  if constexpr (safe) {
+  if (safe) {
     HVX_VectorPred overMax = Q6_Q_vcmp_gt_VuwVuw(u, constMaxU);
     isInf = Q6_Q_or_QQ(
         isInf, Q6_Q_and_QQn(overMax,
@@ -116,13 +116,13 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf32_hvx_schraudolph(HVX_Vector x) {
 
   // we can let go of one vector predicate register; 0 is unaffected by the
   // polynomial
-  if constexpr (safe)
+  if (safe)
     u = Q6_V_vmux_QVV(isZero, const0, u);
 
   u = _ripple_exp_helper_polynomial_f32(u);
 
   // now, call on isInf:
-  if constexpr (safe)
+  if (safe)
     u = Q6_V_vmux_QVV(isInf, constInf, u);
 
   return u;
@@ -130,14 +130,14 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf32_hvx_schraudolph(HVX_Vector x) {
 
 // works by turning the fp16 into an fp32 and calling the ripple fp32 function,
 // above
-template <bool safe>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf16_hvx_promote(HVX_Vector x) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf16_hvx_promote(HVX_Vector x,
+                                                          bool safe) {
   HVX_VectorPair sfx = _ripple_internal_Wsf_vcvt_Vhf(x);
 
   HVX_Vector hiRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_expf32_hvx_schraudolph<safe>(Q6_V_hi_W(sfx)), Q6_V_vzero());
+      ripple_expf32_hvx_schraudolph(Q6_V_hi_W(sfx), safe), Q6_V_vzero());
   HVX_Vector loRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_expf32_hvx_schraudolph<safe>(Q6_V_lo_W(sfx)), Q6_V_vzero());
+      ripple_expf32_hvx_schraudolph(Q6_V_lo_W(sfx), safe), Q6_V_vzero());
 
   HVX_VectorPair qfres = Q6_W_vcombine_VV(hiRes, loRes);
   HVX_Vector res = Q6_Vhf_equals_Wqf32(qfres);
@@ -178,8 +178,8 @@ _ripple_exp_helper_polynomial_f16(HVX_Vector u) {
 // Magic numbers:
 // 1477.0f ~= 2^10 / ln(2)
 // 15360 = 15 * (2^10)
-template <bool safe>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf16_hvx_schraudolph(HVX_Vector x) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf16_hvx_schraudolph(HVX_Vector x,
+                                                              bool safe) {
   // the splated values are repeated twice because vsplat consumes a 4 byte word
   const HVX_Vector mask03FF = Q6_V_vsplat_R(0x03FF03FF);
   const HVX_Vector mask001F = Q6_V_vsplat_R(0x001F001F);
@@ -214,7 +214,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf16_hvx_schraudolph(HVX_Vector x) {
   HVX_VectorPred overflow;
   HVX_VectorPred isZero;
   HVX_VectorPred isInf;
-  if constexpr (safe) {
+  if (safe) {
     overflow =
         Q6_Q_vcmp_gt_VhVh(constNeg4, shift); // if we had to shift too far left,
                                              // we are overflowing the exponent
@@ -224,7 +224,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf16_hvx_schraudolph(HVX_Vector x) {
 
   // perform shift, then additional safety code
   u = Q6_Vh_vasr_VhVh(u, shift);
-  if constexpr (safe) {
+  if (safe) {
     HVX_VectorPred overMax = Q6_Q_vcmp_gt_VuhVuh(u, constMaxU);
     isInf = Q6_Q_or_QQ(
         isInf, Q6_Q_and_QQn(overMax,
@@ -238,7 +238,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf16_hvx_schraudolph(HVX_Vector x) {
 
   // let go of all the vector predicate registers; Inf and 0 are unaffected by
   // the polynomial
-  if constexpr (safe) {
+  if (safe) {
     u = Q6_V_vmux_QVV(isZero, const0, u);
     u = Q6_V_vmux_QVV(isInf, constInf, u);
   }

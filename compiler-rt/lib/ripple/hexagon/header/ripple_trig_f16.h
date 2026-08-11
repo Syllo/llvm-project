@@ -13,6 +13,7 @@
 
 #include "__ripple_func_attribs.h"
 #include <hexagon_types.h>
+#include <stdbool.h>
 
 #include "ripple_div_f32_f16_hvx_fast.h"
 #include "ripple_trunc_round_f32_f16.h"
@@ -104,8 +105,8 @@ RIPPLE_INTRIN_INLINE HVX_Vector _ripple_cospiby2x_approx(const HVX_Vector vx) {
 // the cos is then either 1 (or very close) or 0 (or very close).
 // this is normal behavior for all implementations:
 // large floats mod 2pi will never be accurate.
-template <bool isCos>
-RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_trig_func(HVX_Vector input) {
+RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_trig_func(HVX_Vector input,
+                                                           bool isCos) {
   const HVX_Vector inv2pi = Q6_V_vsplat_R(0x3e22f983);
 
   // 16 bits, uint16_t, mod2pi
@@ -131,7 +132,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_trig_func(HVX_Vector input) {
   // that value will get quantized into "1", later.
   HVX_Vector input_flipped = Q6_Vh_vsub_VhVh(one_bit14, input);
 
-  if constexpr (isCos) {
+  if (isCos) {
     // cosine is negative if value is in quadrants 1 or 2
     // cosine is 'flipped' (starts at 0, goes to 1) in Q1 or Q3
     HVX_VectorPred q1 = Q6_Q_vcmp_eq_VhVh(quadrant, const1);
@@ -246,7 +247,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinf16_hvx(HVX_Vector input) {
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector ripple_cosf16_hvx(HVX_Vector input) {
-  return _ripple_internal_trig_func<true>(input);
+  return _ripple_internal_trig_func(input, true);
 }
 
 // The point of this code is to skip using a vmux, which are always expensive.
@@ -278,8 +279,8 @@ _ripple_internal_tanf16_trick(HVX_Vector input) {
   return Q6_Vuh_vmin_VuhVuh(input, Q6_Vuh_vsub_VuhVuh_sat(constVMAX, input));
 }
 
-template <bool isNotCot = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_tanf16_hvx(HVX_Vector input) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_tanf16_hvx(HVX_Vector input,
+                                                  bool isNotCot) {
   const HVX_Vector inv_pi = Q6_V_vsplat_R(0x3ea2f983); // 1/pi
   // 16 bits, uint16_t, mod pi
   input = _ripple_quantized_remainder_hf(input, inv_pi);
@@ -302,14 +303,14 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_tanf16_hvx(HVX_Vector input) {
   HVX_Vector sin_val = _ripple_requant_u14_to_hf(
       _ripple_cospiby2x_approx(Q6_Vh_vasl_VhR(input, 1)));
 
-  if constexpr (isNotCot)
+  if (isNotCot)
     return ripple_div_fp16_promote_fast(sin_val, cos_val);
   else
     return ripple_div_fp16_promote_fast(cos_val, sin_val);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector ripple_cotf16_hvx(HVX_Vector input) {
-  return ripple_tanf16_hvx<false>(input);
+  return ripple_tanf16_hvx(input, false);
 }
 
 #endif

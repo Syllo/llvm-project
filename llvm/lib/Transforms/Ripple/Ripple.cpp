@@ -2079,8 +2079,6 @@ void Ripple::replaceDivCalls() {
 
         if ((LHSTy->isIntegerTy(16) || LHSTy->isIntegerTy(32)) &&
             (RHSTy->isIntegerTy(16) || RHSTy->isIntegerTy(32))) {
-          irBuilder.SetInsertPoint(BinOpI);
-
           auto &Mod = *F.getParent();
 
           FunctionCallee TestDivFunc =
@@ -2105,8 +2103,9 @@ void Ripple::replaceDivCalls() {
                            ? Mod.getOrInsertFunction("divi16", FTy)
                            : Mod.getOrInsertFunction("divi", FTy));
 
+            IRBuilder<> DivuBuilder(BinOpI);
             CallInst *DivCallOp =
-                irBuilder.CreateCall(DivFunc, {LHS, RHS}, "divu_val");
+                DivuBuilder.CreateCall(DivFunc, {LHS, RHS}, "divu_val");
 
             setRippleShape(DivCallOp, TS);
 
@@ -2127,8 +2126,6 @@ void Ripple::replaceDivCalls() {
 
         if ((LHSTy->is16bitFPTy() || LHSTy->isFloatTy()) &&
             (RHSTy->is16bitFPTy() || RHSTy->isFloatTy())) {
-          irBuilder.SetInsertPoint(BinOpI);
-
           auto &Mod = *F.getParent();
 
           FunctionCallee TestDivFunc =
@@ -2143,8 +2140,9 @@ void Ripple::replaceDivCalls() {
                 (LHSTy->isFloatTy()) ? Mod.getOrInsertFunction("divf", FTy)
                                      : Mod.getOrInsertFunction("divf16", FTy);
 
+            IRBuilder<> DivfBuilder(BinOpI);
             CallInst *DivCallOp =
-                irBuilder.CreateCall(DivFunc, {LHS, RHS}, "divu_val");
+                DivfBuilder.CreateCall(DivFunc, {LHS, RHS}, "divf_val");
 
             setRippleShape(DivCallOp, TS);
 
@@ -9991,6 +9989,11 @@ Ripple::findExternalRippleFunctionFor(const CallInst *Call,
   ExternalRippleFunction::SourceFunctionName CallName =
       ExternalRippleFunction::SourceFunctionName::parse(FunName);
   for (auto &ExternalFunction : ExternalRippleFunctions) {
+    // A candidate may implement its scalar operation with an intrinsic (for
+    // example, llvm.fabs). Selecting itself would introduce recursion instead
+    // of vectorizing that intrinsic.
+    if (ExternalFunction->getFunction() == &F)
+      continue;
     if (ExternalFunction->matchesFunction(
             CallName, FunType, CallArgShapes,
             BlockShapeAsFirstArg ? &BlockShapeTShape : nullptr)) {

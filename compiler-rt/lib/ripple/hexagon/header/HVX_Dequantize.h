@@ -17,6 +17,7 @@
 #include <hexagon_protos.h>
 #include <ripple.h>
 #include <ripple_hvx.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 // Required compile flags (previously enforced per-source by the bitcode build,

@@ -8,15 +8,55 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===------------------------------------------------------------------------===
-// Internal header to access trunc and round f32 and f16 vector implementations.
+// Internal header for f32/f16 conversions, truncation, and rounding.
 //===------------------------------------------------------------------------===
 
 #include "__ripple_func_attribs.h"
 #include "ripple_internal_utils_hvx.h"
 #include <hexagon_types.h>
+#include <stdbool.h>
+
+// valid below 2^31
+RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_w_from_sf(HVX_Vector val) {
+#if __HEXAGON_ARCH__ >= 73
+  return Q6_Vw_equals_Vsf(val);
+#else
+  const HVX_Vector exp_extract = Q6_V_vsplat_R(0x7f800000);
+  const HVX_Vector mant_extract = Q6_V_vsplat_R(0x7fffff);
+  const HVX_Vector the_one = Q6_V_vsplat_R(0x1 << 23);
+
+  const HVX_Vector const23 = Q6_V_vsplat_R(23);
+  const HVX_Vector const127 = Q6_V_vsplat_R(127);
+  const HVX_Vector const0 = Q6_V_vzero();
+
+  // Extract the unbiased exponent.
+  HVX_Vector shift = Q6_V_vand_VV(val, exp_extract);
+
+  shift = Q6_Vw_vlsr_VwVw(shift, const23);
+  shift = Q6_Vw_vsub_VwVw(shift, const127);
+
+  HVX_VectorPred positive = Q6_Q_vcmp_gt_VwVw(val, const0);
+
+  // fractional values will be right-shifted out
+  // large exponents will become a left shift, by the appropriate amount
+  shift = Q6_Vw_vsub_VwVw(const23, shift);
+
+  // vlsr uses a signed 6-bit shift count. Clamp large right shifts so
+  // small inputs become zero instead of wrapping to a left shift.
+  // The significand has only 24 bits, so shifting by 31 is sufficient.
+  shift = Q6_Vw_vmin_VwVw(shift, Q6_V_vsplat_R(31));
+
+  HVX_Vector retval = Q6_V_vor_VV(the_one, Q6_V_vand_VV(val, mant_extract));
+  retval = Q6_Vw_vlsr_VwVw(retval, shift);
+
+  HVX_Vector negretval = Q6_Vw_vsub_VwVw(const0, retval);
+
+  return Q6_V_vmux_QVV(positive, retval, negretval);
+#endif
+}
 
 RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_sf_from_w(HVX_Vector val) {
-#if HEXAGON_ARCH_VERSION >= 73
+#if __HEXAGON_ARCH__ >= 73
   return Q6_Vsf_equals_Vw(val);
 #else
   const HVX_Vector sign_extract = Q6_V_vsplat_R(0x80000000);
@@ -57,7 +97,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_sf_from_w(HVX_Vector val) {
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_hf_from_h(HVX_Vector val) {
-#if HEXAGON_ARCH_VERSION >= 73
+#if __HEXAGON_ARCH__ >= 73
   return Q6_Vhf_equals_Vh(val);
 #else
   const HVX_Vector sign_extract = Q6_Vh_vsplat_R(0x8000);
@@ -99,7 +139,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_hf_from_h(HVX_Vector val) {
 
 // valid below 2^15
 RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_h_from_hf(HVX_Vector val) {
-#if HEXAGON_ARCH_VERSION >= 73
+#if __HEXAGON_ARCH__ >= 73
   return Q6_Vh_equals_Vhf(val);
 #else
   const HVX_Vector exp_extract = Q6_Vh_vsplat_R(0x7c00);
@@ -133,49 +173,12 @@ RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_h_from_hf(HVX_Vector val) {
 #endif
 }
 
-// valid below 2^31
-RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_w_from_sf(HVX_Vector val) {
-#if HEXAGON_ARCH_VERSION >= 73
-  return Q6_Vw_equals_Vsf(val);
-#else
-  const HVX_Vector exp_extract = Q6_V_vsplat_R(0x7f800000);
-  const HVX_Vector mant_extract = Q6_V_vsplat_R(0x7fffff);
-  const HVX_Vector the_one = Q6_V_vsplat_R(0x1 << 23);
-
-  const HVX_Vector const23 = Q6_V_vsplat_R(23);
-  const HVX_Vector const127 = Q6_V_vsplat_R(127);
-  const HVX_Vector const0 = Q6_V_vzero();
-
-  // we will shift the mantissa mask by the exponent,
-  // clamped between 0 and 23;
-  // if the exponenet was < 0, we turn val into 0
-  HVX_Vector shift = Q6_V_vand_VV(val, exp_extract);
-
-  shift = Q6_Vw_vlsr_VwVw(shift, const23);
-  shift = Q6_Vw_vsub_VwVw(shift, const127);
-
-  HVX_VectorPred positive = Q6_Q_vcmp_gt_VwVw(val, const0);
-
-  // fractional values will be right-shifted out
-  // large exponents will become a left shift, by the appropriate amount
-  shift = Q6_Vw_vsub_VwVw(const23, shift);
-
-  HVX_Vector retval = Q6_V_vor_VV(the_one, Q6_V_vand_VV(val, mant_extract));
-  retval = Q6_Vw_vlsr_VwVw(retval, shift);
-
-  HVX_Vector negretval = Q6_Vw_vsub_VwVw(const0, retval);
-
-  return Q6_V_vmux_QVV(positive, retval, negretval);
-#endif
-}
-
 //===------------------------------------------------------------------------===
 //===------------------------------------------------------------------------===
 
-template <bool unsafe = false>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_trunc_f32(HVX_Vector val) {
-#if HEXAGON_ARCH_VERSION >= 73
-  if constexpr (unsafe) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_trunc_f32(HVX_Vector val, bool unsafe) {
+#if __HEXAGON_ARCH__ >= 73
+  if (unsafe) {
     return Q6_Vsf_equals_Vw(Q6_Vw_equals_Vsf(val));
   } else {
     // this is necessary for correct trunc above 2^31
@@ -217,10 +220,9 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_trunc_f32(HVX_Vector val) {
 #endif
 }
 
-template <bool unsafe = false>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_trunc_f16(HVX_Vector val) {
-#if HEXAGON_ARCH_VERSION >= 73
-  if constexpr (unsafe) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_trunc_f16(HVX_Vector val, bool unsafe) {
+#if __HEXAGON_ARCH__ >= 73
+  if (unsafe) {
     return Q6_Vhf_equals_Vh(Q6_Vh_equals_Vhf(val));
   } else {
     // this is necessary for correct trunc above 2^15
@@ -277,7 +279,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_round_f32(HVX_Vector val) {
   HVX_Vector correct_half = Q6_V_vor_VV(sign, half_sf);
 
   val = _ripple_internal_Vsf_vadd_VsfVsf(val, correct_half);
-  return ripple_trunc_f32(val);
+  return ripple_trunc_f32(val, false);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector ripple_round_f16(HVX_Vector val) {
@@ -292,7 +294,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_round_f16(HVX_Vector val) {
   HVX_Vector correct_half = Q6_V_vor_VV(sign, half_hf);
 
   val = _ripple_internal_Vhf_vadd_VhfVhf(val, correct_half);
-  return ripple_trunc_f16(val);
+  return ripple_trunc_f16(val, false);
 }
 
 //===------------------------------------------------------------------------===
@@ -306,7 +308,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_floor_f32(HVX_Vector val) {
   // fix a bug at -0.0f
   val = _ripple_internal_Vsf_vadd_VsfVsf(val, Q6_V_vzero());
 
-  HVX_Vector trunc = ripple_trunc_f32(val);
+  HVX_Vector trunc = ripple_trunc_f32(val, false);
 
   HVX_Vector sign = Q6_V_vand_VV(val, sign_extract);
   // trunc rounds positives down and negatives up
@@ -329,7 +331,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_floor_f16(HVX_Vector val) {
   // fix a bug at -0.0h
   val = _ripple_internal_Vhf_vadd_VhfVhf(val, Q6_V_vzero());
 
-  HVX_Vector trunc = ripple_trunc_f16(val);
+  HVX_Vector trunc = ripple_trunc_f16(val, false);
 
   HVX_Vector sign = Q6_V_vand_VV(val, sign_extract);
   // trunc rounds positives down and negatives up
@@ -352,7 +354,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_ceil_f32(HVX_Vector val) {
 
   const HVX_Vector sign_extract = Q6_V_vsplat_R(0x80000000);
 
-  HVX_Vector trunc = ripple_trunc_f32(val);
+  HVX_Vector trunc = ripple_trunc_f32(val, false);
 
   HVX_Vector sign = Q6_V_vand_VV(val, sign_extract);
   // trunc rounds positives down and negatives up
@@ -372,7 +374,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_ceil_f16(HVX_Vector val) {
 
   const HVX_Vector sign_extract = Q6_Vh_vsplat_R(0x8000);
 
-  HVX_Vector trunc = ripple_trunc_f16(val);
+  HVX_Vector trunc = ripple_trunc_f16(val, false);
 
   HVX_Vector sign = Q6_V_vand_VV(val, sign_extract);
   // trunc rounds positives down and negatives up

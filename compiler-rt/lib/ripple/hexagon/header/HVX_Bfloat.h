@@ -13,6 +13,7 @@
 #include <hexagon_protos.h>
 #include <ripple.h>
 #include <ripple_hvx.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #if __has_bf16__

@@ -24,7 +24,6 @@
 // CHECK: define
 
 #include "../ripple_test.h"
-#include <ripple_math.h>
 
 #define N 400
 
@@ -45,14 +44,14 @@ void run(void) {
         ripple_block_t BS = ripple_set_block_shape(0, CHUNK);
         ripple_parallel(BS, 0);
         for (int i = base; i < base + CHUNK; i++) {
-            pRES[i] = acosf(pA[i]);
+            pRES[i] = __builtin_ripple_acosf(pA[i]);
         }
     }
     if (REM > 0) {
         ripple_block_t BS = ripple_set_block_shape(0, REM);
         ripple_parallel(BS, 0);
         for (int i = N - REM; i < N; i++) {
-            pRES[i] = acosf(pA[i]);
+            pRES[i] = __builtin_ripple_acosf(pA[i]);
         }
     }
     #undef CHUNK
