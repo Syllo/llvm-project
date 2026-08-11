@@ -1,8 +1,8 @@
+// UNSUPPORTED: cui
 // REQUIRES: hexagon-registered-target
 // RUN: %clang -ffreestanding -S --target=hexagon -mhvx -mv81 -mhvx-length=128B -O2 -fenable-ripple -mllvm -ripple-pad-to-target-simd -emit-llvm %s -o - 2>&1 | FileCheck %s
 
 #include "../ripple_test.h"
-#include <ripple_math.h>
 
 void foo(size_t N, const float a[N], const float b[N], float apb[N]) {
   ripple_block_t BS = ripple_set_block_shape(0, 3);
@@ -29,7 +29,7 @@ void foo_0(size_t N, const float a[N], const float b[N], float apb[N]) {
 void foo_1(const float x[33], float y[33]) {
   ripple_block_t BS = ripple_set_block_shape(0, 33);
   size_t v0 = ripple_id(BS, 0);
-  y[v0] = sinf(x[v0]);
+  y[v0] = __builtin_ripple_sinf(x[v0]);
 }
 // CHECK: foo_1
 // CHECK: llvm.masked.load.v64f32

@@ -6,7 +6,6 @@
 #include "ripple_test.h"
 
 #include <ripple.h>
-#include <ripple_math.h>
 // HVX_VectorPair RT library declarations, inlined so this frontend test does
 // not depend on the compiler-rt headers or the Hexagon SDK.
 #ifndef RIPPLE_VECTOR_CANDIDATE

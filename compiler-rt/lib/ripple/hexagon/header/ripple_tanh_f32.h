@@ -12,14 +12,13 @@
 //===------------------------------------------------------------------------===
 
 #include "__ripple_func_attribs.h"
-#include "ripple_qhmath_hvx.h"
 #include <hexagon_types.h>
 
 #include "ripple_div_f32_f16_hvx.h"
 #include "ripple_internal_utils_hvx.h"
 #include "ripple_trunc_round_f32_f16.h"
 
-// NaN and Inf go to 1, -Inf goes to -1
+// NaN propagates; +Inf goes to 1 and -Inf goes to -1.
 // Rational approximation
 // continuous function
 // continuous first derivative
@@ -30,9 +29,13 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_tanh_f32_hvx(HVX_Vector input) {
   // 7.8522667885e+00f
   const HVX_Vector domain_max = Q6_V_vsplat_R(0x40fb45c5);
   const HVX_Vector sign_mask = Q6_V_vsplat_R(0x80000000);
+  const HVX_Vector abs_mask = Q6_V_vsplat_R(0x7fffffff);
+  const HVX_Vector pos_inf = Q6_V_vsplat_R(0x7f800000);
 
+  HVX_Vector original_input = input;
   HVX_Vector sign_bit = Q6_V_vand_VV(input, sign_mask);
-  input = Q6_V_vand_VV(input, Q6_V_vnot_V(sign_mask));
+  input = Q6_V_vand_VV(input, abs_mask);
+  HVX_VectorPred is_nan = Q6_Q_vcmp_gt_VuwVuw(input, pos_inf);
   input = Q6_Vw_vmin_VwVw(input, domain_max);
 
   const HVX_Vector const0 = Q6_V_vzero();
@@ -99,8 +102,9 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_tanh_f32_hvx(HVX_Vector input) {
   HVX_Vector num_sf = Q6_V_vor_VV(Q6_Vsf_equals_Vqf32(numerator), sign_bit);
   HVX_Vector den_sf = Q6_Vsf_equals_Vqf32(denominator);
 
-  // now call the best div func
-  return ripple_fp32_div_hvx(num_sf, den_sf);
+  // Preserve NaN payloads and signs from the original input lanes.
+  HVX_Vector result = ripple_fp32_div_hvx(num_sf, den_sf);
+  return Q6_V_vmux_QVV(is_nan, original_input, result);
 }
 
 #endif

@@ -12,9 +12,9 @@
 //===------------------------------------------------------------------------===
 
 #include "__ripple_func_attribs.h"
-#include "ripple_qhmath_hvx.h"
 #include "ripple_trunc_round_f32_f16.h"
 #include <hexagon_types.h>
+#include <stdbool.h>
 
 // assumes qf32 input val
 // produces qf32 output val
@@ -35,8 +35,8 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_log2_qf32_approximation(HVX_Vector val) {
   return Q6_Vqf32_vadd_Vqf32Vqf32(val, temp);
 }
 
-template <bool safe = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log2_f32(HVX_Vector val) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log2_f32(HVX_Vector val,
+                                                     bool safe) {
   const HVX_Vector exp_extract = Q6_V_vsplat_R(0x7F800000);
   const HVX_Vector mant_extract = Q6_V_vsplat_R(0x7FFFFF);
   const HVX_Vector mant_adjust = Q6_V_vsplat_R(127 << 23);
@@ -80,15 +80,14 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log2_f32(HVX_Vector val) {
   return val;
 }
 
-template <bool safe = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log_f32(HVX_Vector val) {
-  return _ripple_internal_Vsf_vmpy_VsfVsf(ripple_fast_log2_f32<safe>(val),
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log_f32(HVX_Vector val, bool safe) {
+  return _ripple_internal_Vsf_vmpy_VsfVsf(ripple_fast_log2_f32(val, safe),
                                           Q6_V_vsplat_R(0x3f317218));
 }
 
-template <bool safe = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log10_f32(HVX_Vector val) {
-  return _ripple_internal_Vsf_vmpy_VsfVsf(ripple_fast_log2_f32<safe>(val),
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log10_f32(HVX_Vector val,
+                                                      bool safe) {
+  return _ripple_internal_Vsf_vmpy_VsfVsf(ripple_fast_log2_f32(val, safe),
                                           Q6_V_vsplat_R(0x3e9a209b));
 }
 
@@ -99,10 +98,10 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_log_f16_promote(HVX_Vector x) {
   HVX_VectorPair qfx = Q6_Wqf32_vmpy_VhfVhf(x, const1);
 
   HVX_Vector hiRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_fast_log_f32<false>(Q6_Vsf_equals_Vqf32(Q6_V_hi_W(qfx))),
+      ripple_fast_log_f32(Q6_Vsf_equals_Vqf32(Q6_V_hi_W(qfx)), false),
       Q6_V_vzero());
   HVX_Vector loRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_fast_log_f32<false>(Q6_Vsf_equals_Vqf32(Q6_V_lo_W(qfx))),
+      ripple_fast_log_f32(Q6_Vsf_equals_Vqf32(Q6_V_lo_W(qfx)), false),
       Q6_V_vzero());
 
   HVX_VectorPair qfres = Q6_W_vdeal_VVR(hiRes, loRes, 0);
@@ -128,8 +127,8 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_log2_qf16_approximation(HVX_Vector val) {
   return Q6_Vqf16_vadd_Vqf16Vqf16(val, temp);
 }
 
-template <bool safe = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log2_f16(HVX_Vector val) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log2_f16(HVX_Vector val,
+                                                     bool safe) {
   const HVX_Vector exp_extract = Q6_Vh_vsplat_R(0x7c00);
   const HVX_Vector mant_extract = Q6_Vh_vsplat_R(0x3ff);
   const HVX_Vector mant_adjust = Q6_Vh_vsplat_R(15 << 10);
@@ -175,15 +174,14 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log2_f16(HVX_Vector val) {
   return val;
 }
 
-template <bool safe = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log_f16(HVX_Vector val) {
-  return _ripple_internal_Vhf_vmpy_VhfVhf(ripple_fast_log2_f16<safe>(val),
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log_f16(HVX_Vector val, bool safe) {
+  return _ripple_internal_Vhf_vmpy_VhfVhf(ripple_fast_log2_f16(val, safe),
                                           Q6_Vh_vsplat_R(0x398c));
 }
 
-template <bool safe = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log10_f16(HVX_Vector val) {
-  return _ripple_internal_Vhf_vmpy_VhfVhf(ripple_fast_log2_f16<safe>(val),
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log10_f16(HVX_Vector val,
+                                                      bool safe) {
+  return _ripple_internal_Vhf_vmpy_VhfVhf(ripple_fast_log2_f16(val, safe),
                                           Q6_Vh_vsplat_R(0x34d1));
 }
 

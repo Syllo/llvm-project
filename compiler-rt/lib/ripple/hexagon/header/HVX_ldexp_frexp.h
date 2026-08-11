@@ -12,10 +12,6 @@
 
 #pragma once
 
-#ifndef __cplusplus
-#error "HVX_ldexp_frexp.h requires C++"
-#endif
-
 #include "__ripple_func_attribs.h"
 #include <hexagon_protos.h>
 #include <ripple.h>
@@ -24,6 +20,15 @@
 
 #if defined(__HVX_LENGTH__) && __HVX_LENGTH__ != 128
 #error "HVX_ldexp_frexp.h requires -mhvx-length=128B"
+#endif
+
+// The vector conversion helpers are templates in C++ and macros in C.
+#ifdef __cplusplus
+#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec<N, T>((BS), (X))
+#define _VEC_TO_RIPPLE(N, T, BS, X) vec_to_ripple<N, T>((BS), (X))
+#else
+#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec(N, T, (BS), (X))
+#define _VEC_TO_RIPPLE(N, T, BS, X) vec_to_ripple(N, T, (BS), (X))
 #endif
 
 // {{{ frexp
@@ -69,11 +74,11 @@ RIPPLE_INTRIN_INLINE float __ripple_frexpf(float num, int32_t *exp) {
 RIPPLE_CANDIDATE_INLINE f32t32
 ripple_ret_t32f32_t32f32_t32ptr_frexpf(f32t32 vnum, i32t32 *vexp) {
   ripple_block_t BS = ripple_set_block_shape(0, 32);
-  float num = vec_to_ripple<32, float>(BS, vnum);
+  float num = _VEC_TO_RIPPLE(32, float, BS, vnum);
   int32_t exp = ripple_broadcast(BS, 0b1, 0);
   float fraction = __ripple_frexpf(num, &exp);
-  *vexp = ripple_to_vec<32, int32_t>(BS, exp);
-  return ripple_to_vec<32, float>(BS, fraction);
+  *vexp = _RIPPLE_TO_VEC(32, int32_t, BS, exp);
+  return _RIPPLE_TO_VEC(32, float, BS, fraction);
 }
 
 RIPPLE_INTRIN_INLINE _Float16 __ripple_frexpf16(_Float16 num, int16_t *exp) {
@@ -120,11 +125,11 @@ RIPPLE_INTRIN_INLINE _Float16 __ripple_frexpf16(_Float16 num, int16_t *exp) {
 RIPPLE_CANDIDATE_INLINE f16t64
 ripple_ret_t64f16_t64f16_t64ptr_frexpf16(f16t64 vnum, i32t64 *vexp) {
   ripple_block_t BS = ripple_set_block_shape(0, 64);
-  _Float16 num = vec_to_ripple<64, _Float16>(BS, vnum);
+  _Float16 num = _VEC_TO_RIPPLE(64, _Float16, BS, vnum);
   int16_t exp = ripple_broadcast(BS, 0b1, 0);
   _Float16 fraction = __ripple_frexpf16(num, &exp);
-  *vexp = ripple_to_vec<64, int32_t>(BS, static_cast<int32_t>(exp));
-  return ripple_to_vec<64, _Float16>(BS, fraction);
+  *vexp = _RIPPLE_TO_VEC(64, int32_t, BS, (int32_t)exp);
+  return _RIPPLE_TO_VEC(64, _Float16, BS, fraction);
 }
 
 // }}}
@@ -178,9 +183,9 @@ RIPPLE_INTRIN_INLINE float __ripple_ldexpf(float num, int32_t exp) {
 
 RIPPLE_CANDIDATE_INLINE f32t32 ripple_ew_pure_ldexpf(f32t32 vnum, i32t32 vexp) {
   ripple_block_t BS = ripple_set_block_shape(0, 32);
-  float num = vec_to_ripple<32, float>(BS, vnum);
-  int32_t exp = vec_to_ripple<32, int32_t>(BS, vexp);
-  return ripple_to_vec<32, float>(BS, __ripple_ldexpf(num, exp));
+  float num = _VEC_TO_RIPPLE(32, float, BS, vnum);
+  int32_t exp = _VEC_TO_RIPPLE(32, int32_t, BS, vexp);
+  return _RIPPLE_TO_VEC(32, float, BS, __ripple_ldexpf(num, exp));
 }
 
 RIPPLE_INTRIN_INLINE _Float16 __ripple_ldexpf16(_Float16 num, int16_t exp) {
@@ -233,10 +238,23 @@ RIPPLE_INTRIN_INLINE _Float16 __ripple_ldexpf16(_Float16 num, int16_t exp) {
 RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_ldexpf16(f16t64 vnum,
                                                        i32t64 vexp) {
   ripple_block_t BS = ripple_set_block_shape(0, 64);
-  _Float16 num = vec_to_ripple<64, _Float16>(BS, vnum);
+  _Float16 num = _VEC_TO_RIPPLE(64, _Float16, BS, vnum);
   i16t64 vexph = Q6_Vh_vpack_VwVw_sat(Q6_V_hi_W(vexp), Q6_V_lo_W(vexp));
-  int16_t exp = vec_to_ripple<64, int16_t>(BS, vexph);
-  return ripple_to_vec<64, _Float16>(BS, __ripple_ldexpf16(num, exp));
+  int16_t exp = _VEC_TO_RIPPLE(64, int16_t, BS, vexph);
+  return _RIPPLE_TO_VEC(64, _Float16, BS, __ripple_ldexpf16(num, exp));
+}
+
+RIPPLE_CANDIDATE_INLINE f32t32 ripple_ew_pure_scalbnf(f32t32 vnum,
+                                                      i32t32 vexp) {
+  return ripple_ew_pure_ldexpf(vnum, vexp);
+}
+
+RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_scalbnf16(f16t64 vnum,
+                                                        i32t64 vexp) {
+  return ripple_ew_pure_ldexpf16(vnum, vexp);
 }
 
 // }}}
+
+#undef _RIPPLE_TO_VEC
+#undef _VEC_TO_RIPPLE

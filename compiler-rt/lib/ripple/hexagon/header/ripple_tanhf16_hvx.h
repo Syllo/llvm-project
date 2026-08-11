@@ -13,8 +13,8 @@
 
 #include "__ripple_func_attribs.h"
 #include "ripple_internal_utils_hvx.h"
-#include "ripple_qhmath_hvx.h"
 #include <hexagon_types.h>
+#include <stdbool.h>
 
 // tanh table: map x2 -> tanh(x)
 // where x2 = (1-x1)^2,  x1 = min( 1, abs(x)/(16/3))
@@ -27,7 +27,7 @@
 // Ths is compensated for calculation of x2 by (~x1)^2 >> 16
 // .. where x1,x2 are both u16 (0...1.0 with 16 fractional bits); e.g
 // x1 = 0 => x2 = 0xfffe gives a zero result.
-alignas(128) const int16_t tanh_16_cubic_lookup[64] = {
+__attribute__((aligned(128))) static const int16_t tanh_16_cubic_lookup[64] = {
     -1125,  -58,    -742,   -117,   -1192,  -250,   -1725,  -475,
     -2424,  -837,   -3266,  -1392,  -4178,  -2214,  -5006,  -3385,
     -5405,  -4987,  -4952,  -7078,  -3158,  -9658,  262,    -12622,
@@ -40,11 +40,11 @@ alignas(128) const int16_t tanh_16_cubic_lookup[64] = {
 
 // iS_TANH flag can be useful for other ops, like swish
 //   -- if 'false', the function computes 0.5 + 0.5*tanh instead of tanh
-template <bool IS_TANH>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_tanhf16_hvx(HVX_Vector xval) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_tanhf16_hvx(HVX_Vector xval,
+                                                   bool IS_TANH) {
   // first, remove the sign
   HVX_VectorPred qsign = Q6_Q_vcmp_gt_VhVh(Q6_V_vzero(), xval);
-  if constexpr (!IS_TANH) {
+  if (!IS_TANH) {
     xval = _ripple_internal_Vhf_vmpy_VhfVhf(
         xval, Q6_Vh_vsplat_R(0x3800)); // input*0.5
   }
@@ -142,7 +142,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_tanhf16_hvx(HVX_Vector xval) {
   // and put sign in
   final_tanh = Q6_V_vandor_VQR(final_tanh, qsign, 0x80008000);
 
-  if constexpr (!IS_TANH) {
+  if (!IS_TANH) {
     // 0.5*tanh + 0.5
     final_tanh = Q6_Vhf_equals_Vqf16(Q6_Vqf16_vmpy_Vqf16Vhf(
         Q6_Vqf16_vadd_VhfVhf(final_tanh, Q6_Vh_vsplat_R(0x3C00)),

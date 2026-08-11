@@ -13,14 +13,14 @@
 
 #include "__ripple_func_attribs.h"
 #include "ripple_internal_utils_hvx.h"
-#include "ripple_qhmath_hvx.h"
 #include <hexagon_types.h>
+#include <stdbool.h>
 
-// safe = handles subnormals (off by default; it roughly triples runtime)
+// safe = handles subnormals (roughly triples runtime)
 // full = 2 runs of Newton's method instead of 1
 
-template <bool safe = true, bool full = false>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_rsqrt_f32(HVX_Vector val) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_rsqrt_f32(HVX_Vector val, bool safe,
+                                                 bool full) {
   const HVX_Vector exp_extract = Q6_V_vsplat_R(0x7F800000);
 
   const HVX_Vector const0 = Q6_V_vzero();
@@ -75,8 +75,8 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_rsqrt_f32(HVX_Vector val) {
 }
 
 // just like rsqrt, but we multiply by the original value at the end.
-template <bool safe = true, bool full = false>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_sqrt_f32(HVX_Vector x) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_sqrt_f32(HVX_Vector x, bool safe,
+                                                bool full) {
   const HVX_Vector exp_extract = Q6_V_vsplat_R(0x7F800000);
 
   const HVX_Vector const0 = Q6_V_vzero();
@@ -147,10 +147,10 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_rsqrt_f16_promote(HVX_Vector x) {
   HVX_VectorPair qfx = Q6_Wqf32_vmpy_VhfVhf(x, const1);
 
   HVX_Vector hiRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_rsqrt_f32<false>(Q6_Vsf_equals_Vqf32(Q6_V_hi_W(qfx))),
+      ripple_rsqrt_f32(Q6_Vsf_equals_Vqf32(Q6_V_hi_W(qfx)), false, false),
       Q6_V_vzero());
   HVX_Vector loRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_rsqrt_f32<false>(Q6_Vsf_equals_Vqf32(Q6_V_lo_W(qfx))),
+      ripple_rsqrt_f32(Q6_Vsf_equals_Vqf32(Q6_V_lo_W(qfx)), false, false),
       Q6_V_vzero());
 
   HVX_VectorPair qfres = Q6_W_vdeal_VVR(hiRes, loRes, 0);
@@ -158,8 +158,8 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_rsqrt_f16_promote(HVX_Vector x) {
   return res;
 }
 
-template <bool safe = true, bool full = false>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_rsqrt_f16(HVX_Vector val) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_rsqrt_f16(HVX_Vector val, bool safe,
+                                                 bool full) {
   const HVX_Vector exp_extract = Q6_Vh_vsplat_R(0x7c00);
 
   const HVX_Vector const0 = Q6_V_vzero();
@@ -223,10 +223,10 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_sqrt_f16_promote(HVX_Vector x) {
   HVX_VectorPair qfx = Q6_Wqf32_vmpy_VhfVhf(x, const1);
 
   HVX_Vector hiRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_sqrt_f32<false>(Q6_Vsf_equals_Vqf32(Q6_V_hi_W(qfx))),
+      ripple_sqrt_f32(Q6_Vsf_equals_Vqf32(Q6_V_hi_W(qfx)), false, false),
       Q6_V_vzero());
   HVX_Vector loRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_sqrt_f32<false>(Q6_Vsf_equals_Vqf32(Q6_V_lo_W(qfx))),
+      ripple_sqrt_f32(Q6_Vsf_equals_Vqf32(Q6_V_lo_W(qfx)), false, false),
       Q6_V_vzero());
 
   HVX_VectorPair qfres = Q6_W_vdeal_VVR(hiRes, loRes, 0);
@@ -235,8 +235,8 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_sqrt_f16_promote(HVX_Vector x) {
 }
 
 // just like rsqrt, but we multiply by the input at the end
-template <bool safe = true, bool full = false>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_sqrt_f16(HVX_Vector x) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_sqrt_f16(HVX_Vector x, bool safe,
+                                                bool full) {
   const HVX_Vector exp_extract = Q6_Vh_vsplat_R(0x7c00);
 
   const HVX_Vector const0 = Q6_V_vzero();

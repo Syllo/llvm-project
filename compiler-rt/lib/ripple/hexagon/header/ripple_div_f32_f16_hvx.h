@@ -13,13 +13,13 @@
 
 #include "__ripple_func_attribs.h"
 #include "ripple_internal_utils_hvx.h"
-#include "ripple_qhmath_hvx.h"
 #include <hexagon_types.h>
+#include <stdbool.h>
 
 //===------------------------------------------------------------------------===
 // This header defines several internal implementations of vector div
-// All functions are templated: you can choose to compile the overflow-handling
-// code (safe=true) or not.
+// The boolean arguments select overflow handling and approximation variants.
+// Callers pass constants so unused paths are removed after inlining.
 //
 // As a rule, the overflow-handling code makes the function twice as slow.
 //===------------------------------------------------------------------------===
@@ -43,9 +43,8 @@ struct ripple_internal_subnormal_preprocess_results {
 } // namespace
 #endif
 
-template <bool force_exp = true>
-RIPPLE_INTRIN_INLINE ripple_internal_frexp_abs_results
-ripple_frexp_abs_fp32_hvx(HVX_Vector vin) {
+RIPPLE_INTRIN_INLINE struct ripple_internal_frexp_abs_results
+ripple_frexp_abs_fp32_hvx(HVX_Vector vin, bool force_exp) {
   // Perform the frexp operation and extract the sign
   // Return a vector of mantissas in range [0.5, 1.0)
   // And a vector of the original exponents
@@ -61,16 +60,16 @@ ripple_frexp_abs_fp32_hvx(HVX_Vector vin) {
   HVX_Vector exp = Q6_V_vand_VV(exp_extract, vin);
   HVX_Vector norm = Q6_V_vand_VV(mant_extract, vin);
   HVX_Vector sign = Q6_V_vand_VV(sign_extract, vin);
-  if constexpr (force_exp)
+  if (force_exp)
     norm = Q6_V_vor_VV(norm, fixed_exp);
   exp = Q6_Vuw_vlsr_VuwR(exp, 23); // shift exp to the low bits
-  return {norm, exp, sign};
+  struct ripple_internal_frexp_abs_results result = {norm, exp, sign};
+  return result;
 }
 
 // alwasy use three_newton to avoid strange behavior
-template <bool three_newton = true>
 RIPPLE_INTRIN_INLINE HVX_Vector
-ripple_compute_recip_approx_fp32(HVX_Vector vin) {
+ripple_compute_recip_approx_fp32(HVX_Vector vin, bool three_newton) {
   const HVX_Vector lin_offset =
       Q6_V_vsplat_R(0x4034B4B5); // ~48/17 in IEEE FP32
   const HVX_Vector lin_scale =
@@ -94,7 +93,7 @@ ripple_compute_recip_approx_fp32(HVX_Vector vin) {
       Q6_Vqf32_vmpy_Vqf32Vqf32(step0, neg_vin_qf); // compute -DX1
   step1 = Q6_Vqf32_vadd_Vqf32Vsf(step1, v2);
   step1 = Q6_Vqf32_vmpy_Vqf32Vqf32(step1, step0);
-  if constexpr (three_newton) {
+  if (three_newton) {
     // Third iter
     HVX_Vector step2 = Q6_Vqf32_vmpy_Vqf32Vqf32(step1, neg_vin_qf);
     step2 = Q6_Vqf32_vadd_Vqf32Vsf(step2, v2);
@@ -105,7 +104,7 @@ ripple_compute_recip_approx_fp32(HVX_Vector vin) {
   }
 }
 
-RIPPLE_INTRIN_INLINE ripple_internal_subnormal_preprocess_results
+RIPPLE_INTRIN_INLINE struct ripple_internal_subnormal_preprocess_results
 ripple_preprocess_subnormals_hvx_fp32(HVX_Vector vin) {
   const HVX_Vector subnormal_detect = Q6_V_vsplat_R(0x7F000000);
   HVX_Vector vin_subnormal = Q6_V_vand_VV(subnormal_detect, vin);
@@ -113,7 +112,9 @@ ripple_preprocess_subnormals_hvx_fp32(HVX_Vector vin) {
   const HVX_Vector subnormal_adj = Q6_V_vsplat_R(0x4B000000); // 2^23
   HVX_Vector adj = _ripple_internal_Vsf_vmpy_VsfVsf(vin, subnormal_adj);
   HVX_Vector res = Q6_V_vmux_QVV(is_subnormal, adj, vin);
-  return {is_subnormal, res};
+  struct ripple_internal_subnormal_preprocess_results result = {is_subnormal,
+                                                                res};
+  return result;
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector ripple_fp32_div_hvx(HVX_Vector numerator,
@@ -127,16 +128,29 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_fp32_div_hvx(HVX_Vector numerator,
   const HVX_Vector subnormalThreshold = Q6_V_vsplat_R(-126);
   const HVX_Vector hiddenBit = Q6_V_vsplat_R(0x800000);
   // detect subnormal in denominator
-  auto [denominator_subnormal, adjustedDenominator] =
-      ripple_preprocess_subnormals_hvx_fp32(denominator);
+  struct ripple_internal_subnormal_preprocess_results
+      denom_preprocessed =
+          ripple_preprocess_subnormals_hvx_fp32(denominator);
+  HVX_VectorPred denominator_subnormal =
+      denom_preprocessed.is_subnormal;
+  HVX_Vector adjustedDenominator = denom_preprocessed.adjusted;
   // detect subnormal in numerator
-  auto [numerator_subnormal, adjustedNumerator] =
-      ripple_preprocess_subnormals_hvx_fp32(numerator);
+  struct ripple_internal_subnormal_preprocess_results
+      numer_preprocessed =
+          ripple_preprocess_subnormals_hvx_fp32(numerator);
+  HVX_VectorPred numerator_subnormal = numer_preprocessed.is_subnormal;
+  HVX_Vector adjustedNumerator = numer_preprocessed.adjusted;
   // Perform frexp and return the abs value + sign
-  auto [normalizedDenominator, denomExp, denomSign] =
-      ripple_frexp_abs_fp32_hvx(adjustedDenominator);
-  auto [normalizedNumerator, numerExp, numerSign] =
-      ripple_frexp_abs_fp32_hvx(adjustedNumerator);
+  struct ripple_internal_frexp_abs_results denom_parts =
+      ripple_frexp_abs_fp32_hvx(adjustedDenominator, true);
+  HVX_Vector normalizedDenominator = denom_parts.norm;
+  HVX_Vector denomExp = denom_parts.exp;
+  HVX_Vector denomSign = denom_parts.sign;
+  struct ripple_internal_frexp_abs_results numer_parts =
+      ripple_frexp_abs_fp32_hvx(adjustedNumerator, true);
+  HVX_Vector normalizedNumerator = numer_parts.norm;
+  HVX_Vector numerExp = numer_parts.exp;
+  HVX_Vector numerSign = numer_parts.sign;
 
   // Unbias the exponents
   denomExp = Q6_Vw_vsub_VwVw(denomExp, exp_bias);
@@ -151,14 +165,15 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_fp32_div_hvx(HVX_Vector numerator,
       expSum, Q6_V_vmux_QVV(numerator_subnormal, subnormalExp, Q6_V_vzero()));
 
   HVX_Vector resSign = Q6_V_vxor_VV(numerSign, denomSign);
-  HVX_Vector recip = ripple_compute_recip_approx_fp32(normalizedDenominator);
+  HVX_Vector recip =
+      ripple_compute_recip_approx_fp32(normalizedDenominator, true);
   HVX_Vector normalizedRes =
       _ripple_internal_Vsf_vmpy_VsfVsf(normalizedNumerator, recip);
-  // Extract mant, exp from the result
-  // We won't actually need the sign because it is guaranteed to always be 0 but
-  // oh well
-  auto [resMant, resExp, resSignUnused] =
-      ripple_frexp_abs_fp32_hvx<false>(normalizedRes);
+  // Extract the mantissa and exponent; the normalized result's sign is unused.
+  struct ripple_internal_frexp_abs_results result_parts =
+      ripple_frexp_abs_fp32_hvx(normalizedRes, false);
+  HVX_Vector resMant = result_parts.norm;
+  HVX_Vector resExp = result_parts.exp;
   expSum = Q6_Vw_vsub_VwVw(expSum, exp_bias);
   expSum = Q6_Vw_vadd_VwVw(expSum, resExp);
 
@@ -198,9 +213,8 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_recip_fp32_div_hvx(HVX_Vector vin) {
 //===------------------------------------------------------------------------===
 //===------------------------------------------------------------------------===
 
-template <bool force_exp = true>
-RIPPLE_INTRIN_INLINE ripple_internal_frexp_abs_results
-ripple_frexp_abs_fp16_hvx(HVX_Vector vin) {
+RIPPLE_INTRIN_INLINE struct ripple_internal_frexp_abs_results
+ripple_frexp_abs_fp16_hvx(HVX_Vector vin, bool force_exp) {
   // Perform the frexp operation and extract the sign
   // Return a vector of mantissas in range [0.5, 1.0)
   // And a vector of the original exponents
@@ -218,16 +232,16 @@ ripple_frexp_abs_fp16_hvx(HVX_Vector vin) {
   HVX_Vector exp = Q6_V_vand_VV(exp_extract, vin);
   HVX_Vector norm = Q6_V_vand_VV(mant_extract, vin);
   HVX_Vector sign = Q6_V_vand_VV(sign_extract, vin);
-  if constexpr (force_exp)
+  if (force_exp)
     norm = Q6_V_vor_VV(norm, fixed_exp);
   exp = Q6_Vuh_vlsr_VuhR(exp, 10); // shift exp to the low bits
-  return {norm, exp, sign};
+  struct ripple_internal_frexp_abs_results result = {norm, exp, sign};
+  return result;
 }
 
 // experiments show three_newton actually reduces accuracy for f16
-template <bool three_newton = false>
 RIPPLE_INTRIN_INLINE HVX_Vector
-ripple_compute_recip_approx_fp16(HVX_Vector vin) {
+ripple_compute_recip_approx_fp16(HVX_Vector vin, bool three_newton) {
   const HVX_Vector lin_offset =
       Q6_V_vsplat_R(0x41A641A6); // ~48/17 in IEEE FP16
   const HVX_Vector lin_scale =
@@ -251,7 +265,7 @@ ripple_compute_recip_approx_fp16(HVX_Vector vin) {
       Q6_Vqf16_vmpy_Vqf16Vqf16(step0, neg_vin_qf); // compute -DX1
   step1 = Q6_Vqf16_vadd_Vqf16Vhf(step1, v2);
   step1 = Q6_Vqf16_vmpy_Vqf16Vqf16(step1, step0);
-  if constexpr (three_newton) {
+  if (three_newton) {
     // Third iter; check if needed at atll
     HVX_Vector step2 = Q6_Vqf16_vmpy_Vqf16Vqf16(step1, neg_vin_qf);
     step2 = Q6_Vqf16_vadd_Vqf16Vhf(step2, v2);

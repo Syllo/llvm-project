@@ -1,9 +1,9 @@
+// UNSUPPORTED: cui
 // REQUIRES: hexagon-registered-target
 // RUN: %clang -g -S -fenable-ripple --target=hexagon -mhvx -mv81 -emit-llvm -mllvm -print-after=ripple %s -o - 2>&1 | FileCheck %s
 
 #include "ripple_test.h"
 #include "ripple_hvx_test_types.h"
-#include <ripple_math.h>
 
 // Keep this test independent of compiler-rt and the Hexagon SDK.  The Ripple
 // pass only needs these vector-candidate declarations to recognize divisions

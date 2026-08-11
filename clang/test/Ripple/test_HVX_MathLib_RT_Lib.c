@@ -247,24 +247,27 @@ DECLARE_MATH_INTRINSIC_VARIANT_UNARY(trunc, f16, f16t64, ew_pure_, )
 
 #undef DECLARE_MATH_INTRINSIC_VARIANT_UNARY
 #undef DECLARE_MATH_INTRINSIC_VARIANT_BINARY
-#include <ripple_math.h>
+// Declare the scalar functions alongside the candidates. Including
+// ripple_math.h here would also define the runtime candidates on Hexagon.
 
-#define gen_check_mathfn_replacement_unary(N, VEC, OP, LONGTYPE)               \
-  void check_HVX_##OP(const LONGTYPE x[N], LONGTYPE y[N]) {                    \
-    ripple_block_t BS = ripple_set_block_shape(0, VEC);                                             \
-    ripple_parallel(BS, 0);                                                     \
-    for (int i = 0; i < N; i++) {                                              \
-      y[i] = OP(x[i]);                                                 \
-    }                                                                          \
+#define gen_check_mathfn_replacement_unary(N, VEC, OP, LONGTYPE)              \
+  extern LONGTYPE OP(LONGTYPE);                                               \
+  void check_HVX_##OP(const LONGTYPE x[N], LONGTYPE y[N]) {                   \
+    ripple_block_t BS = ripple_set_block_shape(0, VEC);                       \
+    ripple_parallel(BS, 0);                                                   \
+    for (int i = 0; i < N; i++) {                                             \
+      y[i] = OP(x[i]);                                                        \
+    }                                                                         \
   }
 
-#define gen_check_mathfn_replacement_binary(N, VEC, OP, LONGTYPE)              \
-  void check_HVX_##OP(const LONGTYPE x1[N], LONGTYPE x2[N], LONGTYPE y[N]) {   \
-    ripple_block_t BS = ripple_set_block_shape(0, VEC);                                             \
-    ripple_parallel(BS, 0);                                                     \
-    for (int i = 0; i < N; i++) {                                              \
-      y[i] = OP(x1[i], x2[i]);                                                 \
-    }                                                                          \
+#define gen_check_mathfn_replacement_binary(N, VEC, OP, LONGTYPE)             \
+  extern LONGTYPE OP(LONGTYPE, LONGTYPE);                                     \
+  void check_HVX_##OP(const LONGTYPE x1[N], LONGTYPE x2[N], LONGTYPE y[N]) {  \
+    ripple_block_t BS = ripple_set_block_shape(0, VEC);                       \
+    ripple_parallel(BS, 0);                                                   \
+    for (int i = 0; i < N; i++) {                                             \
+      y[i] = OP(x1[i], x2[i]);                                                \
+    }                                                                         \
   }
 
 gen_check_mathfn_replacement_unary(32, 32, acosf, float);

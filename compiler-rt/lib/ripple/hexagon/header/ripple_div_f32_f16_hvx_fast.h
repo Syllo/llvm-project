@@ -12,24 +12,24 @@
 //===------------------------------------------------------------------------===
 
 #include "__ripple_func_attribs.h"
-#include "ripple_qhmath_hvx.h"
 #include <hexagon_types.h>
+#include <stdbool.h>
 
 // some utility functions are shared
 #include "ripple_div_f32_f16_hvx.h"
 
 //===------------------------------------------------------------------------===
 // This header defines several internal implementations of vector div
-// All functions are templated: you can choose to compile the overflow-handling
-// code (safe=true) or not.
+// The boolean arguments select overflow handling and approximation variants.
+// Callers pass constants so unused paths are removed after inlining.
 //
 // As a rule, the overflow-handling code makes the function twice as slow.
 //===------------------------------------------------------------------------===
 
 // if we promoted from fp16, we don't need to check all cases; the only special
 // case is 0.0f
-template <bool safe = true>
-RIPPLE_INTRIN_INLINE HVX_Vector ripple_recip_fp32_fast(HVX_Vector vin) {
+RIPPLE_INTRIN_INLINE HVX_Vector ripple_recip_fp32_fast(HVX_Vector vin,
+                                                       bool safe) {
   const HVX_Vector inf = Q6_V_vsplat_R(0x7F800000);
   const HVX_Vector const253 = Q6_V_vsplat_R(253);
   const HVX_Vector constNeg1 = Q6_V_vsplat_R(0xFFFFFFFF);
@@ -38,16 +38,20 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_recip_fp32_fast(HVX_Vector vin) {
   const HVX_Vector medSubnormal = Q6_V_vsplat_R(1 << 21);
   const HVX_Vector hiddenBit = Q6_V_vsplat_R(0x80000000);
 
-  auto [u, exp, sign] = ripple_frexp_abs_fp32_hvx(vin);
+  struct ripple_internal_frexp_abs_results u_parts =
+      ripple_frexp_abs_fp32_hvx(vin, true);
+  HVX_Vector u = u_parts.norm;
+  HVX_Vector exp = u_parts.exp;
+  HVX_Vector sign = u_parts.sign;
   // can let go of the 'sign' vectorPred register
   HVX_Vector resSign = Q6_V_vmux_QVV(sign, hiddenBit, Q6_V_vzero());
   // compute the reciprocal with exponent 0
-  u = ripple_compute_recip_approx_fp32<true>(u);
+  u = ripple_compute_recip_approx_fp32(u, true);
   // compute the new exponent; turn into a float
   exp = Q6_Vw_vsub_VwVw(const253, exp);
   // if exp is now == const25e, it was 0 before, so we're inverting a subnormal
   HVX_VectorPred return_inf, is_med_subnormal; // should compile out if !safe
-  if constexpr (safe) {
+  if (safe) {
     HVX_VectorPred input_subnormal = Q6_Q_vcmp_eq_VwVw(exp, const253);
     // if exp is now == -2 now, it was 255 before, so we're inveting inf. IEEE
     // says return an inf
@@ -66,7 +70,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_recip_fp32_fast(HVX_Vector vin) {
   exp = Q6_V_vmux_QVV(return_inf, inf, exp); // both safe and !safe computation
   // if output subnormal, don't go to 0, multiply with biggest subnormal value,
   // 2^-127 consider commenting this out; not super worth the computation
-  if constexpr (safe) {
+  if (safe) {
     HVX_VectorPred output_subnormal = Q6_Q_vcmp_eq_VwVw(exp, Q6_V_vzero());
     exp = Q6_V_vmux_QVV(output_subnormal, bigSubnormal, exp);
     // last special case, the med-subnormal
@@ -80,7 +84,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_recip_fp32_fast(HVX_Vector vin) {
 
 RIPPLE_INTRIN_INLINE HVX_Vector
 ripple_fp32_div_hvx_fast(HVX_Vector numerator, HVX_Vector denominator) {
-  HVX_Vector recip = ripple_recip_fp32_fast(denominator);
+  HVX_Vector recip = ripple_recip_fp32_fast(denominator, true);
   return _ripple_internal_Vsf_vmpy_VsfVsf(numerator, recip);
 }
 
@@ -92,10 +96,10 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_recip_fp16_promote_fast(HVX_Vector vin) {
   HVX_VectorPair qfx = Q6_Wqf32_vmpy_VhfVhf(vin, const1);
 
   HVX_Vector hiRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_recip_fp32_fast<false>(Q6_Vsf_equals_Vqf32(Q6_V_hi_W(qfx))),
+      ripple_recip_fp32_fast(Q6_Vsf_equals_Vqf32(Q6_V_hi_W(qfx)), false),
       Q6_V_vzero());
   HVX_Vector loRes = Q6_Vqf32_vadd_VsfVsf(
-      ripple_recip_fp32_fast<false>(Q6_Vsf_equals_Vqf32(Q6_V_lo_W(qfx))),
+      ripple_recip_fp32_fast(Q6_Vsf_equals_Vqf32(Q6_V_lo_W(qfx)), false),
       Q6_V_vzero());
 
   HVX_VectorPair qfres = Q6_W_vcombine_VV(hiRes, loRes);
@@ -118,11 +122,15 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_recip_fp16_fast(HVX_Vector vin) {
   const HVX_Vector medSubnormal = Q6_Vh_vsplat_R(1 << 8);
   const HVX_Vector hiddenBit = Q6_Vh_vsplat_R(0x8000);
 
-  auto [u, exp, sign] = ripple_frexp_abs_fp16_hvx(vin);
+  struct ripple_internal_frexp_abs_results u_parts =
+      ripple_frexp_abs_fp16_hvx(vin, true);
+  HVX_Vector u = u_parts.norm;
+  HVX_Vector exp = u_parts.exp;
+  HVX_Vector sign = u_parts.sign;
   // can let go of the 'sign' vectorPred register
   HVX_Vector resSign = Q6_V_vmux_QVV(sign, hiddenBit, Q6_V_vzero());
   // compute the reciprocal with exponent 0
-  u = ripple_compute_recip_approx_fp16<false>(u);
+  u = ripple_compute_recip_approx_fp16(u, false);
   // compute the new exponent; turn into a float
   exp = Q6_Vh_vsub_VhVh(const29, exp);
   // if exp is now == const29, it was 0 before, so we're inverting a subnormal

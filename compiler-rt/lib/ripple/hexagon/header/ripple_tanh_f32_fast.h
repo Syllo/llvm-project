@@ -12,13 +12,13 @@
 //===------------------------------------------------------------------------===
 
 #include "__ripple_func_attribs.h"
-#include "ripple_qhmath_hvx.h"
 #include <hexagon_types.h>
+#include <stdbool.h>
 
 #include "ripple_internal_utils_hvx.h"
 #include "ripple_trunc_round_f32_f16.h"
 
-alignas(sizeof(HVX_Vector)) static const
+__attribute__((aligned(sizeof(HVX_Vector)))) static const
     float tanh_f32_fast_AB_poly_lookup[32] = {
         // As
         1.0f, 0.9999996276700475f, 0.9998979561346906f, 0.998229439379031f,
@@ -34,7 +34,7 @@ alignas(sizeof(HVX_Vector)) static const
         4.5189672328718906e-05f, 1.0439931004926038e-05f,
         1.7855245659581867e-06f, 7.391710337298526e-07f};
 
-alignas(sizeof(HVX_Vector)) static const
+__attribute__((aligned(sizeof(HVX_Vector)))) static const
     float tanh_f32_fast_CD_poly_lookup[32] = {
         // Cs
         0.130685551185268f, 0.13237443491971135f, 0.12444561151756517f,
@@ -105,13 +105,13 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_tanh_f32_fast_hvx(HVX_Vector xval) {
   const HVX_Vector AB_table = *(HVX_Vector const *)tanh_f32_fast_AB_poly_lookup;
   const HVX_Vector CD_table = *(HVX_Vector const *)tanh_f32_fast_CD_poly_lookup;
   const HVX_Vector a = Q6_Vqf32_vadd_VsfVsf(
-      _ripple_internal_Vw_vlut16_VwVwR(inds, AB_table, 0), Q6_V_vzero());
+      _ripple_internal_Vw_vlut16_VwVwR(inds, AB_table, 0, false), Q6_V_vzero());
   const HVX_Vector b = Q6_Vqf32_vadd_VsfVsf(
-      _ripple_internal_Vw_vlut16_VwVwR(inds, AB_table, 1), Q6_V_vzero());
+      _ripple_internal_Vw_vlut16_VwVwR(inds, AB_table, 1, false), Q6_V_vzero());
   const HVX_Vector c = Q6_Vqf32_vadd_VsfVsf(
-      _ripple_internal_Vw_vlut16_VwVwR(inds, CD_table, 0), Q6_V_vzero());
+      _ripple_internal_Vw_vlut16_VwVwR(inds, CD_table, 0, false), Q6_V_vzero());
   const HVX_Vector d = Q6_Vqf32_vadd_VsfVsf(
-      _ripple_internal_Vw_vlut16_VwVwR(inds, CD_table, 1), Q6_V_vzero());
+      _ripple_internal_Vw_vlut16_VwVwR(inds, CD_table, 1, false), Q6_V_vzero());
 
   // result = offset + a*xval + b * xval^3 + c * xval^5 + d * xval^7
   // guaranteed to match value and first derivative at the boundaries of the

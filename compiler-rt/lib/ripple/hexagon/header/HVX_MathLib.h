@@ -9,10 +9,25 @@
 //===------------------------------------------------------------------------===
 
 #pragma once
+#include "HVX_Cbrtf.h"
+#include "HVX_Expf.h"
+#include "HVX_Logf.h"
+#include "HVX_MathTrig.h"
+#include "HVX_MathTrigfp16.h"
+#include "HVX_NearbyIntf.h"
+#include "HVX_Sqrtf.h"
+#include "HVX_asinf_acosf.h"
+#include "HVX_copysign.h"
+#include "HVX_fabs.h"
+#include "HVX_fdim.h"
+#include "HVX_fmaxfmin.h"
 #include "HVX_ldexp_frexp.h"
+#include "HVX_logbf.h"
+#include "HVX_nextafter.h"
 #include "__ripple_func_attribs.h"
 #include <hexagon_types.h>
 #include <ripple.h>
+#include <stdbool.h>
 
 #define RIPPLE_HVX_MATH_EXPAND(NAME) NAME
 
@@ -22,8 +37,8 @@
                                             TO_TYPE, LIBTAG, SUFFIX)           \
   ATTRIB FROM_TYPE ripple_##LIBTAG##INTRINSIC_NAME##FROM_SCALAR_TYPE##SUFFIX(  \
       FROM_TYPE input) {                                                       \
-    static_assert(sizeof(FROM_TYPE) == sizeof(TO_TYPE),                        \
-                  "Incompatible type sizes");                                  \
+    RIPPLE_STATIC_ASSERT(sizeof(FROM_TYPE) == sizeof(TO_TYPE),                 \
+                         "Incompatible type sizes");                           \
     TO_TYPE CAST_INP;                                                          \
     FROM_TYPE CAST_OUT;                                                        \
     __builtin_memcpy(&CAST_INP, &input, sizeof(FROM_TYPE));                    \
@@ -37,8 +52,8 @@
                                              TO_TYPE, LIBTAG, SUFFIX)          \
   ATTRIB FROM_TYPE ripple_##LIBTAG##INTRINSIC_NAME##FROM_SCALAR_TYPE##SUFFIX(  \
       FROM_TYPE input1, FROM_TYPE input2) {                                    \
-    static_assert(sizeof(FROM_TYPE) == sizeof(TO_TYPE),                        \
-                  "Incompatible type sizes");                                  \
+    RIPPLE_STATIC_ASSERT(sizeof(FROM_TYPE) == sizeof(TO_TYPE),                 \
+                         "Incompatible type sizes");                           \
     TO_TYPE CAST_INP1, CAST_INP2;                                              \
     FROM_TYPE CAST_OUT;                                                        \
     __builtin_memcpy(&CAST_INP1, &input1, sizeof(FROM_TYPE));                  \
@@ -62,8 +77,8 @@ typedef union {
                                             TO_TYPE, LIBTAG, SUFFIX)           \
   ATTRIB FROM_TYPE ripple_##LIBTAG##INTRINSIC_NAME##FROM_SCALAR_TYPE##SUFFIX(  \
       FROM_TYPE input) {                                                       \
-    static_assert(sizeof(FROM_TYPE) == sizeof(TO_TYPE),                        \
-                  "Incompatible type sizes");                                  \
+    RIPPLE_STATIC_ASSERT(sizeof(FROM_TYPE) == sizeof(TO_TYPE),                 \
+                         "Incompatible type sizes");                           \
     __RippleHVXMathLibCastUnion u;                                             \
     u.as_##FROM_TYPE = input;                                                  \
     TO_TYPE result = RIPPLE_HVX_MATH_EXPAND(                                   \
@@ -76,8 +91,8 @@ typedef union {
                                              TO_TYPE, LIBTAG, SUFFIX)          \
   ATTRIB FROM_TYPE ripple_##LIBTAG##INTRINSIC_NAME##FROM_SCALAR_TYPE##SUFFIX(  \
       FROM_TYPE input1, FROM_TYPE input2) {                                    \
-    static_assert(sizeof(FROM_TYPE) == sizeof(TO_TYPE),                        \
-                  "Incompatible type sizes");                                  \
+    RIPPLE_STATIC_ASSERT(sizeof(FROM_TYPE) == sizeof(TO_TYPE),                 \
+                         "Incompatible type sizes");                           \
     union {                                                                    \
       FROM_TYPE from;                                                          \
       TO_TYPE to;                                                              \
@@ -92,9 +107,7 @@ typedef union {
 #endif
 
 #include "ripple_asin_acos_f16.h"
-#include "ripple_asin_acos_f32.h"
 #include "ripple_atan_f16.h"
-#include "ripple_atan_f32.h"
 #include "ripple_div_f32_f16_hvx.h"
 #include "ripple_div_f32_f16_hvx_fast.h"
 #include "ripple_div_i32_i16.h"
@@ -103,7 +116,6 @@ typedef union {
 #include "ripple_internal_utils_hvx.h"
 #include "ripple_log_f32_f16_hvx.h"
 #include "ripple_pow_f32_f16_hvx.h"
-#include "ripple_qhmath_hvx.h"
 #include "ripple_sinh_cosh_f32_f16.h"
 #include "ripple_sqrt_f32_f16_hvx.h"
 #include "ripple_tanh_f32.h"
@@ -128,10 +140,13 @@ typedef union {
 extern "C" {
 #endif
 
+float sqrtf(float);
+float cbrtf(float);
 float sqrtf_safe(float);
 float sqrtf_fast(float);
 float sqrtf_fast_safe(float);
 
+_Float16 sqrtf16(_Float16);
 _Float16 sqrtf16_safe(_Float16);
 _Float16 sqrtf16_fast(_Float16);
 _Float16 sqrtf16_fast_safe(_Float16);
@@ -156,7 +171,47 @@ _Float16 hypotf16_safe(_Float16, _Float16);
 _Float16 hypotf16_fast(_Float16, _Float16);
 _Float16 hypotf16_fast_safe(_Float16, _Float16);
 
+float tanhf(float);
 float tanhf_fast(float);
+_Float16 tanhf16(_Float16);
+
+// Trigonometric functions.
+float sinf(float);
+_Float16 sinf16(_Float16);
+float cosf(float);
+_Float16 cosf16(_Float16);
+float tanf(float);
+_Float16 tanf16(_Float16);
+
+// Inverse trigonometric functions.
+float asinf(float);
+_Float16 asinf16(_Float16);
+float acosf(float);
+_Float16 acosf16(_Float16);
+float atanf(float);
+float atan2f(float, float);
+_Float16 atanf16(_Float16);
+
+// Hyperbolic functions.
+float sinhf(float);
+float coshf(float);
+
+// Rounding functions.
+float ceilf(float);
+_Float16 ceilf16(_Float16);
+float floorf(float);
+_Float16 floorf16(_Float16);
+float roundf(float);
+_Float16 roundf16(_Float16);
+float truncf(float);
+_Float16 truncf16(_Float16);
+
+// Power function.
+float powf(float, float);
+_Float16 powf16(_Float16, _Float16);
+
+float fmaf(float, float, float);
+_Float16 fmaf16(_Float16, _Float16, _Float16);
 
 // pass-through scalar versions for the additional vector versions of functions.
 // The exact meaning of "fast" and "UNSAFE" (for the vector version) are
@@ -164,13 +219,16 @@ float tanhf_fast(float);
 // only, mostly with no difference between the 'fast' and regular versions.
 
 float expf(float);
+float expm1f(float);
+float exp2f(float);
+float exp10f(float);
 
 // error on the scale of a factor of 1e-3
-// roughly 3x faster than exp_vf
+// roughly 3x faster than the precise f32 exp implementation
 float expf_fast(float x);
 
 // same precision as exp_vf_fast
-// roughly 6x faster than exp_vf
+// roughly 6x faster than the precise f32 exp implementation
 // DOES NOT OVERFLOW CORRECTLY: you are responsible for reasonable input!
 float expf_fast_UNSAFE(float x);
 
@@ -187,6 +245,7 @@ _Float16 expf16_fast(_Float16 x);
 _Float16 expf16_fast_UNSAFE(_Float16 x);
 
 float logf(float);
+float log1pf(float);
 
 // error on the scale of a factor of 7e-3
 // roughly 30% faster than log_vf
@@ -257,15 +316,15 @@ _Float16 recipf16(_Float16 x);
 _Float16 divf16_fast(_Float16 x, _Float16 y);
 _Float16 recipf16_fast(_Float16 x);
 
-int32_t divi(int32_t x, int32_t y);
-uint32_t divu(uint32_t x, uint32_t y);
-int32_t remi(int32_t x, int32_t y);
-uint32_t remu(uint32_t x, uint32_t y);
+int divi(int x, int y);
+unsigned int divu(unsigned int x, unsigned int y);
+int remi(int x, int y);
+unsigned int remu(unsigned int x, unsigned int y);
 
-int16_t divi16(int16_t x, int16_t y);
-uint16_t divu16(uint16_t x, uint16_t y);
-int16_t remi16(int16_t x, int16_t y);
-uint16_t remu16(uint16_t x, uint16_t y);
+short divi16(short x, short y);
+unsigned short divu16(unsigned short x, unsigned short y);
+short remi16(short x, short y);
+unsigned short remu16(unsigned short x, unsigned short y);
 
 _Float16 powf16_fast(_Float16, _Float16);
 
@@ -274,6 +333,8 @@ _Float16 cotf16_fast(_Float16);
 
 _Float16 ldexpf16(_Float16, int);
 float ldexpf(float, int);
+_Float16 scalbnf16(_Float16, int);
+float scalbnf(float, int);
 _Float16 frexpf16(_Float16, int *);
 float frexpf(float, int *);
 
@@ -284,14 +345,12 @@ float frexpf(float, int *);
 #if __has_bf16__
 #if __has_soft_bf16__
 #define wrap_spec_unary_bf16_mathfn(op)                                        \
-  __attribute__((always_inline)) RIPPLE_MAYBE_UNUSED static __bf16 op##bf16(   \
-      const __bf16 Val) {                                                      \
+  RIPPLE_INTRIN_INLINE __bf16 op##bf16(const __bf16 Val) {                     \
     return (__bf16)op##f((float)Val);                                          \
   }
 
 #define wrap_spec_binary_bf16_mathfn(op)                                       \
-  __attribute__((always_inline)) RIPPLE_MAYBE_UNUSED static __bf16 op##bf16(   \
-      const __bf16 X, const __bf16 Y) {                                        \
+  RIPPLE_INTRIN_INLINE __bf16 op##bf16(const __bf16 X, const __bf16 Y) {       \
     return (__bf16)op##f((float)(X), (float)(Y));                              \
   }
 
@@ -303,36 +362,174 @@ wrap_spec_unary_bf16_mathfn(rsqrt);
 #endif
 #endif
 
+// __________________ double / long double math functions ___________________
+//
+// Hexagon has long double == double, and this header otherwise only declares
+// float/_Float16 variants. Define always-inline wrappers around the
+// corresponding __builtin_ripple_* / __builtin_ripple_*l builtins so that
+// unsuffixed (sin, sqrt, ...) and 'l'-suffixed (sinl, sqrtl, ...) call sites
+// still surface a Ripple builtin call, matching what ripple_math.h's macros
+// used to provide.
+#define emulate_spec_unary_double_mathfn(op)                                   \
+  __attribute__((always_inline)) static inline double op(double Val) {         \
+    return __builtin_ripple_##op(Val);                                         \
+  }
+
+#define emulate_spec_binary_double_mathfn(op)                                  \
+  __attribute__((always_inline)) static inline double op(double X, double Y) { \
+    return __builtin_ripple_##op(X, Y);                                        \
+  }
+
+#define emulate_spec_unary_longdouble_mathfn(op)                               \
+  __attribute__((always_inline)) static inline long double op##l(              \
+      long double Val) {                                                       \
+    return __builtin_ripple_##op##l(Val);                                      \
+  }
+
+#define emulate_spec_binary_longdouble_mathfn(op)                              \
+  __attribute__((always_inline)) static inline long double op##l(              \
+      long double X, long double Y) {                                          \
+    return __builtin_ripple_##op##l(X, Y);                                     \
+  }
+
+// Only do this when <math.h> isn't available: when it is, it already
+// declares/defines these names (some libcs, e.g. hexagon's, give real bodies
+// to a subset of them), and our wrappers would collide with it
+// ("redefinition of 'cos'", "static declaration of 'sqrt' follows
+// non-static declaration", etc).
+#if !__has_include(<math.h>)
+emulate_spec_unary_double_mathfn(sqrt);
+emulate_spec_unary_longdouble_mathfn(sqrt);
+emulate_spec_unary_double_mathfn(asin);
+emulate_spec_unary_longdouble_mathfn(asin);
+emulate_spec_unary_double_mathfn(acos);
+emulate_spec_unary_longdouble_mathfn(acos);
+emulate_spec_unary_double_mathfn(atan);
+emulate_spec_unary_longdouble_mathfn(atan);
+emulate_spec_binary_double_mathfn(atan2);
+emulate_spec_binary_longdouble_mathfn(atan2);
+emulate_spec_unary_double_mathfn(sin);
+emulate_spec_unary_longdouble_mathfn(sin);
+emulate_spec_unary_double_mathfn(cos);
+emulate_spec_unary_longdouble_mathfn(cos);
+emulate_spec_unary_double_mathfn(tan);
+emulate_spec_unary_longdouble_mathfn(tan);
+emulate_spec_unary_double_mathfn(sinh);
+emulate_spec_unary_longdouble_mathfn(sinh);
+emulate_spec_unary_double_mathfn(cosh);
+emulate_spec_unary_longdouble_mathfn(cosh);
+emulate_spec_unary_double_mathfn(tanh);
+emulate_spec_unary_longdouble_mathfn(tanh);
+emulate_spec_binary_double_mathfn(pow);
+emulate_spec_binary_longdouble_mathfn(pow);
+emulate_spec_unary_double_mathfn(log);
+emulate_spec_unary_longdouble_mathfn(log);
+emulate_spec_unary_double_mathfn(log10);
+emulate_spec_unary_longdouble_mathfn(log10);
+emulate_spec_unary_double_mathfn(log2);
+emulate_spec_unary_longdouble_mathfn(log2);
+emulate_spec_unary_double_mathfn(exp);
+emulate_spec_unary_longdouble_mathfn(exp);
+emulate_spec_unary_double_mathfn(exp2);
+emulate_spec_unary_longdouble_mathfn(exp2);
+emulate_spec_unary_double_mathfn(exp10);
+emulate_spec_unary_longdouble_mathfn(exp10);
+emulate_spec_unary_double_mathfn(fabs);
+emulate_spec_unary_longdouble_mathfn(fabs);
+emulate_spec_binary_double_mathfn(copysign);
+emulate_spec_binary_longdouble_mathfn(copysign);
+emulate_spec_unary_double_mathfn(floor);
+emulate_spec_unary_longdouble_mathfn(floor);
+emulate_spec_unary_double_mathfn(ceil);
+emulate_spec_unary_longdouble_mathfn(ceil);
+emulate_spec_unary_double_mathfn(trunc);
+emulate_spec_unary_longdouble_mathfn(trunc);
+emulate_spec_unary_double_mathfn(rint);
+emulate_spec_unary_longdouble_mathfn(rint);
+emulate_spec_unary_double_mathfn(nearbyint);
+emulate_spec_unary_longdouble_mathfn(nearbyint);
+emulate_spec_unary_double_mathfn(round);
+emulate_spec_unary_longdouble_mathfn(round);
+emulate_spec_unary_double_mathfn(roundeven);
+emulate_spec_unary_longdouble_mathfn(roundeven);
+
+__attribute__((always_inline)) static inline double ldexp(double X, int Y) {
+  return __builtin_ripple_ldexp(X, Y);
+}
+__attribute__((always_inline)) static inline long double ldexpl(long double X,
+                                                                int Y) {
+  return __builtin_ripple_ldexpl(X, Y);
+}
+
+__attribute__((always_inline)) static inline double frexp(double X, int *Y) {
+  return __builtin_ripple_frexp(X, Y);
+}
+__attribute__((always_inline)) static inline long double frexpl(long double X,
+                                                                int *Y) {
+  return __builtin_ripple_frexpl(X, Y);
+}
+
+#undef emulate_spec_unary_double_mathfn
+#undef emulate_spec_binary_double_mathfn
+#undef emulate_spec_unary_longdouble_mathfn
+#undef emulate_spec_binary_longdouble_mathfn
+#endif // !__has_include(<math.h>)
+
+// _______________ float / _Float16 math functions (yet to be implemented) ____
+//
+// TODO: The HVX math library does not yet provide real implementations for
+// these float / _Float16 math functions. For now, emulate them with
+// always-inline wrappers around the corresponding __builtin_ripple_*f /
+// __builtin_ripple_*f16 builtins, mirroring the double/long double wrappers
+// above. Replace with proper HVX math library entry points when available.
+#define emulate_spec_unary_float_mathfn(op)                                    \
+  __attribute__((always_inline)) static inline float op##f(float Val) {        \
+    return __builtin_ripple_##op##f(Val);                                      \
+  }
+
+#define emulate_spec_binary_float_mathfn(op)                                   \
+  __attribute__((always_inline)) static inline float op##f(float X, float Y) { \
+    return __builtin_ripple_##op##f(X, Y);                                     \
+  }
+
+#define emulate_spec_unary_f16_mathfn(op)                                      \
+  __attribute__((always_inline)) static inline _Float16 op##f16(               \
+      _Float16 Val) {                                                          \
+    return __builtin_ripple_##op##f16(Val);                                    \
+  }
+
+#define emulate_spec_binary_f16_mathfn(op)                                     \
+  __attribute__((always_inline)) static inline _Float16 op##f16(_Float16 X,    \
+                                                                _Float16 Y) {  \
+    return __builtin_ripple_##op##f16(X, Y);                                   \
+  }
+
+emulate_spec_binary_f16_mathfn(atan2);
+emulate_spec_unary_f16_mathfn(exp2);
+emulate_spec_unary_f16_mathfn(exp10);
+emulate_spec_unary_f16_mathfn(roundeven);
+
+// Only do this when <math.h> isn't available: when it is, it already
+// declares/defines these names (some libcs, e.g. hexagon's, give real bodies
+// to a subset of them), and our wrappers would collide with it
+// ("redefinition of 'cos'", "static declaration of 'sqrt' follows
+// non-static declaration", etc).
+#if !__has_include(<math.h>)
+emulate_spec_unary_float_mathfn(roundeven);
+#endif // math.h
+
+#undef emulate_spec_unary_float_mathfn
+#undef emulate_spec_binary_float_mathfn
+#undef emulate_spec_unary_f16_mathfn
+#undef emulate_spec_binary_f16_mathfn
+
 // _________________ Module-local helper wrappers and vector-candidate
 // definitions ____
 //
-// The helpers (sin_vf, cos_vf, ...) are called by the
+// The helpers (sqrt_vf_safe, tanh_vf, ...) are called by the
 // DEFINE_MATH_INTRINSIC_VARIANT_* definitions below.  Both layers are
 // module-local so they are inlined into each TU that includes this header and
 // are not exported.
-
-/////////////////////////////////////////////////////////////////////////////
-// Cast vhf <-> vf
-RIPPLE_INTRIN_INLINE HVX_VectorPair vhf_to_vf_pair(HVX_Vector vin) {
-  HVX_Vector vqf16 = qhmath_hvx_vqf16_convert_vhf(vin);
-  HVX_VectorPair vqf32_p = qhmath_hvx_vqf32_convert_vqf16(vqf16);
-  HVX_Vector vqf32_l = Q6_V_lo_W(vqf32_p);
-  HVX_Vector vqf32_h = Q6_V_hi_W(vqf32_p);
-  HVX_Vector vf_l = qhmath_hvx_vsf_convert_vqf32(vqf32_l);
-  HVX_Vector vf_h = qhmath_hvx_vsf_convert_vqf32(vqf32_h);
-  HVX_VectorPair vf_p = Q6_W_vcombine_VV(vf_h, vf_l);
-  return (vf_p);
-}
-
-RIPPLE_INTRIN_INLINE HVX_Vector vf_pair_to_vhf(HVX_VectorPair vin_p) {
-  HVX_Vector vf_l = Q6_V_lo_W(vin_p);
-  HVX_Vector vf_h = Q6_V_hi_W(vin_p);
-  HVX_Vector vqf32_l = qhmath_hvx_vqf32_convert_vsf(vf_l);
-  HVX_Vector vqf32_h = qhmath_hvx_vqf32_convert_vsf(vf_h);
-  HVX_VectorPair vqf32_p = Q6_W_vcombine_VV(vqf32_h, vqf32_l);
-  HVX_Vector vhf = qhmath_hvx_vhf_convert_vqf32(vqf32_p);
-  return (vhf);
-}
 
 RIPPLE_INTRIN_INLINE HVX_VectorPred ripple_is_zero_vf(HVX_Vector vin) {
   // Matches +0 and -0 by masking the sign bit.
@@ -349,44 +546,9 @@ RIPPLE_INTRIN_INLINE HVX_VectorPred ripple_is_zero_vhf(HVX_Vector vin) {
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// Sine
-RIPPLE_INTRIN_INLINE HVX_Vector sin_vf(HVX_Vector vin) {
-  return qhmath_hvx_sin_vf(vin);
-}
-
-RIPPLE_INTRIN_INLINE HVX_Vector sin_vf16(HVX_Vector vin) {
-  return ripple_sinf16_hvx(vin);
-}
-
-/////////////////////////////////////////////////////////////////////////////
-// Cosine
-RIPPLE_INTRIN_INLINE HVX_Vector cos_vf(HVX_Vector vin) {
-  return qhmath_hvx_cos_vf(vin);
-}
-
-RIPPLE_INTRIN_INLINE HVX_Vector cos_vf16(HVX_Vector vin) {
-  return ripple_cosf16_hvx(vin);
-}
-
-/////////////////////////////////////////////////////////////////////////////
 // Tangent
-RIPPLE_INTRIN_INLINE HVX_Vector tan_vf(HVX_Vector vin) {
-  return qhmath_hvx_tan_vf(vin);
-}
-
-RIPPLE_INTRIN_INLINE HVX_Vector tan_vf16(HVX_Vector vin) {
-  HVX_VectorPair vf_p = vhf_to_vf_pair(vin);
-  HVX_Vector vf_l = Q6_V_lo_W(vf_p);
-  HVX_Vector vf_h = Q6_V_hi_W(vf_p);
-  HVX_Vector vout_l = qhmath_hvx_tan_vf(vf_l);
-  HVX_Vector vout_h = qhmath_hvx_tan_vf(vf_h);
-  HVX_VectorPair vout_p = Q6_W_vcombine_VV(vout_h, vout_l);
-  HVX_Vector vout = vf_pair_to_vhf(vout_p);
-  return vout;
-}
-
 RIPPLE_INTRIN_INLINE HVX_Vector tan_vf16_fast(HVX_Vector vin) {
-  return ripple_tanf16_hvx(vin);
+  return ripple_tanf16_hvx(vin, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector cot_vf16_fast(HVX_Vector vin) {
@@ -395,93 +557,62 @@ RIPPLE_INTRIN_INLINE HVX_Vector cot_vf16_fast(HVX_Vector vin) {
 
 /////////////////////////////////////////////////////////////////////////////
 // Inverse Tangent
-RIPPLE_INTRIN_INLINE HVX_Vector atan_vf(HVX_Vector vin) {
-  return ripple_atanf32_hvx(vin);
-}
-
 RIPPLE_INTRIN_INLINE HVX_Vector atan_vf16(HVX_Vector vin) {
   return ripple_atanf16_hvx(vin);
 }
 
 /////////////////////////////////////////////////////////////////////////////
 // Inverse Sine
-RIPPLE_INTRIN_INLINE HVX_Vector asin_vf(HVX_Vector vin) {
-  return ripple_asinf32_hvx(vin);
-}
-
 RIPPLE_INTRIN_INLINE HVX_Vector asin_vf16(HVX_Vector vin) {
   return ripple_asinf16_hvx(vin);
 }
 
 /////////////////////////////////////////////////////////////////////////////
 // Inverse Cosine
-RIPPLE_INTRIN_INLINE HVX_Vector acos_vf(HVX_Vector vin) {
-  return ripple_acosf32_hvx(vin);
-}
-
 RIPPLE_INTRIN_INLINE HVX_Vector acos_vf16(HVX_Vector vin) {
   return ripple_acosf16_hvx(vin);
 }
 
 /////////////////////////////////////////////////////////////////////////////
 // Exponential
-RIPPLE_INTRIN_INLINE HVX_Vector exp_vf(HVX_Vector vin) {
-  return qhmath_hvx_exp_vf(vin);
-}
-
 RIPPLE_INTRIN_INLINE HVX_Vector exp_vf_fast(HVX_Vector vin) {
-  return ripple_expf32_hvx_schraudolph<true>(vin);
+  return ripple_expf32_hvx_schraudolph(vin, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector exp_vf_fast_UNSAFE(HVX_Vector vin) {
-  return ripple_expf32_hvx_schraudolph<false>(vin);
+  return ripple_expf32_hvx_schraudolph(vin, false);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector exp_vf16(HVX_Vector vin) {
-  return ripple_expf16_hvx_promote<true>(vin);
+  return ripple_expf16_hvx_promote(vin, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector exp_vf16_fast(HVX_Vector vin) {
-  return ripple_expf16_hvx_schraudolph<true>(vin);
+  return ripple_expf16_hvx_schraudolph(vin, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector exp_vf16_fast_UNSAFE(HVX_Vector vin) {
-  return ripple_expf16_hvx_schraudolph<false>(vin);
+  return ripple_expf16_hvx_schraudolph(vin, false);
 }
 
 /////////////////////////////////////////////////////////////////////////////
 // Hyperbolic Cosine
-RIPPLE_INTRIN_INLINE HVX_Vector cosh_vf(HVX_Vector vin) {
-  HVX_Vector vout = ripple_coshf32_hvx(vin);
-#if __HEXAGON_ARCH__ < 79
-  // Older qhmath miscomputes cosh(+/-0); force the exact identity == 1.
-  const HVX_Vector const1 = Q6_V_vsplat_R(0x3f800000);
-  HVX_VectorPred is_zero = ripple_is_zero_vf(vin);
-  vout = Q6_V_vmux_QVV(is_zero, const1, vout);
-#endif
-  return vout;
-}
-
 RIPPLE_INTRIN_INLINE HVX_Vector cosh_vf16(HVX_Vector vin) {
-  return ripple_coshf16_hvx_promote(vin);
+  return ripple_coshf16_hvx_promote(vin, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector cosh_vf16_fast(HVX_Vector vin) {
-  return ripple_coshf16_hvx(vin);
+  return ripple_coshf16_hvx(vin, true);
 }
 
 /////////////////////////////////////////////////////////////////////////////
 // Hyperbolic Sine
-RIPPLE_INTRIN_INLINE HVX_Vector sinh_vf(HVX_Vector vin) {
-  return ripple_sinhf32_hvx(vin);
-}
-
 RIPPLE_INTRIN_INLINE HVX_Vector sinh_vf16(HVX_Vector vin) {
-  return ripple_sinhf16_hvx_promote(vin);
+  return ripple_sinhf16_hvx_promote(vin, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector sinh_vf16_fast(HVX_Vector vin) {
-  return ripple_sinhf16_hvx(vin);
+  return ripple_sinhf16_hvx(vin, true);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -495,46 +626,33 @@ RIPPLE_INTRIN_INLINE HVX_Vector tanh_vf_fast(HVX_Vector vin) {
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector tanh_vf16(HVX_Vector vin) {
-  return ripple_tanhf16_hvx<true>(vin);
+  return ripple_tanhf16_hvx(vin, true);
 }
 
 /////////////////////////////////////////////////////////////////////////////
 // Sqrt
-RIPPLE_INTRIN_INLINE HVX_Vector sqrt_vf(HVX_Vector vin) {
-  HVX_Vector vout = qhmath_hvx_sqrt_vf(vin);
-#if __HEXAGON_ARCH__ < 79
-  // Older qhmath miscomputes x={+/-0,1}; override the exact identities.
-  const HVX_Vector const1 = Q6_V_vsplat_R(0x3f800000);
-  HVX_VectorPred is_zero = ripple_is_zero_vf(vin);
-  HVX_VectorPred is_one = Q6_Q_vcmp_eq_VwVw(vin, const1);
-  vout = Q6_V_vmux_QVV(is_zero, vin, vout);
-  vout = Q6_V_vmux_QVV(is_one, const1, vout);
-#endif
-  return vout;
-}
-
 RIPPLE_INTRIN_INLINE HVX_Vector sqrt_vf_safe(HVX_Vector vin) {
-  return ripple_sqrt_f32<true, true>(vin);
+  return ripple_sqrt_f32(vin, true, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector sqrt_vf_fast(HVX_Vector vin) {
-  return ripple_sqrt_f32<false, false>(vin);
+  return ripple_sqrt_f32(vin, false, false);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector sqrt_vf_fast_safe(HVX_Vector vin) {
-  return ripple_sqrt_f32<true, false>(vin);
+  return ripple_sqrt_f32(vin, true, false);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector sqrt_vf16(HVX_Vector vin) {
-  return ripple_sqrt_f16<false, true>(vin);
+  return ripple_sqrt_f16(vin, false, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector sqrt_vf16_safe(HVX_Vector vin) {
-  return ripple_sqrt_f16<true, true>(vin);
+  return ripple_sqrt_f16(vin, true, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector sqrt_vf16_fast(HVX_Vector vin) {
-  return ripple_sqrt_f16<false, false>(vin);
+  return ripple_sqrt_f16(vin, false, false);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector sqrt_vf16_fast_safe(HVX_Vector vin) {
@@ -544,31 +662,31 @@ RIPPLE_INTRIN_INLINE HVX_Vector sqrt_vf16_fast_safe(HVX_Vector vin) {
 /////////////////////////////////////////////////////////////////////////////
 // Inverse Sqrt
 RIPPLE_INTRIN_INLINE HVX_Vector rsqrt_vf(HVX_Vector vin) {
-  return ripple_rsqrt_f32<false, true>(vin);
+  return ripple_rsqrt_f32(vin, false, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector rsqrt_vf_safe(HVX_Vector vin) {
-  return ripple_rsqrt_f32<true, true>(vin);
+  return ripple_rsqrt_f32(vin, true, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector rsqrt_vf_fast(HVX_Vector vin) {
-  return ripple_rsqrt_f32<false, false>(vin);
+  return ripple_rsqrt_f32(vin, false, false);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector rsqrt_vf_fast_safe(HVX_Vector vin) {
-  return ripple_rsqrt_f32<true, false>(vin);
+  return ripple_rsqrt_f32(vin, true, false);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector rsqrt_vf16(HVX_Vector vin) {
-  return ripple_rsqrt_f16<false, true>(vin);
+  return ripple_rsqrt_f16(vin, false, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector rsqrt_vf16_safe(HVX_Vector vin) {
-  return ripple_rsqrt_f16<true, true>(vin);
+  return ripple_rsqrt_f16(vin, true, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector rsqrt_vf16_fast(HVX_Vector vin) {
-  return ripple_rsqrt_f16<false, false>(vin);
+  return ripple_rsqrt_f16(vin, false, false);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector rsqrt_vf16_fast_safe(HVX_Vector vin) {
@@ -578,91 +696,32 @@ RIPPLE_INTRIN_INLINE HVX_Vector rsqrt_vf16_fast_safe(HVX_Vector vin) {
 /////////////////////////////////////////////////////////////////////////////
 // Log
 
-// Natural log from qhmath with edge cases corrected: on targets below v79 the
-// qhmath implementation miscomputes x={1,+/-0}, so force log(1)=0 and
-// log(+/-0)=-inf.
-RIPPLE_INTRIN_INLINE HVX_Vector _ripple_log_vf_corrected(HVX_Vector vin) {
-  HVX_Vector vlog = qhmath_hvx_log_vf(vin);
-#if __HEXAGON_ARCH__ < 79
-  const HVX_Vector const1 = Q6_V_vsplat_R(0x3f800000);
-  const HVX_Vector const0 = Q6_V_vzero();
-  const HVX_Vector neg_inf = Q6_V_vsplat_R(0xff800000);
-  HVX_VectorPred is_one = Q6_Q_vcmp_eq_VwVw(vin, const1);
-  HVX_VectorPred is_zero = ripple_is_zero_vf(vin);
-  vlog = Q6_V_vmux_QVV(is_one, const0, vlog);
-  vlog = Q6_V_vmux_QVV(is_zero, neg_inf, vlog);
-#endif
-  return vlog;
-}
-
-RIPPLE_INTRIN_INLINE HVX_Vector log_vf(HVX_Vector vin) {
-  return _ripple_log_vf_corrected(vin);
-}
-
 RIPPLE_INTRIN_INLINE HVX_Vector log_vf_fast(HVX_Vector vin) {
-  return ripple_fast_log_f32(vin);
-}
-
-RIPPLE_INTRIN_INLINE HVX_Vector _ripple_log_vhf_corrected(HVX_Vector vin) {
-  HVX_Vector vlog = qhmath_hvx_log_vhf(vin);
-#if __HEXAGON_ARCH__ < 79
-  const HVX_Vector const1 = Q6_Vh_vsplat_R(0x3c00);
-  const HVX_Vector const0 = Q6_V_vzero();
-  const HVX_Vector neg_inf = Q6_Vh_vsplat_R(0xfc00);
-  HVX_VectorPred is_one = Q6_Q_vcmp_eq_VhVh(vin, const1);
-  HVX_VectorPred is_zero = ripple_is_zero_vhf(vin);
-  vlog = Q6_V_vmux_QVV(is_one, const0, vlog);
-  vlog = Q6_V_vmux_QVV(is_zero, neg_inf, vlog);
-#endif
-  return vlog;
-}
-
-RIPPLE_INTRIN_INLINE HVX_Vector log_vf16(HVX_Vector vin) {
-  return _ripple_log_vhf_corrected(vin);
+  return ripple_fast_log_f32(vin, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector log_vf16_fast(HVX_Vector vin) {
-  return ripple_fast_log_f16(vin);
+  return ripple_fast_log_f16(vin, true);
 }
 
 /////////////////////////////////////////////////////////////////////////////
 // Log2
-RIPPLE_INTRIN_INLINE HVX_Vector log2_vf(HVX_Vector vin) {
-  return _ripple_internal_Vsf_vmpy_VsfVsf(_ripple_log_vf_corrected(vin),
-                                          Q6_V_vsplat_R(0x3fb8aa3b));
-}
-
 RIPPLE_INTRIN_INLINE HVX_Vector log2_vf_fast(HVX_Vector vin) {
-  return ripple_fast_log2_f32(vin);
-}
-
-RIPPLE_INTRIN_INLINE HVX_Vector log2_vf16(HVX_Vector vin) {
-  return _ripple_internal_Vhf_vmpy_VhfVhf(_ripple_log_vhf_corrected(vin),
-                                          Q6_Vh_vsplat_R(0x3dc5));
+  return ripple_fast_log2_f32(vin, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector log2_vf16_fast(HVX_Vector vin) {
-  return ripple_fast_log2_f16(vin);
+  return ripple_fast_log2_f16(vin, true);
 }
 
 /////////////////////////////////////////////////////////////////////////////
 // Log10
-RIPPLE_INTRIN_INLINE HVX_Vector log10_vf(HVX_Vector vin) {
-  return _ripple_internal_Vsf_vmpy_VsfVsf(_ripple_log_vf_corrected(vin),
-                                          Q6_V_vsplat_R(0x3ede5bd9));
-}
-
 RIPPLE_INTRIN_INLINE HVX_Vector log10_vf_fast(HVX_Vector vin) {
-  return ripple_fast_log10_f32(vin);
-}
-
-RIPPLE_INTRIN_INLINE HVX_Vector log10_vf16(HVX_Vector vin) {
-  return _ripple_internal_Vhf_vmpy_VhfVhf(_ripple_log_vhf_corrected(vin),
-                                          Q6_Vh_vsplat_R(0x36f3));
+  return ripple_fast_log10_f32(vin, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector log10_vf16_fast(HVX_Vector vin) {
-  return ripple_fast_log10_f16(vin);
+  return ripple_fast_log10_f16(vin, true);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -692,53 +751,53 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_pow_vhf_corrected(HVX_Vector base,
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector pow_vf(HVX_Vector vin1, HVX_Vector vin2) {
-  return ripple_pow_vf_corrected(vin1, vin2, ripple_pow_f32<true>(vin1, vin2));
+  return ripple_pow_vf_corrected(vin1, vin2, ripple_pow_f32(vin1, vin2, true));
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector pow_vf16(HVX_Vector vin1, HVX_Vector vin2) {
   return ripple_pow_vhf_corrected(vin1, vin2,
-                                  ripple_pow_f16<true, true>(vin1, vin2));
+                                  ripple_pow_f16(vin1, vin2, true, true));
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector pow_vf16_fast(HVX_Vector vin1,
                                               HVX_Vector vin2) {
   return ripple_pow_vhf_corrected(vin1, vin2,
-                                  ripple_pow_f16<true, false>(vin1, vin2));
+                                  ripple_pow_f16(vin1, vin2, true, false));
 }
 
 /////////////////////////////////////////////////////////////////////////////
 // Hypot
 RIPPLE_INTRIN_INLINE HVX_Vector hypot_vf(HVX_Vector vin1, HVX_Vector vin2) {
-  return ripple_hypot_f32<false, true>(vin1, vin2);
+  return ripple_hypot_f32(vin1, vin2, false, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector hypot_vf_safe(HVX_Vector vin1,
                                               HVX_Vector vin2) {
-  return ripple_hypot_f32<true, true>(vin1, vin2);
+  return ripple_hypot_f32(vin1, vin2, true, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector hypot_vf_fast(HVX_Vector vin1,
                                               HVX_Vector vin2) {
-  return ripple_hypot_f32<false, false>(vin1, vin2);
+  return ripple_hypot_f32(vin1, vin2, false, false);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector hypot_vf_fast_safe(HVX_Vector vin1,
                                                    HVX_Vector vin2) {
-  return ripple_hypot_f32<true, false>(vin1, vin2);
+  return ripple_hypot_f32(vin1, vin2, true, false);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector hypot_vf16(HVX_Vector vin1, HVX_Vector vin2) {
-  return ripple_hypot_f16<false, true>(vin1, vin2);
+  return ripple_hypot_f16(vin1, vin2, false, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector hypot_vf16_safe(HVX_Vector vin1,
                                                 HVX_Vector vin2) {
-  return ripple_hypot_f16<true, true>(vin1, vin2);
+  return ripple_hypot_f16(vin1, vin2, true, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector hypot_vf16_fast(HVX_Vector vin1,
                                                 HVX_Vector vin2) {
-  return ripple_hypot_f16<false, false>(vin1, vin2);
+  return ripple_hypot_f16(vin1, vin2, false, false);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector hypot_vf16_fast_safe(HVX_Vector vin1,
@@ -749,11 +808,11 @@ RIPPLE_INTRIN_INLINE HVX_Vector hypot_vf16_fast_safe(HVX_Vector vin1,
 /////////////////////////////////////////////////////////////////////////////
 // Truncate
 RIPPLE_INTRIN_INLINE HVX_Vector trunc_vf(HVX_Vector vin) {
-  return ripple_trunc_f32(vin);
+  return ripple_trunc_f32(vin, false);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector trunc_vf16(HVX_Vector vin) {
-  return ripple_trunc_f16(vin);
+  return ripple_trunc_f16(vin, false);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -801,7 +860,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector div_vf_fast(HVX_Vector num, HVX_Vector den) {
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector recip_vf_fast(HVX_Vector vin) {
-  return ripple_recip_fp32_fast(vin);
+  return ripple_recip_fp32_fast(vin, true);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector div_vf16(HVX_Vector num, HVX_Vector den) {
@@ -856,23 +915,45 @@ RIPPLE_INTRIN_INLINE HVX_Vector rem_vu16(HVX_Vector num, HVX_Vector den) {
 
 // _________________ Ripple vector-candidate definitions ______________________
 
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, acos, f, f32t32,
-                                    i32t32, ew_pure_, )
+// The vector conversion helpers are templates in C++ and macros in C.
+#ifdef __cplusplus
+#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec<N, T>((BS), (X))
+#define _VEC_TO_RIPPLE(N, T, BS, X) vec_to_ripple<N, T>((BS), (X))
+#else
+#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec(N, T, (BS), (X))
+#define _VEC_TO_RIPPLE(N, T, BS, X) vec_to_ripple(N, T, (BS), (X))
+#endif
+
+// Use multiply followed by add; these candidates do not guarantee the
+// single rounding of a fused operation.
+RIPPLE_CANDIDATE_INLINE f32t32 ripple_ew_pure_fmaf(f32t32 va, f32t32 vb,
+                                               f32t32 vc) {
+  ripple_block_t BS = ripple_set_block_shape(0, 32);
+  float a = _VEC_TO_RIPPLE(32, float, BS, va);
+  float b = _VEC_TO_RIPPLE(32, float, BS, vb);
+  float c = _VEC_TO_RIPPLE(32, float, BS, vc);
+  float result = a * b + c;
+  return _RIPPLE_TO_VEC(32, float, BS, result);
+}
+
+RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_fmaf16(f16t64 va, f16t64 vb,
+                                                 f16t64 vc) {
+  ripple_block_t BS = ripple_set_block_shape(0, 64);
+  _Float16 a = _VEC_TO_RIPPLE(64, _Float16, BS, va);
+  _Float16 b = _VEC_TO_RIPPLE(64, _Float16, BS, vb);
+  _Float16 c = _VEC_TO_RIPPLE(64, _Float16, BS, vc);
+  _Float16 result = a * b + c;
+  return _RIPPLE_TO_VEC(64, _Float16, BS, result);
+}
+
+#undef _RIPPLE_TO_VEC
+#undef _VEC_TO_RIPPLE
+
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, acos, f16, f16t64,
-                                    i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, asin, f, f32t32,
                                     i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, asin, f16, f16t64,
                                     i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, atan, f, f32t32,
-                                    i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, atan, f16, f16t64,
-                                    i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, cos, f, f32t32,
-                                    i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, cos, f16, f16t64,
-                                    i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, cosh, f, f32t32,
                                     i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, cosh, f16, f16t64,
                                     i32t32, ew_pure_, )
@@ -900,8 +981,6 @@ DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, div, i16, i16t64,
                                      i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, div, u16, u16t64,
                                      i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, exp, f, f32t32,
-                                    i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, exp, f, f32t32,
                                     i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, exp, f, f32t32,
@@ -933,25 +1012,13 @@ DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, hypot, f16,
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, hypot, f16,
                                      f16t64, i32t32, ew_pure_, _fast_safe)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log, f, f32t32,
-                                    i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log, f16, f16t64,
-                                    i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log, f, f32t32,
                                     i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log2, f, f32t32,
-                                    i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log2, f16, f16t64,
-                                    i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log2, f, f32t32,
                                     i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log2, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log10, f, f32t32,
-                                    i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log10, f16, f16t64,
-                                    i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log10, f, f32t32,
                                     i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log10, f16, f16t64,
@@ -998,18 +1065,10 @@ DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, rsqrt, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, rsqrt, f16, f16t64,
                                     i32t32, ew_pure_, _fast_safe)
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sin, f, f32t32,
-                                    i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sin, f16, f16t64,
-                                    i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sinh, f, f32t32,
-                                    i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sinh, f16, f16t64,
                                     i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sinh, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sqrt, f, f32t32,
-                                    i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sqrt, f, f32t32,
                                     i32t32, ew_pure_, _safe)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sqrt, f, f32t32,
@@ -1024,10 +1083,6 @@ DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sqrt, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sqrt, f16, f16t64,
                                     i32t32, ew_pure_, _fast_safe)
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, tan, f, f32t32,
-                                    i32t32, ew_pure_, )
-DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, tan, f16, f16t64,
-                                    i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, tan, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, tanh, f, f32t32,

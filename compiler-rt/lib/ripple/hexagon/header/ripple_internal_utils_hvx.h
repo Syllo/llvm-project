@@ -13,18 +13,17 @@
 
 #include "__ripple_func_attribs.h"
 #include <hexagon_types.h>
+#include <stdbool.h>
 
 // allows lookup for 16 w's from a NATURAL lookup table (16 floats in a row)
 // They are fully stored in the bottom half-byte
 // R is either 0 (for bottom half) or 1 (for top half); other values produce a
 // '0' in output
 //
-// Defaults to unsafe: the results will be correct if the lookup table and R are
-// correct; we expect developers to know what they are doing!
-template <bool safe = false>
+// With safe=false, callers must provide valid lookup indices and R.
 RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_Vw_vlut16_VwVwR(
-    HVX_Vector inds, HVX_Vector table, unsigned R) {
-  if constexpr (safe) {
+    HVX_Vector inds, HVX_Vector table, unsigned R, bool safe) {
+  if (safe) {
     R = R & 0x1;
     inds = Q6_V_vand_VV(inds, Q6_V_vsplat_R(0xF));
   }
@@ -57,13 +56,13 @@ RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_piecewise_poly_engine(
   HVX_Vector x2 = Q6_Vqf32_vmpy_Vqf32Vqf32(xval, xval);
 
   const HVX_Vector a = Q6_Vqf32_vadd_VsfVsf(
-      _ripple_internal_Vw_vlut16_VwVwR(inds, AB_table, 0), Q6_V_vzero());
+      _ripple_internal_Vw_vlut16_VwVwR(inds, AB_table, 0, false), Q6_V_vzero());
   const HVX_Vector b = Q6_Vqf32_vadd_VsfVsf(
-      _ripple_internal_Vw_vlut16_VwVwR(inds, AB_table, 1), Q6_V_vzero());
+      _ripple_internal_Vw_vlut16_VwVwR(inds, AB_table, 1, false), Q6_V_vzero());
   const HVX_Vector c = Q6_Vqf32_vadd_VsfVsf(
-      _ripple_internal_Vw_vlut16_VwVwR(inds, CD_table, 0), Q6_V_vzero());
+      _ripple_internal_Vw_vlut16_VwVwR(inds, CD_table, 0, false), Q6_V_vzero());
   const HVX_Vector d = Q6_Vqf32_vadd_VsfVsf(
-      _ripple_internal_Vw_vlut16_VwVwR(inds, CD_table, 1), Q6_V_vzero());
+      _ripple_internal_Vw_vlut16_VwVwR(inds, CD_table, 1, false), Q6_V_vzero());
 
   // use vals (polynomials)
   HVX_Vector result =

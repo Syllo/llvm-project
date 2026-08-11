@@ -9,6 +9,12 @@
 
 #pragma once
 
+#if defined(__hexagon__) && defined(__HVX__)
+
+#include <ripple/HVX_MathLib.h>
+
+#else
+
 #define sqrtf16(x) __builtin_ripple_sqrtf16(x)
 #define sqrtf(x) __builtin_ripple_sqrtf(x)
 #define sqrt(x) __builtin_ripple_sqrt(x)
@@ -148,6 +154,13 @@
 #define ldexpf(x, y) __builtin_ripple_ldexpf((x), (y))
 #define ldexp(x, y) __builtin_ripple_ldexp((x), (y))
 #define ldexpl(x, y) __builtin_ripple_ldexpl((x), (y))
+
+#define frexpf16(x, y) __builtin_ripple_frexpf16((x), (y))
+#define frexpf(x, y) __builtin_ripple_frexpf((x), (y))
+#define frexp(x, y) __builtin_ripple_frexp((x), (y))
+#define frexpl(x, y) __builtin_ripple_frexpl((x), (y))
+
+#endif // defined(__hexagon__) && defined(__HVX__)
 
 /* ___________________________ isnan/isinf/isfinite __________________________*/
 
