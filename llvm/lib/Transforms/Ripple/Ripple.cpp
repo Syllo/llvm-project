@@ -3479,9 +3479,10 @@ void Ripple::padToTargetSIMDWidth() {
       }
 
       irBuilder.SetInsertPoint(CallI);
-      auto *NewCallI = irBuilder.CreateCall(CallI->getFunctionType(),
-                                            CallI->getCalledOperand(), NewArgs,
-                                            CallI->getName() + ".pad");
+      Twine Name = CallI->getType()->isVoidTy() ? Twine("")
+                                                : CallI->getName() + ".pad";
+      auto *NewCallI = irBuilder.CreateCall(
+          CallI->getFunctionType(), CallI->getCalledOperand(), NewArgs, Name);
 
       // For vector-returning calls, record in InstToPadded so downstream
       // padded instructions can look up the replacement via GetPaddedV.
