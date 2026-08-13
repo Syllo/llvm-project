@@ -97,6 +97,12 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
     "${CMAKE_CURRENT_LIST_DIR}/header"
   )
 
+  # Keep targets that share OUTPUT_NAME in distinct build-tree directories.
+  # They install to distinct destinations, but CMake/Ninja still needs unique
+  # build-tree output paths.
+  set(RIPPLE_THD_QURT_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/qurt")
+  set(RIPPLE_THD_QURT_G0PIC_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/qurt/G0/pic")
+
   # Static library
   add_library(ripple_thd_qurt_static STATIC ${RIPPLE_THD_QURT_SOURCES})
   target_include_directories(ripple_thd_qurt_static
@@ -111,7 +117,31 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
   PRIVATE
     ${HEXAGON_FLAGS}
   )
-  set_target_properties(ripple_thd_qurt_static PROPERTIES OUTPUT_NAME ripple_thd_qurt)
+  set_target_properties(ripple_thd_qurt_static PROPERTIES
+    OUTPUT_NAME ripple_thd_qurt
+    ARCHIVE_OUTPUT_DIRECTORY "${RIPPLE_THD_QURT_OUTPUT_DIR}"
+  )
+
+  # Static library in G0 + pic
+  add_library(ripple_thd_qurt_static_g0pic STATIC ${RIPPLE_THD_QURT_SOURCES})
+  target_include_directories(ripple_thd_qurt_static_g0pic
+  PRIVATE
+    ${RIPPLE_THD_QURT_INCLUDE_DIRS}
+  )
+  target_compile_definitions(ripple_thd_qurt_static_g0pic
+  PRIVATE
+    RIPPLE_THD_USE_QURT
+  )
+  target_compile_options(ripple_thd_qurt_static_g0pic
+  PRIVATE
+    ${HEXAGON_FLAGS}
+    -fPIC
+    -G0
+  )
+  set_target_properties(ripple_thd_qurt_static_g0pic PROPERTIES
+    OUTPUT_NAME ripple_thd_qurt
+    ARCHIVE_OUTPUT_DIRECTORY "${RIPPLE_THD_QURT_G0PIC_OUTPUT_DIR}"
+  )
 
   # Shared (dynamic) library
   add_library(ripple_thd_qurt_shared SHARED ${RIPPLE_THD_QURT_SOURCES})
@@ -127,7 +157,34 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
   PRIVATE
     ${HEXAGON_FLAGS}
   )
-  set_target_properties(ripple_thd_qurt_shared PROPERTIES OUTPUT_NAME ripple_thd_qurt)
+  set_target_properties(ripple_thd_qurt_shared PROPERTIES
+    OUTPUT_NAME ripple_thd_qurt
+    LIBRARY_OUTPUT_DIRECTORY "${RIPPLE_THD_QURT_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${RIPPLE_THD_QURT_OUTPUT_DIR}"
+  )
+
+ # Shared (dynamic) library in G0 + pic
+  add_library(ripple_thd_qurt_shared_g0pic SHARED ${RIPPLE_THD_QURT_SOURCES})
+  target_include_directories(ripple_thd_qurt_shared_g0pic
+  PRIVATE
+    ${RIPPLE_THD_QURT_INCLUDE_DIRS}
+  )
+  target_compile_definitions(ripple_thd_qurt_shared_g0pic
+  PRIVATE
+    RIPPLE_THD_USE_QURT
+  )
+  target_compile_options(ripple_thd_qurt_shared_g0pic
+  PRIVATE
+    ${HEXAGON_FLAGS}
+    -fPIC
+    -G0
+  )
+  set_target_properties(ripple_thd_qurt_shared_g0pic PROPERTIES
+    OUTPUT_NAME ripple_thd_qurt
+    LIBRARY_OUTPUT_DIRECTORY "${RIPPLE_THD_QURT_G0PIC_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${RIPPLE_THD_QURT_G0PIC_OUTPUT_DIR}"
+  )
+
 
   # Install headers
   install(
@@ -143,6 +200,12 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
   install(TARGETS ripple_thd_qurt_static ripple_thd_qurt_shared
     ARCHIVE DESTINATION ${install_dir}   # static libs (.a/.lib)
     LIBRARY DESTINATION ${install_dir}   # shared libs (.so/.dylib)
+    # RUNTIME DESTINATION ${install_dir}   # Windows DLLs
+  )
+# G0 + pic
+  install(TARGETS ripple_thd_qurt_static_g0pic ripple_thd_qurt_shared_g0pic
+    ARCHIVE DESTINATION ${install_dir}/../G0/pic   # static libs (.a/.lib)
+    LIBRARY DESTINATION ${install_dir}/../G0/pic   # shared libs (.so/.dylib)
     # RUNTIME DESTINATION ${install_dir}   # Windows DLLs
   )
 
@@ -179,6 +242,12 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
     list(APPEND RIPPLE_THD_QHPI_INCLUDE_DIRS "${QHPI_INCLUDE}")
   endif()
 
+  # Keep targets that share OUTPUT_NAME in distinct build-tree directories.
+  # They install to distinct destinations, but CMake/Ninja still needs unique
+  # build-tree output paths.
+  set(RIPPLE_THD_QHPI_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/qhpi")
+  set(RIPPLE_THD_QHPI_G0PIC_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/qhpi/G0/pic")
+
   # Static library
   add_library(ripple_thd_qhpi_static STATIC ${RIPPLE_THD_QHPI_SOURCES})
   target_include_directories(ripple_thd_qhpi_static
@@ -193,7 +262,32 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
   PRIVATE
     ${HEXAGON_FLAGS}
   )
-  set_target_properties(ripple_thd_qhpi_static PROPERTIES OUTPUT_NAME ripple_thd_qhpi)
+  set_target_properties(ripple_thd_qhpi_static PROPERTIES
+    OUTPUT_NAME ripple_thd_qhpi
+    ARCHIVE_OUTPUT_DIRECTORY "${RIPPLE_THD_QHPI_OUTPUT_DIR}"
+  )
+
+  # Static library in G0 + pic
+  add_library(ripple_thd_qhpi_static_g0pic STATIC ${RIPPLE_THD_QHPI_SOURCES})
+  target_include_directories(ripple_thd_qhpi_static_g0pic
+  PRIVATE
+    ${RIPPLE_THD_QHPI_INCLUDE_DIRS}
+  )
+  target_compile_definitions(ripple_thd_qhpi_static_g0pic
+  PRIVATE
+    RIPPLE_THD_USE_QHPI
+  )
+  target_compile_options(ripple_thd_qhpi_static_g0pic
+  PRIVATE
+    ${HEXAGON_FLAGS}
+    -fPIC
+    -G0
+  )
+  set_target_properties(ripple_thd_qhpi_static_g0pic PROPERTIES
+    OUTPUT_NAME ripple_thd_qhpi
+    ARCHIVE_OUTPUT_DIRECTORY "${RIPPLE_THD_QHPI_G0PIC_OUTPUT_DIR}"
+  )
+
 
   # Shared (dynamic) library
   add_library(ripple_thd_qhpi_shared SHARED ${RIPPLE_THD_QHPI_SOURCES})
@@ -216,7 +310,40 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
   PRIVATE
     ${HEXAGON_FLAGS}
   )
-  set_target_properties(ripple_thd_qhpi_shared PROPERTIES OUTPUT_NAME ripple_thd_qhpi)
+  set_target_properties(ripple_thd_qhpi_shared PROPERTIES
+    OUTPUT_NAME ripple_thd_qhpi
+    LIBRARY_OUTPUT_DIRECTORY "${RIPPLE_THD_QHPI_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${RIPPLE_THD_QHPI_OUTPUT_DIR}"
+  )
+
+# Shared (dynamic) library in G0 + pic
+  add_library(ripple_thd_qhpi_shared_g0pic SHARED ${RIPPLE_THD_QHPI_SOURCES})
+  target_include_directories(ripple_thd_qhpi_shared_g0pic
+  PRIVATE
+    ${RIPPLE_THD_QHPI_INCLUDE_DIRS}
+  )
+  target_compile_definitions(ripple_thd_qhpi_shared_g0pic
+  PRIVATE
+    RIPPLE_THD_USE_QHPI
+  )
+  if(DEFINED QHPI_INCLUDE AND EXISTS "${QHPI_INCLUDE}" AND IS_DIRECTORY "${QHPI_INCLUDE}")
+    target_compile_definitions(ripple_thd_qhpi_static_g0pic PRIVATE __HAS_QHPI__)
+    target_compile_definitions(ripple_thd_qhpi_shared_g0pic PRIVATE __HAS_QHPI__)
+  else()
+    message(NOTICE "Building QHPI-based ripple_thd without QHPI headers")
+  endif()
+
+  target_compile_options(ripple_thd_qhpi_shared_g0pic
+  PRIVATE
+    ${HEXAGON_FLAGS}
+    -fPIC
+    -G0
+  )
+  set_target_properties(ripple_thd_qhpi_shared_g0pic PROPERTIES
+    OUTPUT_NAME ripple_thd_qhpi
+    LIBRARY_OUTPUT_DIRECTORY "${RIPPLE_THD_QHPI_G0PIC_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${RIPPLE_THD_QHPI_G0PIC_OUTPUT_DIR}"
+  )
 
   # Install headers
   install(
@@ -233,6 +360,12 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
   install(TARGETS ripple_thd_qhpi_static ripple_thd_qhpi_shared
     ARCHIVE DESTINATION ${install_dir}   # static libs (.a/.lib)
     LIBRARY DESTINATION ${install_dir}   # shared libs (.so/.dylib)
+    # RUNTIME DESTINATION ${install_dir}   # Windows DLLs
+  )
+  # Install G0 + pic libs
+  install(TARGETS ripple_thd_qhpi_static_g0pic ripple_thd_qhpi_shared_g0pic
+    ARCHIVE DESTINATION ${install_dir}/../G0/pic   # static libs (.a/.lib)
+    LIBRARY DESTINATION ${install_dir}/../G0/pic   # shared libs (.so/.dylib)
     # RUNTIME DESTINATION ${install_dir}   # Windows DLLs
   )
 
