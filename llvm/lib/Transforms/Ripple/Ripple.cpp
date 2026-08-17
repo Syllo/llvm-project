@@ -2366,6 +2366,10 @@ void Ripple::padToTargetSIMDWidth() {
                          TargetTransformInfo::RGK_FixedWidthVector) /
                      EVTType.getScalarSizeInBits();
     }
+    if (VectorFactor == 0) {
+      // No fixed-width vector info: skip padding.
+      return std::make_pair(EVTType, EVTType);
+    }
 
     unsigned MaxPaddedLength =
         VectorFactor * divideCeil(EVTType.getVectorNumElements(), VectorFactor);
@@ -2638,10 +2642,11 @@ void Ripple::padToTargetSIMDWidth() {
        &CastToReductionIntrinsic]() -> Expected<std::set<Instruction *>> {
     std::set<Instruction *> MustBePadded;
     std::queue<Instruction *> Worklist;
+    Error UnsupportedPaddingErr = Error::success();
 
     auto AnyValuesKnownToBeMustPadded =
-        [&MustBePadded](ArrayRef<Value *> Values,
-                        unsigned PaddedLength) -> bool {
+        [&MustBePadded, &UnsupportedPaddingErr](ArrayRef<Value *> Values,
+                                                unsigned PaddedLength) -> bool {
       for (Value *V : Values) {
         if (auto *VType = dyn_cast<FixedVectorType>(V->getType())) {
           bool TypeAlignsWellWithPaddedLength =
@@ -2658,7 +2663,21 @@ void Ripple::padToTargetSIMDWidth() {
               return true;
             continue;
           }
-          llvm_unreachable("Control should not reach here.");
+          // All-or-bail: unsupported vector values trigger bail.
+          if (!TypeAlignsWellWithPaddedLength) {
+            if (!UnsupportedPaddingErr) {
+              std::string ErrStr;
+              raw_string_ostream OSS(ErrStr);
+              OSS << "Unsupported non-instruction vector value that needs "
+                     "padding: "
+                  << *V;
+              OSS.flush();
+              UnsupportedPaddingErr =
+                  createStringError(inconvertibleErrorCode(), ErrStr);
+            }
+            return false;
+          }
+          continue;
         } else {
           // scalar value => do not pad.
           continue;
@@ -2698,6 +2717,9 @@ void Ripple::padToTargetSIMDWidth() {
       auto *I = Worklist.front();
       auto ShapeI = getRippleShape(I);
       Worklist.pop();
+
+      if (UnsupportedPaddingErr)
+        return std::move(UnsupportedPaddingErr);
 
       if (MustBePadded.find(I) != MustBePadded.end())
         continue; // already marked as padded.
@@ -2892,6 +2914,9 @@ void Ripple::padToTargetSIMDWidth() {
         return createStringError(inconvertibleErrorCode(), ErrStr);
       }
     }
+
+    if (UnsupportedPaddingErr)
+      return std::move(UnsupportedPaddingErr);
 
     return std::move(MustBePadded);
   };
