@@ -52,6 +52,93 @@ void multi_window_load_row_major(int16_t A[32][32], int16_t *Out) {
     Out[v1 * 4 + v0] = A[v1][v0];
 }
 
+// Row-major 4x4 tile load with holes within each load window.
+//
+// The accessed byte offsets are:
+//
+//   0,4,8,12,
+//   64,68,72,76,
+//   128,132,136,140,
+//   192,196,200,204
+//
+// Each row fits within a single vector-sized load window, but the requested
+// elements are non-contiguous. Ripple should form four windows and use a
+// sparse mask to load only the requested elements.
+//
+// CHECK-LABEL: define{{.*}}@multi_window_load_with_holes
+// First window loads offsets [0, 4, 8, 12].
+// CHECK: [[ROW_LOAD0:%[^ ]+]] = {{.*}}call <16 x i16> @llvm.masked.load.v16i16.p0(ptr align 2 %A, <16 x i1> <i1 true, i1 false, i1 true, i1 false, i1 true, i1 false, i1 true, i1 false,
+//
+// Second window starts at byte offset 64.
+// CHECK: [[ROW_BASE1:%[^ ]+]] = getelementptr i8, ptr %A, i64 64
+// Second window loads offsets [64, 68, 72, 76].
+// CHECK: [[ROW_LOAD1:%[^ ]+]] = {{.*}}call <16 x i16> @llvm.masked.load.v16i16.p0(ptr align 2 [[ROW_BASE1]], <16 x i1> <i1 true, i1 false, i1 true, i1 false, i1 true, i1 false, i1 true, i1 false,
+//
+// In the final result, merge lane 0-3 using local lanes from 0,2,4 and 6 from first window
+// Similarly, merge lane 4-7 in the result using local lanes 0,2,4 and 6 from second window
+// CHECK: [[ROW_MERGE1_2:%[^ ]+]] = shufflevector <16 x i16> [[ROW_LOAD0]], <16 x i16> [[ROW_LOAD1]], <16 x i32> <i32 0, i32 2, i32 4, i32 6, i32 16, i32 18, i32 20, i32 22, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
+//
+// Remaining two window loads.
+// CHECK-COUNT-2: call <16 x i16> @llvm.masked.load.v16i16.p0
+//
+// CHECK: store <16 x i16>
+void multi_window_load_with_holes(int16_t A[32][32], int16_t *Out) {
+    ripple_block_t BS = ripple_set_block_shape(VEC, 4, 4);
+    size_t v0 = ripple_id(BS, 0);
+    size_t v1 = ripple_id(BS, 1);
+
+    Out[v1 * 4 + v0] = A[v1][v0 * 2];
+}
+
+// Row-major 4x4 tile load with holes within each load window.
+//
+// The accessed byte offsets are:
+//
+// 12, 8, 4, 0,
+// 76, 72, 68, 64,
+// 140, 136, 132, 128,
+// 204, 200, 196, 192
+//
+// CHECK-LABEL: define{{.*}}@multi_window_load_with_holes_unsorted
+// First window loads offsets Before sorting [12, 8, 4, 0].
+// After sorting - [0, 4, 8, 12]
+// CHECK: [[ROW_LOAD0:%[^ ]+]] = {{.*}}call <16 x i16> @llvm.masked.load.v16i16.p0(ptr align 2 %A, <16 x i1> <i1 true, i1 false, i1 true, i1 false, i1 true, i1 false, i1 true, i1 false,
+//
+// Second window starts at byte offset 64.
+// CHECK: [[ROW_BASE1:%[^ ]+]] = getelementptr i8, ptr %A, i64 64
+// Second window loads offsets before sorting [76, 72, 68, 64].
+// CHECK: [[ROW_LOAD1:%[^ ]+]] = {{.*}}call <16 x i16> @llvm.masked.load.v16i16.p0(ptr align 2 [[ROW_BASE1]], <16 x i1> <i1 true, i1 false, i1 true, i1 false, i1 true, i1 false, i1 true, i1 false,
+//
+// Reorder the first two loaded windows into their original lane order
+// CHECK: [[SHUFFLE1:%[^ ]+]] = shufflevector <16 x i16> [[ROW_LOAD0]], <16 x i16> [[ROW_LOAD1]], <16 x i32> <i32 6, i32 4, i32 2, i32 0, i32 22, i32 20, i32 18, i32 16, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
+//
+// Third window starts at byte offset 128.
+// CHECK: [[ROW_BASE2:%[^ ]+]] = getelementptr i8, ptr %A, i64 128
+// Third window loads offsets before sorting [140, 136, 132, 128].
+// CHECK: [[ROW_LOAD2:%[^ ]+]] = {{.*}}call <16 x i16> @llvm.masked.load.v16i16.p0(ptr align 2 [[ROW_BASE2]], <16 x i1> <i1 true, i1 false, i1 true, i1 false, i1 true, i1 false, i1 true, i1 false,
+//
+// Place offsets [140, 136, 132, 128] into result lanes 8-11.
+// CHECK: [[SHUFFLE2:%[^ ]+]] = shufflevector <16 x i16> [[ROW_LOAD2]], <16 x i16> poison, <16 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 6, i32 4, i32 2, i32 0, i32 poison, i32 poison, i32 poison, i32 poison>
+//
+// Merge the third window with the first two windows.
+// Indices 24-27 select lanes 8-11 from the second shuffle operand.
+// CHECK: [[MERGE2:%[^ ]+]] = shufflevector <16 x i16> [[SHUFFLE1]], <16 x i16> [[SHUFFLE2]], <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 24, i32 25, i32 26, i32 27, i32 poison, i32 poison, i32 poison, i32 poison>
+//
+// Similarly load and merge window 4
+// Fourth window starts at byte offset 192.
+// CHECK: [[ROW_BASE3:%[^ ]+]] = getelementptr i8, ptr %A, i64 192
+// Fourth window loads offsets before sorting [204, 200, 196, 192].
+// CHECK: [[ROW_LOAD3:%[^ ]+]] = {{.*}}call <16 x i16> @llvm.masked.load.v16i16.p0(ptr align 2 [[ROW_BASE3]], <16 x i1> <i1 true, i1 false, i1 true, i1 false, i1 true, i1 false, i1 true, i1 false,
+//
+// CHECK: store <16 x i16>
+void multi_window_load_with_holes_unsorted(int16_t A[32][32], int16_t *Out) {
+    ripple_block_t BS = ripple_set_block_shape(VEC, 4, 4);
+    size_t v0 = ripple_id(BS, 0);
+    size_t v1 = ripple_id(BS, 1);
+
+    Out[v1 * 4 + v0] = A[v1][6 - 2 * v0];
+}
+
 // Column-major (transposed) 4x4 tile load from a 32x32 matrix.
 //
 // The accessed addresses are:
