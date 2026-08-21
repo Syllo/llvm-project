@@ -1062,21 +1062,21 @@ NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
       SortedByteOffsets.end());
 
   auto *ElementTy = Load->getType();
-  int64_t LoadElementSizeBytes = DL.getTypeStoreSize(ElementTy).getFixedValue();
+  int64_t LoadElementSizeByte = DL.getTypeStoreSize(ElementTy).getFixedValue();
 
   // Build Load Windows
   SmallVector<LoadWindow> Windows;
+  int64_t VectorByteSize = NumElementsToLoad * LoadElementSizeByte;
+  int64_t WindowLastByteOffset = 0;
   for (int64_t CurrentByteOffset : SortedByteOffsets) {
-    bool StartNewWindow = Windows.empty();
-
-    if (!StartNewWindow) {
-      int64_t PreviousByteOffset = Windows.back().LoadOffsets.back();
-      int64_t ExpectedByteOffset = PreviousByteOffset + LoadElementSizeBytes;
-      StartNewWindow = ExpectedByteOffset != CurrentByteOffset;
-    }
+    bool StartNewWindow =
+        Windows.empty() || (CurrentByteOffset > WindowLastByteOffset);
 
     if (StartNewWindow) {
+      // CurrentByteOffset if the Window First Byte Offset
       Windows.push_back(LoadWindow({CurrentByteOffset, {}}));
+      WindowLastByteOffset =
+          CurrentByteOffset + VectorByteSize - LoadElementSizeByte;
     }
 
     Windows.back().LoadOffsets.push_back(CurrentByteOffset);
@@ -1118,15 +1118,17 @@ NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
         IrBuilder.CreateGEP(IrBuilder.getInt8Ty(), BasePtr, WindowBaseOffset);
     MyRipple.setRippleShape(WindowBasePtr, MyRipple.getRippleShape(BasePtr));
 
-    // This load mask for the current window-building algorithm guarantees
-    // strictly contiguous offsets starting at Window.BaseOffset. For
-    // future enhancement for window with holes, we can use offset to calculate
-    // the mask.
-    auto WindowWidth = Window.LoadOffsets.size();
+    // Build the load mask from each offset's relative position to the
+    // Window.BaseOffset, allowing windows to contain non-contiguous elements
+    DenseMap<int64_t, unsigned> OriginalOffsetToLocalWindowLane;
     SmallVector<Constant *> WindowLoadMask(NumElementsToLoad,
                                            IrBuilder.getFalse());
-    for (size_t Lane = 0; Lane < WindowWidth; ++Lane) {
-      WindowLoadMask[Lane] = IrBuilder.getTrue();
+    for (auto Offset : Window.LoadOffsets) {
+      auto RelativeByteOffset = Offset - Window.BaseOffset;
+      unsigned LocalLane =
+          static_cast<unsigned>(RelativeByteOffset / LoadElementSizeByte);
+      WindowLoadMask[LocalLane] = IrBuilder.getTrue();
+      OriginalOffsetToLocalWindowLane[Offset] = LocalLane;
     }
     auto WindowAlign = commonAlignment(Load->getAlign(), Window.BaseOffset);
     Value *WindowFullLoad = IrBuilder.CreateMaskedLoad(
@@ -1134,12 +1136,6 @@ NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
         ConstantVector::get(WindowLoadMask), PoisonValue::get(FullVecTy),
         "ripple.multiwindow.load");
     MyRipple.setRippleShape(WindowFullLoad, ToShape);
-
-    DenseMap<int64_t, unsigned> OriginalOffsetToLocalWindowLane;
-    for (unsigned LocalLane = 0; LocalLane < WindowWidth; ++LocalLane) {
-      OriginalOffsetToLocalWindowLane[Window.LoadOffsets[LocalLane]] =
-          LocalLane;
-    }
 
     SmallVector<int> ShuffleMask(NumElementsToLoad, llvm::PoisonMaskElem);
     SmallVector<Constant *> SelectionMask(NumElementsToLoad,
