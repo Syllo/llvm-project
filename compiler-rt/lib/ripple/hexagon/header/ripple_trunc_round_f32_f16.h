@@ -303,6 +303,9 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_floor_f32(HVX_Vector val) {
 
   const HVX_Vector sign_extract = Q6_V_vsplat_R(0x80000000);
 
+  // fix a bug at -0.0f
+  val = _ripple_internal_Vsf_vadd_VsfVsf(val, Q6_V_vzero());
+
   HVX_Vector trunc = ripple_trunc_f32(val);
 
   HVX_Vector sign = Q6_V_vand_VV(val, sign_extract);
@@ -322,6 +325,9 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_floor_f16(HVX_Vector val) {
   const HVX_Vector neg_half_hf = Q6_Vh_vsplat_R(0xb800);
 
   const HVX_Vector sign_extract = Q6_Vh_vsplat_R(0x8000);
+
+  // fix a bug at -0.0h
+  val = _ripple_internal_Vhf_vadd_VhfVhf(val, Q6_V_vzero());
 
   HVX_Vector trunc = ripple_trunc_f16(val);
 
