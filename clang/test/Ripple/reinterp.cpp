@@ -1,5 +1,5 @@
 // REQUIRES: hexagon-registered-target || aarch64-registered-target || x86-registered-target
-// RUN: %clang++ -S -fenable-ripple -fno-discard-value-names -O2 -emit-llvm %s -o - 2>&1 | FileCheck %s --implicit-check-not="warning:" --implicit-check-not="error:"s
+// RUN: %clang++ -S -fenable-ripple -fno-discard-value-names -Rpass-missed=ripple -O2 -emit-llvm %s -o - 2>&1 | FileCheck %s --implicit-check-not="warning:" --implicit-check-not="remark:" --implicit-check-not="error:"s
 
 #include <ripple.h>
 #include <ripple_math.h>
