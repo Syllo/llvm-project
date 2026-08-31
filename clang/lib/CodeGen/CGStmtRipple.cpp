@@ -494,14 +494,14 @@ RValue CodeGenFunction::emitRippleBuiltin(const CallExpr *E,
     /// --------------------------------------------------------------------------------------------
     /// Reinterp-specific Builtins Begin
 
-#define RIPPLE_REINTERP_CASE(Suffix)                                         \
-  CASE_RIPPLE_ALL_INT_FLOAT_BUILTIN(reinterp_##Suffix) {                    \
-    Value *BlockShape = EmitScalarExpr(E->getArg(0));                        \
-    Value *FromEl = EmitScalarExpr(E->getArg(1));                            \
-    llvm::Function *F = CGM.getIntrinsic(                                    \
-        llvm::Intrinsic::ripple_reinterp_##Suffix, FromEl->getType());       \
-    llvm::Value *Result = Builder.CreateCall(F, {BlockShape, FromEl});       \
-    return RValue::get(Result);                                             \
+#define RIPPLE_REINTERP_CASE(Suffix)                                           \
+  CASE_RIPPLE_ALL_INT_FLOAT_BUILTIN(reinterp_##Suffix) {                       \
+    Value *BlockShape = EmitScalarExpr(E->getArg(0));                          \
+    Value *FromEl = EmitScalarExpr(E->getArg(1));                              \
+    llvm::Function *F = CGM.getIntrinsic(                                      \
+        llvm::Intrinsic::ripple_reinterp_##Suffix, FromEl->getType());         \
+    llvm::Value *Result = Builder.CreateCall(F, {BlockShape, FromEl});         \
+    return RValue::get(Result);                                                \
   }
 
     RIPPLE_REINTERP_CASE(i8)
