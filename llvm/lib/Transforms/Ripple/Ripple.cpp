@@ -2421,6 +2421,23 @@ void Ripple::padToTargetSIMDWidth() {
     return MaxPaddedLength;
   };
 
+  /// GetAllocaPaddedLength: Returns the padded length for a Ripple-generated
+  /// vector alloca.  Ripple represents such values as an alloca of an array
+  /// whose element count is the alloca's Ripple shape, rather than as an
+  /// alloca of an LLVM vector type.
+  auto GetAllocaPaddedLength = [this, &GetPaddedLength](AllocaInst *Alloca) {
+    const TensorShape &Shape = getRippleShape(Alloca);
+    assert(Shape.isVector() && "expected a vector-shaped alloca");
+
+    auto *ArrayTy = cast<ArrayType>(Alloca->getAllocatedType());
+    assert(ArrayTy->getNumElements() == Shape.flatShape() &&
+           "Ripple alloca array length must match its shape");
+
+    auto *VectorTy =
+        FixedVectorType::get(ArrayTy->getElementType(), Shape.flatShape());
+    return GetPaddedLength(UndefValue::get(VectorTy));
+  };
+
   /// GetPaddedV: For a value V, returns a value V', such that V' is
   /// V padded with undef values so that it is a vector values with \p
   /// PaddedLength number of elements.
@@ -2638,7 +2655,7 @@ void Ripple::padToTargetSIMDWidth() {
   /// - An error if the function `F` contains an instruction that is
   ///   unsupported.
   auto GetInstructionsThatMustBePadded =
-      [this, &GetPaddedLength, &GetMaxPaddedLength,
+      [this, &GetPaddedLength, &GetMaxPaddedLength, &GetAllocaPaddedLength,
        &CastToReductionIntrinsic]() -> Expected<std::set<Instruction *>> {
     std::set<Instruction *> MustBePadded;
     std::queue<Instruction *> Worklist;
@@ -2743,7 +2760,14 @@ void Ripple::padToTargetSIMDWidth() {
         continue;
       }
 
-      if (auto *BinOpI = dyn_cast<BinaryOperator>(I)) {
+      if (auto *Alloca = dyn_cast<AllocaInst>(I)) {
+        unsigned PaddedLength = GetAllocaPaddedLength(Alloca);
+        auto *ArrayTy = cast<ArrayType>(Alloca->getAllocatedType());
+        if (ArrayTy->getNumElements() != PaddedLength) {
+          MustBePadded.insert(I);
+          AddUserInstsToWorklist(I, Worklist);
+        }
+      } else if (auto *BinOpI = dyn_cast<BinaryOperator>(I)) {
         auto *Lhs = BinOpI->getOperand(0);
         auto *Rhs = BinOpI->getOperand(1);
         auto PaddedLength = GetPaddedLength(BinOpI);
@@ -2969,7 +2993,21 @@ void Ripple::padToTargetSIMDWidth() {
   }
 
   for (auto *I : InstsThatMustBePaddedRPOT) {
-    if (auto *ExtractElementI = dyn_cast<ExtractElementInst>(I)) {
+    if (auto *Alloca = dyn_cast<AllocaInst>(I)) {
+      auto *OldArrayTy = cast<ArrayType>(Alloca->getAllocatedType());
+      unsigned PaddedLength = GetAllocaPaddedLength(Alloca);
+      auto *NewArrayTy =
+          ArrayType::get(OldArrayTy->getElementType(), PaddedLength);
+
+      irBuilder.SetInsertPoint(Alloca);
+      auto *NewAlloca = irBuilder.CreateAlloca(
+          NewArrayTy, Alloca->getAddressSpace(), Alloca->getArraySize(),
+          Alloca->getName() + ".pad");
+      NewAlloca->setAlignment(Alloca->getAlign());
+      setRippleShape(NewAlloca, getRippleShape(Alloca));
+      Alloca->replaceAllUsesWith(NewAlloca);
+      InstructionsToRemove.push_back(Alloca);
+    } else if (auto *ExtractElementI = dyn_cast<ExtractElementInst>(I)) {
       auto *VecOperand = ExtractElementI->getVectorOperand();
       auto PaddedLength = GetPaddedLength(VecOperand);
 
