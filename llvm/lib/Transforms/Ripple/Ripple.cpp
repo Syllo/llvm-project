@@ -3541,11 +3541,16 @@ void Ripple::padToTargetSIMDWidth() {
         }
       }
 
-      irBuilder.SetInsertPoint(CallI);
-      Twine Name = CallI->getType()->isVoidTy() ? Twine("")
-                                                : CallI->getName() + ".pad";
-      auto *NewCallI = irBuilder.CreateCall(
-          CallI->getFunctionType(), CallI->getCalledOperand(), NewArgs, Name);
+      Twine Name =
+          CallI->getType()->isVoidTy() ? Twine("") : CallI->getName() + ".pad";
+      // Preserve all call-site semantics (calling convention, attributes,
+      // tail kind, operand bundles, fast-math flags, and metadata) while
+      // substituting only the padded arguments.
+      auto *NewCallI = cast<CallInst>(CallI->clone());
+      for (auto [ArgIdx, NewArg] : enumerate(NewArgs))
+        NewCallI->setArgOperand(ArgIdx, NewArg);
+      NewCallI->insertBefore(CallI->getIterator());
+      NewCallI->setName(Name);
 
       // For vector-returning calls, record in InstToPadded so downstream
       // padded instructions can look up the replacement via GetPaddedV.
