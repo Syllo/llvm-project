@@ -2448,7 +2448,7 @@ void Ripple::padToTargetSIMDWidth() {
   auto GetPaddedV =
       [this, &GetPaddedLength](
           Value *V, const unsigned PaddedLength,
-          DenseMap<std::pair<Instruction *, unsigned>, Value *> &InstToPadded)
+          DenseMap<std::pair<Value *, unsigned>, Value *> &InstToPadded)
       -> Value * {
     if (!V->getType()->isVectorTy()) {
       LLVM_DEBUG(dbgs() << "[PadToTargetSIMD] Value to be padded (" << *V
@@ -2486,6 +2486,26 @@ void Ripple::padToTargetSIMDWidth() {
       LLVM_DEBUG(dbgs() << "[PadToTargetSIMD] C = " << *C << " will become "
                         << *NewC << "\n";);
       return NewC;
+    }
+    if (auto *Arg = dyn_cast<Argument>(V)) {
+      if (auto It = InstToPadded.find({Arg, PaddedLength});
+          It != InstToPadded.end())
+        return It->second;
+
+      unsigned OriginalLength = VType->getElementCount().getFixedValue();
+      assert(OriginalLength < PaddedLength &&
+             "expected a wider padded vector argument");
+      std::vector<int> MaskEls(PaddedLength, -1);
+      for (unsigned IEl = 0; IEl < OriginalLength; ++IEl)
+        MaskEls[IEl] = IEl;
+
+      auto OldIP = irBuilder.saveIP();
+      irBuilder.SetInsertPoint(F.getEntryBlock().getFirstNonPHIOrDbgOrAlloca());
+      auto *PaddedArg = irBuilder.CreateShuffleVector(
+          Arg, PoisonValue::get(VType), MaskEls, Arg->getName() + ".pad");
+      irBuilder.restoreIP(OldIP);
+      InstToPadded.insert_or_assign({Arg, PaddedLength}, PaddedArg);
+      return PaddedArg;
     }
     if (auto *CFP = dyn_cast<ConstantFP>(V)) {
       auto *NewVType =
@@ -2677,6 +2697,11 @@ void Ripple::padToTargetSIMDWidth() {
             if (!TypeAlignsWellWithPaddedLength)
               return true;
             if (MustBePadded.find(I) != MustBePadded.end())
+              return true;
+            continue;
+          }
+          if (isa<Argument>(V)) {
+            if (!TypeAlignsWellWithPaddedLength)
               return true;
             continue;
           }
@@ -2929,6 +2954,13 @@ void Ripple::padToTargetSIMDWidth() {
 
         MustBePadded.insert(I);
         AddUserInstsToWorklist(I, Worklist);
+      } else if (auto *ReturnI = dyn_cast<ReturnInst>(I)) {
+        if (Value *ReturnValue = ReturnI->getReturnValue();
+            ReturnValue && ReturnValue->getType()->isVectorTy()) {
+          unsigned PaddedLength = GetPaddedLength(ReturnValue);
+          if (AnyValuesKnownToBeMustPadded({ReturnValue}, PaddedLength))
+            MustBePadded.insert(I);
+        }
       } else {
         std::string ErrStr;
         raw_string_ostream OSS(ErrStr);
@@ -2968,9 +3000,9 @@ void Ripple::padToTargetSIMDWidth() {
     return;
   }
 
-  /// InstToPadded: A mapping from the pairs of the form (I, P) to (I'), where
+  /// InstToPadded: A mapping from the pairs of the form (V, P) to (V'), where
   /// I' is the vector value V padded to length "P".
-  DenseMap<std::pair<Instruction *, unsigned>, Value *> InstToPadded;
+  DenseMap<std::pair<Value *, unsigned>, Value *> InstToPadded;
   /// InstructionsToRemove: Since we are replacing instructions with their
   /// padded versions, the unpadded instructions must be removed.
   /// InstructionsToRemove records those instructions.
@@ -3563,6 +3595,18 @@ void Ripple::padToTargetSIMDWidth() {
         CallI->replaceAllUsesWith(NewCallI);
       }
       InstructionsToRemove.push_back(CallI);
+    } else if (auto *ReturnI = dyn_cast<ReturnInst>(I)) {
+      Value *ReturnValue = ReturnI->getReturnValue();
+      assert(ReturnValue && ReturnValue->getType()->isVectorTy() &&
+             "only vector returns need padding");
+      auto *ReturnTy = cast<FixedVectorType>(ReturnValue->getType());
+      unsigned OriginalLength = ReturnTy->getNumElements();
+      unsigned PaddedLength = GetPaddedLength(ReturnValue);
+      auto *PaddedReturn = GetPaddedV(ReturnValue, PaddedLength, InstToPadded);
+
+      irBuilder.SetInsertPoint(ReturnI);
+      ReturnI->setOperand(
+          0, ExtractStartingSubVec(irBuilder, PaddedReturn, OriginalLength));
     } else {
       llvm_unreachable("Not yet Implemented error.");
     }
