@@ -1,7 +1,5 @@
-; REQUIRES: hexagon-registered-target, asserts
-; RUN: opt -passes='ripple' -ripple-pad-to-target-simd -disable-output < %s 2>&1 | FileCheck %s --check-prefix=WARN
-
-; WARN: PadToTargetSIMD.: warning: Not padding Ripple generated vectors to target's SIMD length due to
+; REQUIRES: hexagon-registered-target
+; RUN: opt -S -passes='ripple' -ripple-pad-to-target-simd %s -o - | FileCheck %s
 
 target triple = "hexagon"
 
@@ -12,6 +10,11 @@ entry:
 }
 
 define dso_local void @foo(ptr %A, ptr %B) #0 {
+; CHECK-LABEL: define dso_local void @foo(
+; CHECK: load <33 x double>
+; CHECK: load <33 x double>
+; CHECK: call fastcc <33 x double> @ripple.specialization.final.1.mul(
+; CHECK: store <33 x double>
 entry:
   %bs = call ptr @llvm.ripple.block.setshape.i32(i32 0, i32 33, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1)
   %v = call i32 @llvm.ripple.block.index.i32(ptr %bs, i32 0)
@@ -28,5 +31,5 @@ declare ptr @llvm.ripple.block.setshape.i32(i32 immarg, i32, i32, i32, i32, i32,
 declare i32 @llvm.ripple.block.index.i32(ptr, i32 immarg) #2
 
 attributes #0 = { nounwind "target-cpu"="hexagonv81" "target-features"="+hvx-length128b,+hvxv81,+v81,-long-calls" }
-attributes #1 = { nounwind "ripple-vector-candidate" "target-cpu"="hexagonv81" "target-features"="+hvx-length128b,+hvxv81,+v81,-long-calls" }
+attributes #1 = { noinline nounwind "ripple-vector-candidate" "target-cpu"="hexagonv81" "target-features"="+hvx-length128b,+hvxv81,+v81,-long-calls" }
 attributes #2 = { nocallback nofree nosync nounwind willreturn memory(none) }
