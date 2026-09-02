@@ -255,9 +255,17 @@ vec_to_ripple_3d(ripple_block_t BS,
 
 /* _______________________________ Reductions ________________________________*/
 
+#ifdef __cplusplus
+#define RIPPLE_DISABLE_GENERIC_WARNING                                         \
+  _Pragma("GCC diagnostic push")                                               \
+      _Pragma("GCC diagnostic ignored \"-Wpedantic\"")                         \
+          _Pragma("GCC diagnostic ignored \"-Wc++98-compat-pedantic\"")        \
+              _Pragma("GCC diagnostic ignored \"-Wc++98-compat\"")
+#else
 #define RIPPLE_DISABLE_GENERIC_WARNING                                         \
   _Pragma("GCC diagnostic push")                                               \
       _Pragma("GCC diagnostic ignored \"-Wpedantic\"")
+#endif
 #define RIPPLE_REENABLE_GENERIC_WARNING _Pragma("GCC diagnostic pop")
 
 #ifndef __cplusplus
@@ -724,39 +732,129 @@ spec_reduce_itypes(xor);
 
 /* ___________________________ Shuffle Ops ___________________________________*/
 
+// Keep the mapper expression at the builtin call site so the Ripple pass sees
+// its concrete function instead of an unspecialized C++ wrapper parameter.
+// The builtin requires this exact function-pointer type; in C++, static_cast
+// also converts captureless lambdas and selects the matching overload.
+typedef __SIZE_TYPE__ __ripple_shuffle_index_func_type(__SIZE_TYPE__,
+                                                       __SIZE_TYPE__);
+typedef __ripple_shuffle_index_func_type *__ripple_shuffle_index_func_ptr_type;
+
+#ifdef __cplusplus
+template <typename T, typename U> struct __ripple_shuffle_same_type {
+  static_assert(__is_same(__remove_cv(T), __remove_cv(U)),
+                "ripple_shuffle_pair operands must have the same type");
+};
+
+#define __ripple_shuffle_index_func(IdxFun)                                    \
+  static_cast<__ripple_shuffle_index_func_ptr_type>(IdxFun)
+#define __ripple_shuffle_require_index_func(IdxFun) ((void)0)
+#define __ripple_shuffle_require_same_type(Val1, Val2)                         \
+  ((void)sizeof(__ripple_shuffle_same_type<__typeof__(Val1), __typeof__(Val2)>))
+#else
+#define __ripple_shuffle_index_func(IdxFun)                                    \
+  ((__ripple_shuffle_index_func_ptr_type)(IdxFun))
+#define __ripple_shuffle_require_index_func(IdxFun)                            \
+  __extension__({                                                              \
+    _Static_assert(                                                            \
+        __builtin_types_compatible_p(__typeof__(IdxFun),                       \
+                                     __ripple_shuffle_index_func_type) ||      \
+            __builtin_types_compatible_p(                                      \
+                __typeof__(IdxFun), __ripple_shuffle_index_func_ptr_type),     \
+        "ripple_shuffle mapper must have type size_t (*)(size_t, size_t)");    \
+    (void)0;                                                                   \
+  })
+#define __ripple_shuffle_require_same_type(Val1, Val2)                         \
+  __extension__({                                                              \
+    _Static_assert(                                                            \
+        __builtin_types_compatible_p(__typeof__(Val1), __typeof__(Val2)),      \
+        "ripple_shuffle_pair operands must have the same type");               \
+    (void)0;                                                                   \
+  })
+#endif
+
 #define __ripple_shuffle_impl_int(Type, UI, Val1, Val2, IsPair, IdxFun)        \
   ((Type)(sizeof(Type) == 1                                                    \
-              ? __builtin_ripple_shuffle_##UI##8((Val1), (Val2), (IsPair),     \
-                                                 (IdxFun))                     \
+              ? __builtin_ripple_shuffle_##UI##8(                              \
+                    (Type)(Val1), (Type)(Val2), (IsPair),                      \
+                    __ripple_shuffle_index_func(IdxFun))                       \
               : (sizeof(Type) == 2                                             \
-                     ? __builtin_ripple_shuffle_##UI##16((Val1), (Val2),       \
-                                                         (IsPair), (IdxFun))   \
+                     ? __builtin_ripple_shuffle_##UI##16(                      \
+                           (Type)(Val1), (Type)(Val2), (IsPair),               \
+                           __ripple_shuffle_index_func(IdxFun))                \
                      : (sizeof(Type) == 4                                      \
                             ? __builtin_ripple_shuffle_##UI##32(               \
-                                  (Val1), (Val2), (IsPair), (IdxFun))          \
+                                  (Type)(Val1), (Type)(Val2), (IsPair),        \
+                                  __ripple_shuffle_index_func(IdxFun))         \
                             : __builtin_ripple_shuffle_##UI##64(               \
-                                  (Val1), (Val2), (IsPair), (IdxFun))))))
-
-#ifndef __cplusplus
+                                  (Type)(Val1), (Type)(Val2), (IsPair),        \
+                                  __ripple_shuffle_index_func(IdxFun))))))
 
 #if __has_bf16__
+#ifdef __cplusplus
+// C++ type-checks every _Generic association, including the unselected f16
+// association for a bf16 value (and vice versa), but does not allow direct
+// f16-to-bf16 conversions.
+static __attribute__((always_inline)) __bf16
+__ripple_shuffle_to_bf16(__bf16 value) {
+  return value;
+}
+#if __has_Float16__
+static __attribute__((always_inline)) __bf16
+__ripple_shuffle_to_bf16(_Float16 value) {
+  return (__bf16)(float)value;
+}
+#endif
+template <typename T>
+static __attribute__((always_inline)) __bf16 __ripple_shuffle_to_bf16(T value) {
+  return (__bf16)value;
+}
+#define __ripple_shuffle_bf16_arg(Val) __ripple_shuffle_to_bf16(Val)
+#else
+#define __ripple_shuffle_bf16_arg(Val) (Val)
+#endif
 #if __has_soft_bf16__
 #define __extra_bf16_ripple_shuffle(Val1, Val2, IsPair, indexfunc)             \
   , __bf16 : (__bf16)__builtin_ripple_shuffle_f32(                             \
-                 (float)(Val1), (float)(Val2), (IsPair), (indexfunc))
+                 (float)(Val1), (float)(Val2), (IsPair),                       \
+                 __ripple_shuffle_index_func(indexfunc))
 #else // __has_soft_bf16__
 #define __extra_bf16_ripple_shuffle(Val1, Val2, IsPair, indexfunc)             \
   , __bf16                                                                     \
-      : __builtin_ripple_shuffle_bf16((Val1), (Val2), (IsPair), (indexfunc))
+      : __builtin_ripple_shuffle_bf16(                                         \
+            __ripple_shuffle_bf16_arg(Val1), __ripple_shuffle_bf16_arg(Val2),  \
+            (IsPair), __ripple_shuffle_index_func(indexfunc))
 #endif // __has_soft_bf16__
 #else
 #define __extra_bf16_ripple_shuffle(Val1, Val2, IsPair, indexfunc)
 #endif
 
 #if __has_Float16__
+#ifdef __cplusplus
+static __attribute__((always_inline)) _Float16
+__ripple_shuffle_to_f16(_Float16 value) {
+  return value;
+}
+#if __has_bf16__
+static __attribute__((always_inline)) _Float16
+__ripple_shuffle_to_f16(__bf16 value) {
+  return (_Float16)(float)value;
+}
+#endif
+template <typename T>
+static
+    __attribute__((always_inline)) _Float16 __ripple_shuffle_to_f16(T value) {
+  return (_Float16)value;
+}
+#define __ripple_shuffle_f16_arg(Val) __ripple_shuffle_to_f16(Val)
+#else
+#define __ripple_shuffle_f16_arg(Val) (Val)
+#endif
 #define __extra_f16_ripple_shuffle(Val1, Val2, IsPair, indexfunc)              \
   , _Float16                                                                   \
-      : __builtin_ripple_shuffle_f16((Val1), (Val2), (IsPair), (indexfunc))
+      : __builtin_ripple_shuffle_f16(__ripple_shuffle_f16_arg(Val1),           \
+                                     __ripple_shuffle_f16_arg(Val2), (IsPair), \
+                                     __ripple_shuffle_index_func(indexfunc))
 #else
 #define __extra_f16_ripple_shuffle(Val, Val2, IsPair, indexfunc)
 #endif
@@ -789,158 +887,36 @@ spec_reduce_itypes(xor);
                                                   (Val2), (IsPair), (IdxFun)), \
       unsigned long long: __ripple_shuffle_impl_int(                           \
                unsigned long long, u, (Val1), (Val2), (IsPair), (IdxFun)),     \
-      float: __builtin_ripple_shuffle_f32((Val1), (Val2), (IsPair), (IdxFun)), \
-      double: __builtin_ripple_shuffle_f64((Val1), (Val2), (IsPair), (IdxFun)) \
+      float: __builtin_ripple_shuffle_f32(                                     \
+               (float)(Val1), (float)(Val2), (IsPair),                         \
+               __ripple_shuffle_index_func(IdxFun)),                           \
+      double: __builtin_ripple_shuffle_f64(                                    \
+               (double)(Val1), (double)(Val2), (IsPair),                       \
+               __ripple_shuffle_index_func(IdxFun))                            \
           __extra_bf16_ripple_shuffle((Val1), (Val2), (IsPair), (IdxFun))      \
               __extra_f16_ripple_shuffle((Val1), (Val2), (IsPair), (IdxFun)))  \
       RIPPLE_REENABLE_GENERIC_WARNING
 
-#define ripple_shuffle(Val, IdxFun)                                            \
-  __ripple_shuffle_impl((Val), (Val), 0, (IdxFun))
+#define ripple_shuffle(Val, ...)                                               \
+  (__ripple_shuffle_require_index_func((__VA_ARGS__)),                         \
+   __ripple_shuffle_impl((Val), ((__typeof__(Val))0), 0, (__VA_ARGS__)))
 
-#define ripple_shuffle_pair(Val1, Val2, IdxFun)                                \
-  __ripple_shuffle_impl((Val1), (Val2), 1, (IdxFun))
+#define ripple_shuffle_pair(Val1, Val2, ...)                                   \
+  (__ripple_shuffle_require_same_type((Val1), (Val2)),                         \
+   __ripple_shuffle_require_index_func((__VA_ARGS__)),                         \
+   __ripple_shuffle_impl((Val1), (Val2), 1, (__VA_ARGS__)))
 
-#define ripple_shuffle_p(Val, IdxFun)                                          \
-  (__typeof__(Val))__builtin_ripple_shuffle_p((Val), (Val), 0, (IdxFun))
+#define ripple_shuffle_p(Val, ...)                                             \
+  (__ripple_shuffle_require_index_func((__VA_ARGS__)),                         \
+   (__typeof__(Val))__builtin_ripple_shuffle_p(                                \
+       (Val), ((__typeof__(Val))0), 0,                                         \
+       __ripple_shuffle_index_func((__VA_ARGS__))))
 
-#define ripple_shuffle_pair_p(Val1, Val2, IdxFun)                              \
-  (__typeof__(Val1))__builtin_ripple_shuffle_p((Val1), (Val2), 1, (IdxFun))
-
-#else // defined(__cplusplus)
-
-#if __has_soft_bf16__
-
-#define __emulate_shuffle_bf16(Val1, Val2, IsPair, indexfunc)                  \
-  (__bf16)__builtin_ripple_shuffle_f32((float)(Val1), (float)(Val2), (IsPair), \
-                                       (indexfunc))
-
-#else // ! __has_soft_bf16__
-
-#define __emulate_shuffle_bf16(Val1, Val2, IsPair, indexfunc)                  \
-  __builtin_ripple_shuffle_bf16((Val1), (Val2), (IsPair), (indexfunc))
-
-#endif // __has_soft_bf16__
-
-#define __ripple_shuffle_impl_int_cpp(Type, UI)                                \
-  static __attribute__((always_inline)) Type ripple_shuffle(                   \
-      Type x, __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {     \
-    return __ripple_shuffle_impl_int(Type, UI, x, x, false, index_func);       \
-  }
-
-static __attribute__((always_inline)) char
-ripple_shuffle(char x,
-               __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {
-  return __ripple_char_is_signed
-             ? __ripple_shuffle_impl_int(char, i, x, x, false, index_func)
-             : __ripple_shuffle_impl_int(char, u, x, x, false, index_func);
-}
-
-template <typename T>
-static __attribute__((always_inline)) T *
-ripple_shuffle_p(T *x,
-                 __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {
-  return static_cast<T *>(__builtin_ripple_shuffle_p(x, x, false, index_func));
-}
-
-__ripple_shuffle_impl_int_cpp(signed char, i);
-__ripple_shuffle_impl_int_cpp(unsigned char, u);
-__ripple_shuffle_impl_int_cpp(signed short, i);
-__ripple_shuffle_impl_int_cpp(unsigned short, u);
-__ripple_shuffle_impl_int_cpp(signed int, i);
-__ripple_shuffle_impl_int_cpp(unsigned int, u);
-__ripple_shuffle_impl_int_cpp(signed long, i);
-__ripple_shuffle_impl_int_cpp(unsigned long, u);
-__ripple_shuffle_impl_int_cpp(signed long long, i);
-__ripple_shuffle_impl_int_cpp(unsigned long long, u);
-
-#undef __ripple_shuffle_impl_int_cpp
-
-#if __has_Float16__
-static __attribute__((always_inline)) _Float16
-ripple_shuffle(_Float16 x,
-               __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {
-  return __builtin_ripple_shuffle_f16(x, x, false, index_func);
-}
-#endif
-#if __has_bf16__
-static __attribute__((always_inline)) __bf16
-ripple_shuffle(__bf16 x,
-               __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {
-  return __emulate_shuffle_bf16(x, x, false, index_func);
-}
-#endif
-static __attribute__((always_inline)) float
-ripple_shuffle(float x,
-               __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {
-  return __builtin_ripple_shuffle_f32(x, x, false, index_func);
-}
-static __attribute__((always_inline)) double
-ripple_shuffle(double x,
-               __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {
-  return __builtin_ripple_shuffle_f64(x, x, false, index_func);
-}
-
-#define __ripple_shuffle_pair_impl_int_cpp(Type, UI)                           \
-  static __attribute__((always_inline)) Type ripple_shuffle_pair(              \
-      Type x, Type y,                                                          \
-      __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {             \
-    return __ripple_shuffle_impl_int(Type, UI, x, y, true, index_func);        \
-  }
-
-static __attribute__((always_inline)) char
-ripple_shuffle_pair(char x, char y,
-                    __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {
-  return __ripple_char_is_signed
-             ? __ripple_shuffle_impl_int(char, i, x, y, true, index_func)
-             : __ripple_shuffle_impl_int(char, u, x, y, true, index_func);
-}
-
-template <typename T>
-static __attribute__((always_inline)) T *ripple_shuffle_pair_p(
-    T *x, T *y, __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {
-  return static_cast<T *>(__builtin_ripple_shuffle_p(x, y, true, index_func));
-}
-
-__ripple_shuffle_pair_impl_int_cpp(signed char, i);
-__ripple_shuffle_pair_impl_int_cpp(unsigned char, u);
-__ripple_shuffle_pair_impl_int_cpp(signed short, i);
-__ripple_shuffle_pair_impl_int_cpp(unsigned short, u);
-__ripple_shuffle_pair_impl_int_cpp(signed int, i);
-__ripple_shuffle_pair_impl_int_cpp(unsigned int, u);
-__ripple_shuffle_pair_impl_int_cpp(signed long, i);
-__ripple_shuffle_pair_impl_int_cpp(unsigned long, u);
-__ripple_shuffle_pair_impl_int_cpp(signed long long, i);
-__ripple_shuffle_pair_impl_int_cpp(unsigned long long, u);
-
-#undef __ripple_shuffle_pair_impl_int_cpp
-
-#if __has_Float16__
-static __attribute__((always_inline)) _Float16
-ripple_shuffle_pair(_Float16 x, _Float16 y,
-                    __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {
-  return __builtin_ripple_shuffle_f16(x, y, true, index_func);
-}
-#endif
-#if __has_bf16__
-static __attribute__((always_inline)) __bf16
-ripple_shuffle_pair(__bf16 x, __bf16 y,
-                    __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {
-  return __emulate_shuffle_bf16(x, y, true, index_func);
-}
-#endif
-static __attribute__((always_inline)) float
-ripple_shuffle_pair(float x, float y,
-                    __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {
-  return __builtin_ripple_shuffle_f32(x, y, true, index_func);
-}
-static __attribute__((always_inline)) double
-ripple_shuffle_pair(double x, double y,
-                    __SIZE_TYPE__ (*index_func)(__SIZE_TYPE__, __SIZE_TYPE__)) {
-  return __builtin_ripple_shuffle_f64(x, y, true, index_func);
-}
-
-#endif // __cplusplus
+#define ripple_shuffle_pair_p(Val1, Val2, ...)                                 \
+  (__ripple_shuffle_require_same_type((Val1), (Val2)),                         \
+   __ripple_shuffle_require_index_func((__VA_ARGS__)),                         \
+   (__typeof__(Val1))__builtin_ripple_shuffle_p(                               \
+       (Val1), (Val2), 1, __ripple_shuffle_index_func((__VA_ARGS__))))
 
 /* _________________________ Saturation Ops _________________________________*/
 
