@@ -11,10 +11,13 @@ entry:
 
 define dso_local void @foo(ptr %A, ptr %B) #0 {
 ; CHECK-LABEL: define dso_local void @foo(
-; CHECK: load <33 x double>
-; CHECK: load <33 x double>
-; CHECK: call fastcc <33 x double> @ripple.specialization.final.1.mul(
-; CHECK: store <33 x double>
+; CHECK: [[A:%.*]] = call <48 x double> @llvm.masked.load.v48f64.p0(
+; CHECK: [[B:%.*]] = call <48 x double> @llvm.masked.load.v48f64.p0(
+; CHECK: [[NARROW_A:%.*]] = shufflevector <48 x double> [[A]], {{.*}}, <33 x i32>
+; CHECK: [[NARROW_B:%.*]] = shufflevector <48 x double> [[B]], {{.*}}, <33 x i32>
+; CHECK: [[CALL:%.*]] = call fastcc <33 x double> @ripple.specialization.final.1.mul(<33 x double> [[NARROW_A]], <33 x double> [[NARROW_B]])
+; CHECK: [[PADDED_CALL:%.*]] = shufflevector <33 x double> [[CALL]], {{.*}}, <48 x i32>
+; CHECK: call void @llvm.masked.store.v48f64.p0(<48 x double> [[PADDED_CALL]],
 entry:
   %bs = call ptr @llvm.ripple.block.setshape.i32(i32 0, i32 33, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1)
   %v = call i32 @llvm.ripple.block.index.i32(ptr %bs, i32 0)
