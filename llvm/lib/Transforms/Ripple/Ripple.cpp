@@ -2939,28 +2939,10 @@ void Ripple::padToTargetSIMDWidth() {
           AddUserInstsToWorklist(I, Worklist);
         }
       } else if (auto *CallI = dyn_cast<CallInst>(I)) {
-        std::string ErrStr;
-        raw_string_ostream OSS(ErrStr);
-        OSS << "Only call instructions that accept legalizable types suported. "
-               "Unsupported call: "
-            << *I;
-        OSS.flush();
-
-        if (auto *CallIVtype = dyn_cast<FixedVectorType>(CallI->getType())) {
-          if (CallIVtype->getNumElements() != GetPaddedLength(CallI)) {
-            return createStringError(inconvertibleErrorCode(), ErrStr);
-          }
-        }
-
-        for (auto &Arg : CallI->args()) {
-          auto *ArgV = Arg.get();
-          if (auto *ArgVtype = dyn_cast<FixedVectorType>(ArgV->getType())) {
-            if (ArgVtype->getNumElements() != GetPaddedLength(ArgV)) {
-              return createStringError(inconvertibleErrorCode(), ErrStr);
-            }
-          }
-        }
-
+        if (CallI->isMustTailCall())
+          return createStringError(inconvertibleErrorCode(),
+                                   "Cannot pad a function containing a "
+                                   "musttail call.");
         MustBePadded.insert(I);
         AddUserInstsToWorklist(I, Worklist);
       } else if (auto *ReturnI = dyn_cast<ReturnInst>(I)) {
@@ -3587,18 +3569,28 @@ void Ripple::padToTargetSIMDWidth() {
       InstToPadded.insert_or_assign({Phi, PaddedLength}, NewPhi);
       InstructionsToRemove.push_back(Phi);
     } else if (auto *CallI = dyn_cast<CallInst>(I)) {
-      // Build new argument list using padded counterparts, asserting that each
-      // vector argument's padded length equals its unpadded length (enforced
-      // by GetInstructionsThatMustBePadded).
+      // Calls retain their original function type. Convert padded values back
+      // to the call's fixed-width ABI at the call boundary.
       SmallVector<Value *> NewArgs;
       for (auto &Arg : CallI->args()) {
         auto *ArgV = Arg.get();
         if (auto *ArgVType = dyn_cast<FixedVectorType>(ArgV->getType())) {
-          assert(ArgVType->getNumElements() == GetPaddedLength(ArgV) &&
-                 "PadToTargetSIMD: CallInst arg vector length must equal its "
-                 "padded length.");
+          unsigned OriginalLength = ArgVType->getNumElements();
+          unsigned PaddedLength = GetPaddedLength(ArgV);
+          if (isa<Argument>(ArgV) || isa<Constant>(ArgV)) {
+            NewArgs.push_back(ArgV);
+            continue;
+          }
+
+          if (OriginalLength == PaddedLength) {
+            NewArgs.push_back(GetPaddedV(ArgV, OriginalLength, InstToPadded));
+            continue;
+          }
+
+          auto *PaddedArg = GetPaddedV(ArgV, PaddedLength, InstToPadded);
+          irBuilder.SetInsertPoint(CallI);
           NewArgs.push_back(
-              GetPaddedV(ArgV, ArgVType->getNumElements(), InstToPadded));
+              ExtractStartingSubVec(irBuilder, PaddedArg, OriginalLength));
         } else {
           NewArgs.push_back(ArgV);
         }
@@ -3606,22 +3598,34 @@ void Ripple::padToTargetSIMDWidth() {
 
       Twine Name =
           CallI->getType()->isVoidTy() ? Twine("") : CallI->getName() + ".pad";
-      // Preserve all call-site semantics (calling convention, attributes,
-      // tail kind, operand bundles, fast-math flags, and metadata) while
-      // substituting only the padded arguments.
+      // Preserve call-site semantics while substituting only the padded
+      // arguments. A tail call whose result needs widening is cleared below.
       auto *NewCallI = cast<CallInst>(CallI->clone());
       for (auto [ArgIdx, NewArg] : enumerate(NewArgs))
         NewCallI->setArgOperand(ArgIdx, NewArg);
       NewCallI->insertBefore(CallI->getIterator());
       NewCallI->setName(Name);
 
-      // For vector-returning calls, record in InstToPadded so downstream
-      // padded instructions can look up the replacement via GetPaddedV.
-      // For non-vector returns, replace all uses directly since those users
-      // are not tracked through InstToPadded.
+      // Re-expand a non-legal vector result for uses in this padded function.
+      // The call itself retains its fixed-width ABI result.
       if (auto *RetVType = dyn_cast<FixedVectorType>(CallI->getType())) {
-        unsigned PaddedLength = RetVType->getNumElements();
-        InstToPadded.insert_or_assign({CallI, PaddedLength}, NewCallI);
+        unsigned OriginalLength = RetVType->getNumElements();
+        unsigned PaddedLength = GetPaddedLength(CallI);
+        if (OriginalLength == PaddedLength) {
+          InstToPadded.insert_or_assign({CallI, PaddedLength}, NewCallI);
+        } else {
+          if (NewCallI->getTailCallKind() == CallInst::TCK_Tail)
+            NewCallI->setTailCallKind(CallInst::TCK_None);
+
+          std::vector<int> MaskEls(PaddedLength, -1);
+          for (unsigned IEl = 0; IEl < OriginalLength; ++IEl)
+            MaskEls[IEl] = IEl;
+          setInsertPointAfter(irBuilder, NewCallI);
+          auto *PaddedCall = irBuilder.CreateShuffleVector(
+              NewCallI, PoisonValue::get(NewCallI->getType()), MaskEls,
+              NewCallI->getName() + ".pad");
+          InstToPadded.insert_or_assign({CallI, PaddedLength}, PaddedCall);
+        }
       } else {
         CallI->replaceAllUsesWith(NewCallI);
       }
