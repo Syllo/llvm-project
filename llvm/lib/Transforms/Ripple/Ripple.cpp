@@ -462,6 +462,44 @@ void removeIncomingBlockFromPhis(const BasicBlock *RefToRemove,
 }
 } // namespace llvm
 
+// When Clang does not inline a captureless lambda's conversion to a function
+// pointer, it remains a call to a generated conversion function. That function
+// returns the concrete lambda invoke function that Ripple needs to evaluate.
+// Resolve this narrow case without general interprocedural pointer analysis:
+// every return from the locally defined conversion function must identify the
+// same function.
+static Function *resolveRippleShuffleMappingFunction(Value *Mapping) {
+  if (auto *Func = dyn_cast<Function>(Mapping->stripPointerCasts()))
+    return Func;
+
+  auto *ConversionCall = dyn_cast<CallBase>(Mapping);
+  if (!ConversionCall)
+    return nullptr;
+
+  Function *ConversionFunc = ConversionCall->getCalledFunction();
+  if (!ConversionFunc || ConversionFunc->isDeclaration())
+    return nullptr;
+
+  // Clang's captureless-lambda conversion operator returns the same generated
+  // invoke function on every path. Reject code that does not follow that shape.
+  Function *MappingFunc = nullptr;
+  for (BasicBlock &BB : *ConversionFunc) {
+    auto *Return = dyn_cast<ReturnInst>(BB.getTerminator());
+    if (!Return)
+      continue;
+
+    Value *ReturnedValue = Return->getReturnValue();
+    auto *ReturnedFunc =
+        ReturnedValue ? dyn_cast<Function>(ReturnedValue->stripPointerCasts())
+                      : nullptr;
+    if (!ReturnedFunc || (MappingFunc && MappingFunc != ReturnedFunc))
+      return nullptr;
+    MappingFunc = ReturnedFunc;
+  }
+
+  return MappingFunc;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 ///                             TensorShapeAny                               ///
 ////////////////////////////////////////////////////////////////////////////////
@@ -4412,8 +4450,10 @@ void Ripple::genVectorInstructions() {
       assert(VecToShuffle != rippleShuffle->getArgOperand(0));
     }
 
-    // We made sure that this is a valid function earlier
-    Function *ShuffleFunc = cast<Function>(rippleShuffle->getArgOperand(3));
+    // We made sure that this resolves to a valid function earlier.
+    Function *ShuffleFunc =
+        resolveRippleShuffleMappingFunction(rippleShuffle->getArgOperand(3));
+    assert(ShuffleFunc && "invalid ripple shuffle mapping function");
     FunctionType *ShuffleFuncType = ShuffleFunc->getFunctionType();
 
     irBuilder.SetInsertPoint(rippleShuffle);
@@ -8546,7 +8586,8 @@ Error Ripple::checkRippleReductionIntrinsics(IntrinsicInst *I) {
 }
 
 Error Ripple::checkRippleShuffleIntrinsics(IntrinsicInst *I) {
-  Function *ShuffleFunc = dyn_cast<Function>(I->getArgOperand(3));
+  Function *ShuffleFunc =
+      resolveRippleShuffleMappingFunction(I->getArgOperand(3));
 
   bool IsPairShuffle =
       !cast<ConstantInt>(cast<CallInst>(I)->getArgOperand(2))->isZero();
