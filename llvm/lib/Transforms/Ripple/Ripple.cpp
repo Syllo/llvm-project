@@ -2322,6 +2322,8 @@ PreservedAnalyses Ripple::run() {
   assert(allInstructionsHaveRippleShapes() &&
          "Some instruction has no Ripple shape");
 
+  finishSpecializationMask();
+
   LLVM_DEBUG(dbgs() << "\nFunction after Ripple pass:\n\n"; F.print(dbgs());
              dbgs() << "\n");
 
@@ -3054,6 +3056,22 @@ void Ripple::padToTargetSIMDWidth() {
   }
 
   for (auto *I : InstsThatMustBePaddedRPOT) {
+    // The specialization mask is a temporary placeholder for the ABI mask
+    // argument, which does not exist until finishSpecialization() clones this
+    // function. Keep it as the operand of a padded shuffle so cloning can map
+    // the placeholder to that argument instead of folding it to a constant.
+    if (SpecializationMask && I == SpecializationMask) {
+      auto *MaskType = cast<FixedVectorType>(I->getType());
+      unsigned PaddedLength = GetPaddedLength(I);
+      std::vector<int> MaskEls(PaddedLength, -1);
+      for (unsigned IEl = 0; IEl < MaskType->getNumElements(); ++IEl)
+        MaskEls[IEl] = IEl;
+      setInsertPointAfter(irBuilder, I);
+      auto *PaddedMask = irBuilder.CreateShuffleVector(
+          I, PoisonValue::get(MaskType), MaskEls, I->getName() + ".pad");
+      InstToPadded.insert_or_assign({I, PaddedLength}, PaddedMask);
+      continue;
+    }
     if (auto *Alloca = dyn_cast<AllocaInst>(I)) {
       auto *OldArrayTy = cast<ArrayType>(Alloca->getAllocatedType());
       unsigned PaddedLength = GetAllocaPaddedLength(Alloca);
@@ -10998,8 +11016,53 @@ bool Ripple::requestSpecializationFor(const CallInst &Call) {
   return true;
 }
 
+TensorShape Ripple::getPendingSpecializationMaskShape(
+    SmallVectorImpl<const TensorShape *> &ArgumentShapes) const {
+  ArgumentShapes.reserve(F.arg_size() / 2);
+  for (unsigned ArgIdx = 0, E = F.arg_size() / 2; ArgIdx < E; ArgIdx++) {
+    Argument *RippleArg = F.getArg(E + ArgIdx);
+    ArgumentShapes.push_back(&getRippleShape(RippleArg));
+  }
+  auto SpecMaskShape = TensorShape::broadcastShapeFromAll(ArgumentShapes);
+  if (!SpecMaskShape)
+    llvm_unreachable("We shouldn't be constructing ripple specializations when "
+                     "argument tensor shapes don't broadcast");
+  return SpecMaskShape.get();
+}
+
+TensorShape Ripple::getPendingSpecializationMaskShape() const {
+  SmallVector<const TensorShape *> ArgumentShapes;
+  return getPendingSpecializationMaskShape(ArgumentShapes);
+}
+
+void Ripple::finishSpecializationMask() {
+  if (!isPendingRippleSpecialization(F))
+    return;
+
+  TensorShape MaskShape = getPendingSpecializationMaskShape();
+
+  // The function does not yet have the mask argument that will be present in
+  // the masked specialization. Use a temporary value until cloning replaces it
+  // with that argument.
+  irBuilder.SetInsertPoint(F.getEntryBlock().getFirstNonPHIOrDbgOrAlloca());
+  SpecializationMask = irBuilder.Insert(createMaskSelectToTrueFalse(
+      irBuilder.getInt1Ty(),
+      ElementCount::get(MaskShape.flatShape(), /*Scalable=*/false),
+      "ripple.specialization.mask"));
+  Value *TemporaryMask = SpecializationMask;
+  setRippleShape(TemporaryMask, MaskShape);
+
+  auto refToPtr = [](BasicBlock &BB) { return &BB; };
+  applyMaskToOps(make_range(map_iterator(F.begin(), refToPtr),
+                            map_iterator(F.end(), refToPtr)),
+                 TemporaryMask, MaskShape,
+                 &*std::next(cast<Instruction>(TemporaryMask)->getIterator()));
+}
+
 void Ripple::finishSpecialization() {
   assert(isPendingRippleSpecialization(F));
+  assert(SpecializationMask && "Specialization mask must be applied first");
+  Value *TemporaryMask = SpecializationMask;
   const TensorShape *ReturnShape = &ScalarShape;
   Type *ReturnType = Type::getVoidTy(F.getContext());
   if (!F.getReturnType()->isVoidTy()) {
@@ -11023,18 +11086,7 @@ void Ripple::finishSpecialization() {
       ReturnType = F.getReturnType();
   }
   SmallVector<const TensorShape *> ArgumentShapes;
-  ArgumentShapes.reserve(F.arg_size() / 2);
-  // We get the tensor shape of the ripple arguments
-  for (unsigned ArgIdx = 0, E = F.arg_size() / 2; ArgIdx < E; ArgIdx++) {
-    Argument *RippleArg = F.getArg(E + ArgIdx);
-    ArgumentShapes.push_back(&getRippleShape(RippleArg));
-  }
-  auto SpecMaskShape = TensorShape::broadcastShapeFromAll(ArgumentShapes);
-  // This is checked when requesting specialization construction
-  if (!SpecMaskShape)
-    llvm_unreachable("We shouldn't be constructing ripple specializations when "
-                     "argument tensor shapes don't broadcast");
-  TensorShape &MaskShape = SpecMaskShape.get();
+  TensorShape MaskShape = getPendingSpecializationMaskShape(ArgumentShapes);
   Function *ProcessedSpecialization = nullptr;
   Function *MaskedSpecialization = nullptr;
   if (ReturnType->isVoidTy()) {
@@ -11101,22 +11153,6 @@ void Ripple::finishSpecialization() {
   LLVM_DEBUG(dbgs() << "\nFinal specialization of " << F.getName() << ":\n";
              ProcessedSpecialization->print(dbgs()));
 
-  // Create a temporary mask for whole function masking. After cloning the
-  // function, we will replace this instruction by the argument (which does not
-  // exist here)!
-  irBuilder.SetInsertPoint(F.getEntryBlock().getFirstNonPHIOrDbgOrAlloca());
-  SelectInst *TemporaryMask = irBuilder.Insert(createMaskSelectToTrueFalse(
-      irBuilder.getInt1Ty(),
-      ElementCount::get(MaskShape.flatShape(), /*Scalable*/ false),
-      "ripple.specialization.mask"));
-  setRippleShape(TemporaryMask, MaskShape);
-
-  SmallVector<BasicBlock *> BBs;
-  auto refToPtr = [](BasicBlock &BB) { return &BB; };
-  applyMaskToOps(make_range(map_iterator(F.begin(), refToPtr),
-                            map_iterator(F.end(), refToPtr)),
-                 TemporaryMask, MaskShape,
-                 &*std::next(TemporaryMask->getIterator()));
   {
     ValueToValueMapTy VMap;
     for (unsigned ArgIdx = 0, E = MaskedSpecialization->arg_size() - 1;
