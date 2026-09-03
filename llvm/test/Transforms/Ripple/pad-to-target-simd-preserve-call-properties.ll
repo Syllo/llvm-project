@@ -1,11 +1,11 @@
-; REQUIRES: x86-registered-target
-; RUN: opt -S -passes='module(ripple)' -ripple-pad-to-target-simd %s -o - 2>/dev/null | FileCheck %s
+; REQUIRES: hexagon-registered-target
+; RUN: opt -S -mtriple=hexagon -mcpu=hexagonv81 -mattr=+hvx-length128b,+hvxv81,+v81,-long-calls -passes='module(ripple)' -ripple-pad-to-target-simd %s -o - 2>/dev/null | FileCheck %s
 
-; Padding recreates this vector call after the specialization's vector return
-; causes padding to bail out.  The replacement call must retain fastcc: the
-; specialization definition is fastcc, and a default-C call is undefined.
+; Padding recreates this vector call at its fixed-width ABI boundary. The
+; replacement call must retain fastcc: the specialization definition is
+; fastcc, and a default-C call is undefined.
 
-target triple = "i386-unknown-linux-gnu"
+target triple = "hexagon"
 
 define internal double @mul(double %a, double %b) #1 {
 entry:
@@ -32,6 +32,6 @@ entry:
 declare ptr @llvm.ripple.block.setshape.i32(i32 immarg, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32) #2
 declare i32 @llvm.ripple.block.index.i32(ptr, i32 immarg) #2
 
-attributes #0 = { nounwind }
-attributes #1 = { noinline nounwind "ripple-vector-candidate" }
+attributes #0 = { nounwind "target-cpu"="hexagonv81" "target-features"="+hvx-length128b,+hvxv81,+v81,-long-calls" }
+attributes #1 = { noinline nounwind "ripple-vector-candidate" "target-cpu"="hexagonv81" "target-features"="+hvx-length128b,+hvxv81,+v81,-long-calls" }
 attributes #2 = { nocallback nofree nosync nounwind willreturn memory(none) }
