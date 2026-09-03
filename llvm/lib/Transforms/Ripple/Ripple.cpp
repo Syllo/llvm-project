@@ -2534,8 +2534,10 @@ void Ripple::padToTargetSIMDWidth() {
         return It->second;
 
       unsigned OriginalLength = VType->getElementCount().getFixedValue();
-      assert(OriginalLength < PaddedLength &&
-             "expected a wider padded vector argument");
+      assert(OriginalLength <= PaddedLength &&
+             "expected a vector no wider than the padded vector");
+      if (OriginalLength == PaddedLength)
+        return Arg;
       std::vector<int> MaskEls(PaddedLength, -1);
       for (unsigned IEl = 0; IEl < OriginalLength; ++IEl)
         MaskEls[IEl] = IEl;
