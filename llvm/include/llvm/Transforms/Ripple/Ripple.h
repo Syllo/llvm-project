@@ -1633,6 +1633,10 @@ private:
   /// them later.
   DenseSet<AssertingVH<SelectInst>> SelectToMaskWhenIfConvert;
 
+  /// @brief The temporary specialization mask used while building the masked
+  /// specialization body. It is replaced by the mask argument when cloning.
+  WeakTrackingVH SpecializationMask;
+
   /// @brief The set of instructions that should not
   /// be masked when if-converting.
   DenseSet<AssertingVH<Instruction>> ToSkipMaskingWhenIfConvert;
@@ -2223,6 +2227,18 @@ private:
   /// function prototype now that all the types have settled.
   /// @pre isPendingRippleSpecialization is true
   void finishSpecialization();
+
+  /// @brief Apply the specialization mask before target SIMD padding for a
+  /// pending specialization.
+  void finishSpecializationMask();
+
+  /// @brief Populate the shapes of the pending specialization's Ripple
+  /// arguments and return their broadcast mask shape.
+  TensorShape getPendingSpecializationMaskShape(
+      SmallVectorImpl<const TensorShape *> &ArgumentShapes) const;
+
+  /// @brief Return the broadcast mask shape of the pending specialization.
+  TensorShape getPendingSpecializationMaskShape() const;
 
   /// @brief Request the masked specialization of a given non-masked
   /// specialization
