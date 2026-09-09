@@ -115,6 +115,7 @@ define i32 @trunc_v32i8_to_v32i1(<32 x i8> %v) {
 
 ; CHECK-LABEL: trunc_v16i16_to_v16i1:
 ; CHECK: q{{[0-9]+}} = vand(v{{[0-9]+}},r{{[0-9]+}})
+; CHECK: r{{[0-9]+}} = vextract(
 define i16 @trunc_v16i16_to_v16i1(<16 x i16> %v) {
   %1 = trunc <16 x i16> %v to <16 x i1>
   %2 = bitcast <16 x i1> %1 to i16
@@ -125,6 +126,7 @@ define i16 @trunc_v16i16_to_v16i1(<16 x i16> %v) {
 
 ; CHECK-LABEL: trunc_v16i8_to_v16i1:
 ; CHECK: q{{[0-9]+}} = vand(v{{[0-9]+}},r{{[0-9]+}})
+; CHECK: r{{[0-9]+}} = vextract(
 define i16 @trunc_v16i8_to_v16i1(<16 x i8> %v) {
   %1 = trunc <16 x i8> %v to <16 x i1>
   %2 = bitcast <16 x i1> %1 to i16
