@@ -1,7 +1,9 @@
 ; RUN: llc -mtriple=hexagon < %s | FileCheck %s
 
 ; CHECK-LABEL: danny:
-; CHECK: vrmpy
+; CHECK: q{{[0-9]+}} = vcmp.eq(v0.b,v1.b)
+; CHECK: v{{[0-9]+}} = vand(q{{[0-9]+}},r{{[0-9]+}})
+; CHECK: vextract
 define i64 @danny(<64 x i8> %a0, <64 x i8> %a1) #0 {
   %v0 = icmp eq <64 x i8> %a0, %a1
   %v1 = bitcast <64 x i1> %v0 to i64
@@ -9,7 +11,9 @@ define i64 @danny(<64 x i8> %a0, <64 x i8> %a1) #0 {
 }
 
 ; CHECK-LABEL: sammy:
-; CHECK: vrmpy
+; CHECK: q{{[0-9]+}} = vcmp.eq(v0.h,v1.h)
+; CHECK: v{{[0-9]+}} = vand(q{{[0-9]+}},r{{[0-9]+}})
+; CHECK: vextract
 define i32 @sammy(<32 x i16> %a0, <32 x i16> %a1) #0 {
   %v0 = icmp eq <32 x i16> %a0, %a1
   %v1 = bitcast <32 x i1> %v0 to i32

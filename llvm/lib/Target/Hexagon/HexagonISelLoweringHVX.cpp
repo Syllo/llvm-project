@@ -2115,6 +2115,142 @@ HexagonTargetLowering::LowerHvxBitcast(SDValue Op, SelectionDAG &DAG) const {
   const SDLoc &dl(Op);
 
   if (isHvxBoolTy(ValTy) && ResTy.isScalarInteger()) {
+    // Predicate -> scalar bitcasts fall into two categories:
+    //
+    //  1) Canonical logical round-trips originating from toV32i1Fromi32.
+    //     These have a precise DAG shape and can be reversed without
+    //     consulting HVX predicate register layout.
+    //
+    //  2) All other cases, which depend on the physical predicate encoding
+    //     (2-bit/4-bit lanes, sub-vector predicates, HVX64 vs HVX128).
+    //
+    // We first match and fold only the exact canonical patterns. Any other
+    // producer intentionally falls back to generic per-lane packing or
+    // HVX-specific compression logic for correctness.
+    unsigned BitWidth = ResTy.getSizeInBits();
+
+    // Canonical matcher:
+    // Match only the exact form produced by toV32i1Fromi32:
+    //   V2Q(SRA(SHL(SPLAT(i32), <31,30,...,0>), <31,...,31>))
+    // This matcher is intentionally strict. Any deviation is non-canonical.
+    auto matchV32i1FromI32 = [&](SDValue QVal) -> SDValue {
+      if (ty(QVal) != MVT::v32i1 || QVal.getOpcode() != HexagonISD::V2Q)
+        return SDValue();
+
+      auto matchBuildVecConst = [&](SDValue Vec, auto ExpectVal) -> bool {
+        if (ty(Vec) != MVT::v32i32 || Vec.getOpcode() != ISD::BUILD_VECTOR ||
+            Vec.getNumOperands() != 32)
+          return false;
+        for (unsigned i = 0; i != 32; ++i) {
+          auto *C = dyn_cast<ConstantSDNode>(Vec.getOperand(i));
+          if (!C || C->getZExtValue() != ExpectVal(i))
+            return false;
+        }
+        return true;
+      };
+      auto matchConstSplat = [&](SDValue Vec, uint64_t Expected) -> bool {
+        if (ty(Vec) != MVT::v32i32)
+          return false;
+        if (Vec.getOpcode() == ISD::SPLAT_VECTOR) {
+          auto *C = dyn_cast<ConstantSDNode>(Vec.getOperand(0));
+          return C && C->getZExtValue() == Expected;
+        }
+        return matchBuildVecConst(Vec,
+                                  [Expected](unsigned) { return Expected; });
+      };
+
+      SDValue SraV = QVal.getOperand(0);
+      if (ty(SraV) != MVT::v32i32 || SraV.getOpcode() != ISD::SRA)
+        return SDValue();
+
+      SDValue ShlV = SraV.getOperand(0);
+      SDValue SraAmt = SraV.getOperand(1);
+      if (ty(ShlV) != MVT::v32i32 || ShlV.getOpcode() != ISD::SHL)
+        return SDValue();
+
+      SDValue Splat = ShlV.getOperand(0);
+      SDValue ShlAmt = ShlV.getOperand(1);
+      if (ty(Splat) != MVT::v32i32 || Splat.getOpcode() != ISD::SPLAT_VECTOR ||
+          !matchBuildVecConst(ShlAmt, [](unsigned i) { return 31u - i; }) ||
+          !matchConstSplat(SraAmt, 31u))
+        return SDValue();
+
+      SDValue Scalar = Splat.getOperand(0);
+      return DAG.getZExtOrTrunc(Scalar, dl, MVT::i32);
+    };
+
+    // Fast path: canonical v32i1 -> i32 round-trip.
+    // Avoids predicate compression, Q2V/V2Q fixups, and deal ops.
+    if (ValTy == MVT::v32i1 && BitWidth == 32)
+      if (SDValue Direct = matchV32i1FromI32(Val))
+        return DAG.getZExtOrTrunc(Direct, dl, ResTy);
+
+    // Fast path: canonical v64i1 -> i64 formed by CONCAT of two canonical
+    // v32i1 halves. Bit ordering is preserved explicitly via hi/lo combine.
+    if (ValTy == MVT::v64i1 && BitWidth == 64 &&
+        Val.getOpcode() == ISD::CONCAT_VECTORS) {
+      SDValue Lo = matchV32i1FromI32(Val.getOperand(0));
+      SDValue Hi = matchV32i1FromI32(Val.getOperand(1));
+      if (Lo && Hi)
+        return getCombine(Hi, Lo, dl, MVT::i64, DAG);
+    }
+
+    auto reduceHvxPredChunk = [&](SDValue Pred, unsigned NumBits) {
+      unsigned HwLen = Subtarget.getVectorLength();
+      assert(NumBits == HwLen / 4 &&
+             "Predicate chunk must cover one physical HVX register");
+      assert(ty(Pred) == MVT::getVectorVT(MVT::i1, NumBits) &&
+             "Unexpected predicate chunk type");
+
+      MVT ByteTy = MVT::getVectorVT(MVT::i8, HwLen);
+      MVT VecTy = MVT::getVectorVT(MVT::i32, NumBits);
+      SDValue Q2V = DAG.getNode(HexagonISD::Q2V, dl, ByteTy, Pred);
+      SDValue Reduced = DAG.getBitcast(VecTy, Q2V);
+
+      SmallVector<SDValue, 32> BitValues;
+      for (unsigned I = 0; I != NumBits; ++I)
+        BitValues.push_back(
+            DAG.getConstant(uint32_t(1) << I, dl, MVT::i32));
+      SDValue Id = DAG.getBuildVector(VecTy, dl, BitValues);
+      Reduced = DAG.getNode(ISD::AND, dl, VecTy, Reduced, Id);
+
+      for (unsigned Step = 1; Step < NumBits; Step <<= 1) {
+        SDValue Rot = DAG.getNode(
+            HexagonISD::VROR, dl, VecTy, Reduced,
+            DAG.getConstant(Step * sizeof(int32_t), dl, MVT::i32));
+        Reduced = DAG.getNode(ISD::OR, dl, VecTy, Reduced, Rot);
+      }
+
+      return extractHvxElementReg(
+          Reduced, DAG.getConstant(0, dl, MVT::i32), dl, MVT::i32, DAG);
+    };
+
+    // Non-canonical predicate -> scalar conversion.
+    if ((ValTy == MVT::v32i1 && BitWidth == 32) ||
+        (ValTy == MVT::v64i1 && BitWidth == 64)) {
+      unsigned ChunkBits = Subtarget.getVectorLength() / 4;
+      SDValue Packed = DAG.getConstant(0, dl, ResTy);
+      for (unsigned Offset = 0; Offset != BitWidth; Offset += ChunkBits) {
+        MVT ChunkTy = MVT::getVectorVT(MVT::i1, ChunkBits);
+        SDValue Chunk = Val;
+        if (Offset != 0 || ChunkBits != BitWidth)
+          Chunk = DAG.getNode(ISD::EXTRACT_SUBVECTOR, dl, ChunkTy, Val,
+                              DAG.getConstant(Offset, dl, MVT::i32));
+        SDValue Word = DAG.getZExtOrTrunc(
+            reduceHvxPredChunk(Chunk, ChunkBits), dl, ResTy);
+        if (Offset != 0)
+          Word = DAG.getNode(ISD::SHL, dl, ResTy, Word,
+                             DAG.getConstant(Offset, dl, ResTy));
+        Packed = DAG.getNode(ISD::OR, dl, ResTy, Packed, Word);
+      }
+      return Packed;
+    }
+
+    // HVX-specific predicate compression path.
+    // This code handles cases where scalar bitcasts must respect physical
+    // HVX predicate encoding (sub-vector predicates, 2-bit/4-bit lanes,
+    // HVX64 vs HVX128 differences). It relies on Q2V, deal/redeal, and
+    // compressHvxPred.
     unsigned HwLen = Subtarget.getVectorLength();
     MVT WordTy = MVT::getVectorVT(MVT::i32, HwLen/4);
 
@@ -2139,7 +2275,6 @@ HexagonTargetLowering::LowerHvxBitcast(SDValue Op, SelectionDAG &DAG) const {
     }
 
     SDValue VQ = compressHvxPred(Val, dl, WordTy, DAG);
-    unsigned BitWidth = ResTy.getSizeInBits();
 
     if (BitWidth < 64) {
       SDValue W0 = extractHvxElementReg(VQ, DAG.getConstant(0, dl, MVT::i32),
@@ -2172,20 +2307,25 @@ HexagonTargetLowering::LowerHvxBitcast(SDValue Op, SelectionDAG &DAG) const {
   }
 
   // Handle bitcast from i32, v2i16, and v4i8 to v32i1.
-  // Splat the input into a 32-element i32 vector, then AND each element
-  // with a unique bitmask to isolate individual bits.
+  // Splat the input into a 32-element i32 vector, then move each source bit
+  // to the sign position and arithmetic-shift it across the lane.
   auto bitcastI32ToV32I1 = [&](SDValue Val32) {
     assert(Val32.getValueType().getSizeInBits() == 32 &&
            "Input must be 32 bits");
     MVT VecTy = MVT::getVectorVT(MVT::i32, 32);
     SDValue Splat = DAG.getNode(ISD::SPLAT_VECTOR, dl, VecTy, Val32);
-    SmallVector<SDValue, 32> Mask;
-    for (unsigned i = 0; i < 32; ++i)
-      Mask.push_back(DAG.getConstant(1ull << i, dl, MVT::i32));
-
-    SDValue MaskVec = DAG.getBuildVector(VecTy, dl, Mask);
-    SDValue Anded = DAG.getNode(ISD::AND, dl, VecTy, Splat, MaskVec);
-    return DAG.getNode(HexagonISD::V2Q, dl, MVT::v32i1, Anded);
+    // Build uniform lanes before V2Q: bit i -> sign bit -> sign broadcast.
+    // Per-lane 1<<i leaves one-hot lanes, which breaks byte-wise consumers.
+    SmallVector<SDValue, 32> ShlAmt, SraAmt;
+    for (unsigned i = 0; i < 32; ++i) {
+      ShlAmt.push_back(DAG.getConstant(31 - i, dl, MVT::i32));
+      SraAmt.push_back(DAG.getConstant(31, dl, MVT::i32));
+    }
+    SDValue Shl = DAG.getNode(ISD::SHL, dl, VecTy, Splat,
+                              DAG.getBuildVector(VecTy, dl, ShlAmt));
+    SDValue Sra = DAG.getNode(ISD::SRA, dl, VecTy, Shl,
+                              DAG.getBuildVector(VecTy, dl, SraAmt));
+    return DAG.getNode(HexagonISD::V2Q, dl, MVT::v32i1, Sra);
   };
   // === Case: v32i1 ===
   if (ResTy == MVT::v32i1 &&
@@ -2262,7 +2402,6 @@ SDValue HexagonTargetLowering::LowerHvxStore(SDValue Op,
 
   unsigned NumBits = ValTy.getVectorNumElements();
   MachineMemOperand *MMO = SN->getMemOperand();
-
   // Check alignment requirements based on predicate size
   unsigned RequiredAlign = (NumBits == 32) ? 4 : 8;
   if (MMO->getBaseAlign().value() % RequiredAlign != 0)
@@ -2270,6 +2409,15 @@ SDValue HexagonTargetLowering::LowerHvxStore(SDValue Op,
 
   unsigned HwLen = Subtarget.getVectorLength();
   MVT WordTy = MVT::getVectorVT(MVT::i32, HwLen / 4);
+
+  // compressHvxPred assumes one bit per byte. For NumBits < HwLen, use BITCAST
+  // packing instead (exact per-lane layout).
+  if (NumBits < HwLen) {
+    MVT IntTy = MVT::getIntegerVT(NumBits);
+    SDValue Packed = DAG.getNode(ISD::BITCAST, dl, IntTy, Val);
+    return DAG.getStore(SN->getChain(), dl, Packed, SN->getBasePtr(),
+                        SN->getMemOperand());
+  }
 
   // Compress the predicate into a vector register
   SDValue VQ = compressHvxPred(Val, dl, WordTy, DAG);

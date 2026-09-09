@@ -5,11 +5,13 @@
 ; CHECK-DAG: [[VREG2:v([0-9]+)]] = vsplat([[REG1]])
 ; CHECK-DAG: [[REG2:(r[0-9]+)]] = memw(r{{[0-9]+}}+#0)
 ; CHECK-DAG: [[VREG3:v([0-9]+)]] = vsplat([[REG2]])
-; CHECK-DAG: [[VREG4:v([0-9]+)]] = vand([[VREG2]],[[VREG1]])
-; CHECK-DAG: [[VREG5:v([0-9]+)]] = vand([[VREG3]],[[VREG1]])
-; CHECK-DAG: [[QREG:q[0-9]+]] = vand([[VREG4]],r{{[0-9]+}})
+; CHECK-DAG: [[VREG4:v([0-9]+)]].w = vasl([[VREG2]].w,[[VREG1]].w)
+; CHECK-DAG: [[VREG5:v([0-9]+)]].w = vasl([[VREG3]].w,[[VREG1]].w)
+; CHECK-DAG: [[VREG4S:v([0-9]+)]].w = vasr([[VREG4]].w,r{{[0-9]+}})
+; CHECK-DAG: [[QREG:q[0-9]+]] = vand([[VREG4S]],r{{[0-9]+}})
 ; CHECK-DAG: [[VREG6:v([0-9]+)]] = vand([[QREG]],r{{[0-9]+}})
-; CHECK-DAG: [[QREG1:q[0-9]+]] = vand([[VREG5]],r{{[0-9]+}})
+; CHECK-DAG: [[VREG5S:v([0-9]+)]].w = vasr([[VREG5]].w,r{{[0-9]+}})
+; CHECK-DAG: [[QREG1:q[0-9]+]] = vand([[VREG5S]],r{{[0-9]+}})
 ; CHECK-DAG: [[VREG7:v([0-9]+)]] = vand([[QREG1]],r{{[0-9]+}})
 ; CHECK-DAG: v{{[0-9]+}}.b = vpacke(v{{[0-9]+}}.h,v{{[0-9]+}}.h)
 ; CHECK-DAG: v{{[0-9]+}}.b = vpacke(v{{[0-9]+}}.h,v{{[0-9]+}}.h)
@@ -30,4 +32,3 @@ entry:
   store i8 %z1, ptr %ptr1, align 1
   ret void
 }
-
