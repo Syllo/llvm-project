@@ -1,8 +1,9 @@
 ; RUN: llc --mtriple=hexagon -mattr=+hvxv79,+hvx-length128b < %s | FileCheck %s
 
 ; CHECK: [[VREG1:v([0-9]+)]] = vsplat(r{{[0-9]*}})
-; CHECK: [[VREG2:v([0-9]+)]] = vand([[VREG1]],v{{[0-9]+}})
-; CHECK: q[[QREG:[0-9]+]] =  vand([[VREG2]],r{{[0-9]+}})
+; CHECK: [[VREG2:v([0-9]+)]].w = vasl([[VREG1]].w,v{{[0-9]+}}.w)
+; CHECK: [[VREG3:v([0-9]+)]].w = vasr([[VREG2]].w,r{{[0-9]+}})
+; CHECK: q[[QREG:[0-9]+]] = vand([[VREG3]],r{{[0-9]+}})
 
 define void @bitcast_i32_to_v32i1_full(ptr %in, ptr %out) {
 entry:

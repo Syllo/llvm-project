@@ -1,29 +1,21 @@
 ; RUN: llc -mtriple=hexagon < %s | FileCheck %s
+; RUN: llc -mtriple=hexagon -stop-after=finalize-isel < %s \
+; RUN: | FileCheck %s --check-prefix=MIR
 ;
 ; CHECK-LABEL: foo_128_2x
 
-; Check that bitcast is computed corrected by fixing up a predicate register
-; before compressing it.
-; CHECK: v[[V1:[0-9]+]].b = vdeal(v{{[0-9]+}}.b)
+; CHECK: v{{[0-9]+}} = vand(q0,r{{[0-9]+}})
 
-; Check that the resulting register pair has the registers in the right order.
+; Check that the low and high packed words are returned in order.
+; CHECK: r0 = vextract(v{{[0-9]+}},r{{[0-9]+}})
+; CHECK: r1 = vextract(v{{[0-9]+}},r{{[0-9]+}})
+; CHECK: jumpr r31
 
-; CHECK: vdeal
-; CHECK: vdeal
-; CHECK: v[[V1:[0-9]+]]:[[V0:[0-9]+]] = vshuff
-; CHECK-NEXT: }
-; CHECK-NEXT: {
-; CHECK-NEXT: vmem(r[[RA:[0-9]+]]+#0) = v[[V0]]
-; CHECK-NEXT: }
-; CHECK-NEXT: {
-; CHECK-NEXT: r0 = memw(r1+#0)
-; CHECK-NEXT: }
-; CHECK-NEXT: {
-; CHECK-NEXT: r1 = memw(r1+#4)
-; CHECK-NEXT: }
-; CHECK-NEXT: {
-; CHECK-NEXT: r31:30 = dealloc_return(r30):raw
-; CHECK-NEXT: }
+; MIR-LABEL: name: foo_128_2x
+; MIR: [[LOW:%[0-9]+]]:intregs = V6_extractw [[LOW_REDUCTION:%[0-9]+]], [[WORD:%[0-9]+]]
+; MIR: [[HIGH:%[0-9]+]]:intregs = V6_extractw [[HIGH_REDUCTION:%[0-9]+]], [[WORD]]
+; MIR: [[PACKED:%[0-9]+]]:doubleregs = REG_SEQUENCE [[HIGH]], %subreg.isub_hi, [[LOW]], %subreg.isub_lo
+; MIR: $d0 = COPY [[PACKED]]
 
 define i64 @foo_128_2x(<64 x i16> %a0, <64 x i16> %a1) #0 {
   %v0 = icmp ugt <64 x i16> %a0, %a1
@@ -35,11 +27,7 @@ define i64 @foo_128_2x(<64 x i16> %a0, <64 x i16> %a1) #0 {
 ;; the only distinction.
 
 ; CHECK-LABEL: foo_128_4x
-; CHECK: v[[V1:[0-9]+]].h = vdeal(v{{[0-9]+}}.h)
-; CHECK: v{{[0-9]+}}.b = vdeal(v[[V1]].b)
-; CHECK: vdeal
-; CHECK: vdeal
-; CHECK: vshuff
+; CHECK: v{{[0-9]+}} = vand(q0,r{{[0-9]+}})
 define i32 @foo_128_4x(<32 x i16> %a0, <32 x i16> %a1) #0 {
   %v0 = icmp ugt <32 x i16> %a0, %a1
   %v1 = bitcast <32 x i1> %v0 to i32
@@ -47,10 +35,7 @@ define i32 @foo_128_4x(<32 x i16> %a0, <32 x i16> %a1) #0 {
 }
 
 ; CHECK-LABEL: foo_64_2x
-; CHECK: v{{[0-9]+}}.b = vdeal(v{{[0-9]+}}.b)
-; CHECK: vdeal
-; CHECK: vdeal
-; CHECK: vshuff
+; CHECK: v{{[0-9]+}} = vand(q0,r{{[0-9]+}})
 define i32 @foo_64_2x(<32 x i16> %a0, <32 x i16> %a1) #1 {
   %v0 = icmp ugt <32 x i16> %a0, %a1
   %v1 = bitcast <32 x i1> %v0 to i32
@@ -58,11 +43,7 @@ define i32 @foo_64_2x(<32 x i16> %a0, <32 x i16> %a1) #1 {
 }
 
 ; CHECK-LABEL: foo_64_4x
-; CHECK: v[[V1:[0-9]+]].h = vdeal(v{{[0-9]+}}.h)
-; CHECK: v{{[0-9]+}}.b = vdeal(v[[V1]].b)
-; CHECK: vdeal
-; CHECK: vdeal
-; CHECK: vshuff
+; CHECK: v{{[0-9]+}} = vand(q0,r{{[0-9]+}})
 define i16 @foo_64_4x(<16 x i16> %a0, <16 x i16> %a1) #1 {
   %v0 = icmp ugt <16 x i16> %a0, %a1
   %v1 = bitcast <16 x i1> %v0 to i16
@@ -71,4 +52,3 @@ define i16 @foo_64_4x(<16 x i16> %a0, <16 x i16> %a1) #1 {
 
 attributes #0 = { nounwind readnone "target-cpu"="hexagonv68" "target-features"="+hvx,+hvx-length128b,-packets" }
 attributes #1 = { nounwind readnone "target-cpu"="hexagonv68" "target-features"="+hvx,+hvx-length64b,-packets" }
-
