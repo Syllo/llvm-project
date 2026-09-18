@@ -85,6 +85,7 @@ if (NOT "${HEXAGON_QURT_INCLUDE_DIR}" STREQUAL "")
   # Sources
   set(RIPPLE_THD_QURT_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/qurt/ripple_thd_qurt.c"
+    "${CMAKE_CURRENT_LIST_DIR}/qurt/ripple_thd_qurt_pool.c"
     "${CMAKE_CURRENT_LIST_DIR}/ripple_thd_it_serv.c"
     "${CMAKE_CURRENT_LIST_DIR}/ripple_thd.c"
   )
