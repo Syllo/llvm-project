@@ -24,6 +24,7 @@ typedef qurt_barrier_t ripple_thd_barrier_t;
 #include "ripple/ripple_thd_block.h"
 #include "ripple/ripple_thd_conventions.h"
 #include "ripple/ripple_thd_qurt.h"
+#include "ripple/ripple_thd_qurt_pool.h"
 #include <ripple/thread.h>
 
 /// @brief Encodes an integer @p id into a string pointed at @p nm_ptr
@@ -123,6 +124,7 @@ qthd_runtime_t *qthd_runtime_init(unsigned n_thd_) {
   rt->attrs = (qurt_thread_attr_t *)malloc(n_thd_ * sizeof(qurt_thread_attr_t));
   rt->ctxs = (context_f_args_t *)malloc(n_thd_ * sizeof(context_f_args_t));
   rt->stack = (char **)malloc(n_thd_ * sizeof(char *));
+  rt->pool = (qthd_worker_pool_t)malloc(sizeof(struct qthd_worker_pool));
 
   for (unsigned t = 0; t < n_thd_; ++t) {
     // Generate mini-names "0", "1", etc, which we'll convert back to ints
@@ -149,6 +151,7 @@ extern void qthd_runtime_exit(qthd_runtime_t *rt) {
   }
   free(rt->stack);
   free(rt->return_status);
+  free(rt->pool);
   for (unsigned block_id = 0; block_id < RIPPLE_THD_QURT_MAX_BLOCKS;
        ++block_id) {
     if (rt->ripple_rt[block_id] == NULL)
@@ -170,12 +173,17 @@ extern ripple_thd_block_t ripple_thd_init(int PE_id, void *underlying,
   qthd_runtime_t *qrt = (qthd_runtime_t *)underlying;
   qrt->n_blocks = n_blocks;
   _ripple_thd_init(PE_id, underlying, n_blocks, flags, max_dims);
+  qurt_thread_t const id = qurt_thread_get_id();
+  int parent_priority = qurt_thread_get_priority(id);
+  qthd_worker_pool_init(qrt->pool, qrt, parent_priority,
+                        RIPPLE_THD_QURT_STACK_SIZE);
   return _ripple_get_thd_block(underlying, 0);
 }
 
 RIPPLE_THD_SCALAR
 extern void ripple_thd_exit(void *underlying) {
   qthd_runtime_t *qrt = (qthd_runtime_t *)underlying;
+  qthd_worker_pool_exit(qrt->pool);
   // Deallocate the shared barriers
   _ripple_thd_barriers_dealloc(qrt->ripple_rt[0]->barriers);
   for (unsigned block = 0; block < qrt->n_blocks; ++block) {
