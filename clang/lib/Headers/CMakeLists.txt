@@ -93,14 +93,16 @@ set (ripple_include_files
   ripple_include/ripple_math.h
   ripple_include/ripple_hvx.h
   ripple_include/__ripple_vec.h
+  )
+  
+  set (ripple_include_ripple_files
   ripple_include/ripple/zip.h
   ripple_include/ripple/thread.h
   )
-
-set (ripple_include_ripple_files
-  ripple_include/ripple/zip.h
-  ripple_include/ripple/thread.h
-  )
+  
+set (ripple_include_ripple_hvx_files
+  ripple_include/ripple/hvx/vi64_t.h
+)
 
 set(hlsl_h
   hlsl.h
@@ -484,6 +486,7 @@ endfunction(clang_generate_header)
 # Copy header files from the source directory to the build directory
 foreach( f ${files} ${cuda_wrapper_files} ${cuda_wrapper_bits_files}
            ${ripple_include_files} ${ripple_include_ripple_files}
+           ${ripple_include_ripple_hvx_files}
            ${cuda_wrapper_utility_files} ${ppc_wrapper_files} ${openmp_wrapper_files}
            ${zos_wrapper_files} ${hlsl_files} ${llvm_libc_wrapper_files}
            ${llvm_offload_wrapper_files} ${gpu_hip_wrapper_files})
@@ -690,6 +693,11 @@ install(
 install(
   FILES ${ripple_include_ripple_files}
   DESTINATION ${header_install_dir}/ripple_include/ripple
+  COMPONENT clang-resource-headers)
+
+install(
+  FILES ${ripple_include_ripple_hvx_files}
+  DESTINATION ${header_install_dir}/ripple_include/ripple/hvx
   COMPONENT clang-resource-headers)
 
 #############################################################
