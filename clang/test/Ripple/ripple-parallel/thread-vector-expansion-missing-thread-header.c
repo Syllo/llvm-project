@@ -7,7 +7,7 @@
 
 void check(int Chunk, long N, int start, long end, float x[restrict N],
            float y[restrict N], float xpy[restrict N]) {
-  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL);
+  ripple_thd_block_t ThreadBlockT = ripple_thd_set_block_shape(NULL, 0, 1, RIPPLE_THD_DYNAMIC);
   ripple_block_t BSV = ripple_set_block_shape(0, 4);
 #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlockT) Dims(0) ThreadChunk(Chunk)
@@ -18,11 +18,10 @@ void check(int Chunk, long N, int start, long end, float x[restrict N],
 #endif
   for (int i = start; i < end; ++i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(ThreadBlockT);
 }
 
 // CHECK:      thread-vector-expansion-missing-thread-header.c:10:3: error: unknown type name 'ripple_thd_block_t'; did you mean 'ripple_block_t'?
-// CHECK-NEXT:    10 |   ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL);
+// CHECK-NEXT:    10 |   ripple_thd_block_t ThreadBlockT = ripple_thd_set_block_shape(NULL, 0, 1, RIPPLE_THD_DYNAMIC);
 // CHECK-NEXT:       |   ^~~~~~~~~~~~~~~~~~
 // CHECK-NEXT:       |   ripple_block_t
 // PRAGMACHECK:      thread-vector-expansion-missing-thread-header.c:13:3: error: 'ripple_thd_id' function declaration not found; include <ripple/thread.h>

@@ -37,7 +37,7 @@ struct ripple_thread_block {
   size_t shape[RIPPLE_MAX_THD_BLOCK_DIMS];
   // One dimension server per non-0-dimensional thread (dyn dim has to be 0)
   // TODO: make less static and wasteful
-  it_serv_t its[RIPPLE_MAX_THD_COUNT / 2];
+  it_serv_t *its;
   size_t bar_ends[RIPPLE_MAX_THD_BLOCK_DIMS_COMBO];
   ripple_thd_barrier_t *barriers;
 };

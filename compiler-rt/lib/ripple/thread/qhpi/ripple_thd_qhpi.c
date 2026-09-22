@@ -25,18 +25,31 @@ typedef struct _ripple_barrier_t {
 #include "ripple/ripple_thd_block.h"
 #include "ripple/ripple_thd_conventions.h"
 #include "ripple/ripple_thd_qhpi.h"
+#include <ripple/hexagon.h>
 #include <ripple/thread.h>
 
-// Fwd decl from qurt_hvx.h:
-int qurt_hvx_get_units(void);
+#ifdef __NO_QURT__
+int qurt_printf(const char *msg, ...);
+qurt_thread_t qurt_thread_get_id(void);
+#else
+#include <qurt.h>
+#endif
+
+#ifdef RIPPLE_THD_QHPI_DEBUG
+#define print(x, ...) qurt_printf(x, __VA_ARGS__)
+#else
+#define print(x, ...)
+#endif
 
 /// @brief Retrieves the base address of block # @p block_id
-inline __attribute__((always_inline)) static ripple_qhpi_sync_block_t *
+RIPPLE_THD_SCALAR
+inline __attribute__((always_inline)) static qhpi_runtime_t *
 sync_block_addr(void *underlying) {
   QHPI_RuntimeHandle *qhpi = (QHPI_RuntimeHandle *)underlying;
-  return (ripple_qhpi_sync_block_t *)qhpi_sync_block(qhpi);
+  return (qhpi_runtime_t *)qhpi_sync_block(qhpi);
 }
 
+RIPPLE_THD_SCALAR
 inline __attribute__((always_inline)) static unsigned
 ripple_qhpi_n_slices(void *underlying) {
   QHPI_RuntimeHandle *qhpi = (QHPI_RuntimeHandle *)underlying;
@@ -46,16 +59,98 @@ ripple_qhpi_n_slices(void *underlying) {
 // _________________________ Underlying runtime ________________________________
 
 #define RIPPLE_THD_PREPARING RIPPLE_THD_MAX_U
+#define ADD_BYTES(addr, bytes, type) (type)(((char *)(addr)) + (bytes))
+
+// _ _ _ _ _ _ _ _ Binding qhpi_runtime_t with slice ids _ _ _ _ _ _ _ _ _ _ _ _
+
+// 1. Consistency discussion:
+// I think that these routines don't need atomics because:
+// - Each thread writes all and only the memory elements that will match
+// its search, and from which it will take the QHPI_RuntimeHandle*
+// (and deduce its slice index)
+
+// 2. Preemption discussion:
+// The functions in this section assume that the _set_ of qurt_thread_get_id's
+// that work on the currently active QHPI slices remain unchanged through
+// preemption. Users must assume that the current work can be picked up by a
+// thread associated with a different ripple_thd_id(). It's ok if the
+// association between kernel instance and qurt_thread_get_id changes through
+// preemption. But there can't be a new qurt_thread_get_id involved.
+
+/// Retrieves the current thread's slice id
+static __attribute__((always_inline)) int _cur_slice_id(qhpi_runtime_t *sync) {
+  int n = sync->n_slices;
+  int slice_id = 0;
+  unsigned thd_id = qurt_thread_get_id();
+  for (; slice_id < n; ++slice_id) {
+    if (sync->qhpi_pairs[slice_id].thd_id == thd_id)
+      return slice_id;
+  }
+  assert(0 && "Internal error: couln't find my slice id");
+  return -1;
+}
 
 RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) ripple_thd_block_t
-ripple_thd_init(int PE_id, void *underlying, unsigned n_blocks, unsigned flags,
-                unsigned max_dims) {
+static __attribute__((always_inline)) void
+_save_qhpi_binding(qhpi_runtime_t *sync, QHPI_RuntimeHandle *qhpi) {
+  unsigned slice_id = qhpi_slice_number(qhpi);
+  qhpi_thd_pair *cur_pair = &(sync->qhpi_pairs[slice_id]);
+  cur_pair->thd_id = qurt_thread_get_id();
+  cur_pair->qhpi = qhpi;
+}
+
+RIPPLE_THD_SCALAR
+static __attribute__((always_inline)) void
+_clear_qhpi_binding(qhpi_runtime_t *sync) {
+  unsigned slice_id = _cur_slice_id(sync);
+  qhpi_thd_pair *cur_pair = &(sync->qhpi_pairs[slice_id]);
+  cur_pair->thd_id = 0;
+  cur_pair->qhpi = NULL;
+}
+
+// _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+// Sync block mem layout:
+// | sync_block | qhpi_pairs | ripple_thread_blocks | it_servs | barriers |
+
+RIPPLE_THD_SCALAR
+extern size_t ripple_qhpi_runtime_size(unsigned n_slices, unsigned max_dims,
+                                       unsigned n_blocks, unsigned flags) {
+  size_t sz = sizeof(qhpi_runtime_t) + (sizeof(qhpi_thd_pair) * n_slices);
+  sz += sizeof(struct ripple_thread_block) * n_blocks;
+  // OPT: there may be cases where we can reduce these sizes to using n_thd,
+  // the number of HW threads available.
+  if (flags & RIPPLE_THD_USE_DYN) {
+    if (max_dims == 1)
+      sz += n_blocks * sizeof(it_serv_t);
+    else
+      sz += n_blocks * ((n_slices + 1) / 2) * sizeof(it_serv_t);
+  }
+  if (flags & RIPPLE_THD_USE_BAR) {
+    sz += n_bars_to_alloc(max_dims, n_slices) * _ripple_barrier_size();
+  }
+  return sz;
+}
+
+/// Initializes ripple_thd's underlying runtime object from the QHPI_Runtime_t *
+// handle. Everything but the barrier objects, because their initialization
+/// depends upon the thread block shape.
+/// @param underlying is the qhpi_runtime_t runtime object
+/// @return a pointer to the qhpi_runtime_t underlying runtime object to use
+/// with the Ripple thread API.
+RIPPLE_THD_SCALAR extern void *ripple_thd_init(int PE_id, void *qhpi,
+                                               unsigned n_blocks,
+                                               unsigned flags,
+                                               unsigned max_dims) {
+  assert(qhpi != NULL && "underlying QHPI object has to be non-NULL");
   assert(n_blocks <= RIPPLE_THD_QHPI_MAX_BLOCKS &&
          "Requesting more thread blocks than supported by Ripple-QHPI");
-  // TODO: support multiple blocks --> loop over block inits.
   //       Blocks can share barriers but not iteration servers.
-  ripple_qhpi_sync_block_t *sync = sync_block_addr(underlying);
+  qhpi_runtime_t *sync = sync_block_addr(qhpi);
+  unsigned n_slices = ripple_qhpi_n_slices(qhpi);
+  assert(sync != NULL &&
+         "Multi-threaded Ripple requires a QHPI sync block. "
+         "ripple_qhpi_runtime_size() reports the necessary size\n");
   // First thread to reach the call to ripple_thd_init init's the runtime
   // We assume that the first element of the sync zone was cleared (to zero)
   unsigned *lock = &(sync->lock);
@@ -63,103 +158,86 @@ ripple_thd_init(int PE_id, void *underlying, unsigned n_blocks, unsigned flags,
   if (__atomic_compare_exchange_n(lock, &zero, RIPPLE_THD_PREPARING,
                                   /*weak*/ 0, memory_order_acq_rel,
                                   memory_order_acquire)) {
-    unsigned n_slices = ripple_qhpi_n_slices(underlying);
-    sync->unfinished = n_slices;
+    sync->n_slices = n_slices;
     sync->n_blocks = n_blocks;
-    // Allocate a space for the blocks and the barriers.
-    // Implicit order: blocks, then barriers (shared between blocks)
-    size_t size_block = sizeof(struct ripple_thread_block);
-    // OPT: allocate barriers as a function of max_dims
-    size_t size_bars = ((flags & RIPPLE_THD_USE_BAR) == 0)
-                           ? 0
-                           : sizeof(ripple_thd_barrier_t) *
-                                 RIPPLE_THD_MAX_BARRIER_3D(n_slices);
-    size_t alloc_size = size_block * n_blocks + size_bars;
-    char *base_addr = (char *)qurt_malloc(alloc_size);
-    assert(base_addr != NULL && "Not enough heap space for the Ripple runtime");
-    char *end_blocks = base_addr + n_blocks * size_block;
-    for (unsigned block = 0; block < n_blocks; ++block) {
-      sync->ripple_rt[block] =
-          (ripple_thd_block_t)base_addr + block * size_block;
-      sync->ripple_rt[block]->barriers = (ripple_thd_barrier_t *)end_blocks;
-    }
+
     // FIXME: QHPI dropped the num_threads() API, which defined the number
     // of threads associated with a self-threaded Op.
     // As a fix, we're using the underlying QuRT APi to know how many HW
     // threads are in the system, which may be more than QHPI's num_threads,
     // if the system talking to QHPI allocates fewer threads to the op.
-    unsigned _n_hw_thds = qurt_hvx_get_units();
-    if ((flags & RIPPLE_THD_USE_BAR) && n_slices > _n_hw_thds) {
+    sync->n_threads = ripple_num_hvx();
+
+    sync->qhpi_pairs = ADD_BYTES(sync, sizeof(qhpi_runtime_t), qhpi_thd_pair *);
+    // Set the first block address,
+    // which will be the base address for the thread blocks.
+    sync->ripple_rts = ADD_BYTES(
+        sync->qhpi_pairs, sizeof(qhpi_thd_pair) * n_slices, ripple_thd_block_t);
+    _save_qhpi_binding(sync, qhpi);
+
+    if ((flags & RIPPLE_THD_USE_BAR) && n_slices > sync->n_threads) {
       assert(0 &&
              "[Error] ripple_thd_barrier() cannot be used with more slices"
              " than HW threads --> deadlock\n"
              "If you aren't using barriers,"
              " don't pass the RIPPLE_THD_USE_BAR flag to ripple_thd_init()");
     }
-    ripple_thd_block_t block =
-        _ripple_thd_init(PE_id, underlying, n_blocks, flags, max_dims);
+    _ripple_thd_init(PE_id, sync, n_blocks, n_slices, flags, max_dims);
     __atomic_thread_fence(memory_order_release);
     __atomic_store_n(lock, 1, memory_order_release);
-    return block;
+    return sync;
   } else {
     // Wait for the runtime to be initialized
     while (__atomic_load_n(lock, memory_order_acquire) == RIPPLE_THD_PREPARING)
       ;
-    return _ripple_get_thd_block(underlying, 0);
+    _save_qhpi_binding(sync, qhpi);
+    return sync;
   }
 }
 
 #undef RIPPLE_THD_PREPARING
 
-extern void ripple_thd_exit(void *underlying) {
-  ripple_qhpi_sync_block_t *sync = sync_block_addr(underlying);
-  unsigned unfinished =
-      __atomic_fetch_sub(&(sync->unfinished), 1, memory_order_acq_rel);
-  if (unfinished == 1) { // last slice to exit the Ripple runtime
-    char *base = (char *)sync->ripple_rt[0];
-    qurt_free(base);
-  }
+RIPPLE_THD_SCALAR
+extern void ripple_thd_exit(void *qhpi) {
+  assert(qhpi != NULL && "underlying runtime object has to be non-NULL");
+  qhpi_runtime_t *sync = sync_block_addr(qhpi);
+  _clear_qhpi_binding(sync);
 }
 
 // ______________________________ Core API Helpers _____________________________
 
-/// @brief Coordinate of the current thread within the block along dimension dim
+/// @brief Coordinate of the current thread within the block along dimension
+/// dim
 RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) size_t
+extern __attribute__((always_inline)) size_t
 _ripple_thd_flat_id(void *underlying) {
-  return (size_t)ripple_qhpi_n_slices(underlying);
+  qhpi_runtime_t *sync = (qhpi_runtime_t *)underlying;
+  return (size_t)_cur_slice_id(sync);
 }
 
 /// @brief full number of threads available from the runtime.
 RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) size_t
+extern __attribute__((always_inline)) size_t
 _ripple_thd_flat_shape(void *underlying) {
-  QHPI_RuntimeHandle *qhpi = RTHD_RCAST(QHPI_RuntimeHandle *, underlying);
-  return (size_t)qhpi_num_slices(qhpi);
+  qhpi_runtime_t *sync = (qhpi_runtime_t *)underlying;
+  return sync->n_slices;
 }
 
 /// @brief retrieves the base address of the current thread runtime
 RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) ripple_thd_block_t
+extern __attribute__((always_inline)) ripple_thd_block_t
 _ripple_get_thd_block(void *underlying, unsigned block_id) {
-  assert(block_id == 0 &&
-         "Only one ripple_thd_block supported by this runtime");
-  QHPI_RuntimeHandle *qhpi = RTHD_RCAST(QHPI_RuntimeHandle *, underlying);
-  return RTHD_RCAST(ripple_thd_block_t, qhpi_sync_block(qhpi));
-}
-
-RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) ripple_thd_block_t
-_ripple_init_thd_block(void *underlying, unsigned block_id) {
-  assert(block_id == 0 &&
-         "Only one ripple_thd_block supported by this runtime");
-  return _ripple_get_thd_block(underlying, block_id);
+  assert(underlying != NULL);
+  qhpi_runtime_t *sync = (qhpi_runtime_t *)underlying;
+  return ADD_BYTES(sync->ripple_rts,
+                   block_id * sizeof(struct ripple_thread_block),
+                   ripple_thd_block_t);
 }
 
 /// Cleaning up is also not really necessary here.
 RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) void
-_ripple_clear_thd_block(void *underlying, unsigned block_id) {}
+extern __attribute__((always_inline)) void
+_ripple_clear_thd_block(void *sync, unsigned block_id) {}
 
 // ________________________________ Barrier interface __________________________
 
@@ -167,9 +245,9 @@ _ripple_clear_thd_block(void *underlying, unsigned block_id) {}
 extern "C" {
 #endif
 
-/// @brief sets all the barriers to 0.
+/// @brief initiaLizes barrier @p barrier_id to 0.
 RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) void
+extern __attribute__((always_inline)) void
 _ripple_thd_barrier_init(ripple_thd_barrier_t *barriers, size_t barrier_id,
                          size_t n_participants) {
   ripple_thd_barrier_t *barrier = &(barriers[barrier_id]);
@@ -180,34 +258,18 @@ _ripple_thd_barrier_init(ripple_thd_barrier_t *barriers, size_t barrier_id,
 
 /// @brief Destroys all the barriers that have been initialized
 RIPPLE_THD_SCALAR
-inline void _ripple_thd_barrier_exit(ripple_thd_barrier_t *barrier,
+extern void _ripple_thd_barrier_exit(ripple_thd_barrier_t *barrier,
                                      size_t bar_id) {}
 #ifdef __cplusplus
 }
 #endif
 
 RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) ripple_thd_barrier_t *
-_ripple_thd_barriers_alloc(void *underlying, unsigned n_thd,
-                           unsigned max_dims) {
-  assert(max_dims <= 3 && "QHPI Ripple runtime supports up to 3 thd dims");
-  ripple_qhpi_sync_block_t *sync = sync_block_addr(underlying);
-  // barriers were allocated in ripple_thd_init. Just return the ptr
-  // Note: barriers are shared across blocks.
-  return sync->ripple_rt[0]->barriers;
-}
-
-RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) void
-_ripple_thd_barriers_dealloc(ripple_thd_barrier_t *base) {
-  // No need to do anything with the barriers. They'll get deallocated
-  // implicitly
-}
+extern size_t _ripple_barrier_size() { return sizeof(ripple_thd_barrier_t); }
 
 /// @brief Spin barrier with a short (32ns) wait between spins
 /// @param b A ripple block (pointer)
-RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) void
+RIPPLE_THD_SCALAR inline __attribute__((always_inline)) void
 _ripple_thd_barrier(ripple_thd_barrier_t *base, unsigned idx) {
   ripple_thd_barrier_t *bar = &(base[idx]);
   // Capture the phase we expect to see toggled when the barrier releases.

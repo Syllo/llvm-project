@@ -35,7 +35,7 @@ _ripple_get_it_serv(ripple_thd_block_t b, unsigned dim) {
   if (dims == 1)
     return &(b->its[0]);
   unsigned idx = ripple_thd_id(b, dims - 1);
-  for (unsigned i = dims - 2; i > 0; i++) {
+  for (unsigned i = dims - 2; i > 0; i--) {
     idx *= b->shape[i];
     idx += ripple_thd_id(b, i);
   }
@@ -73,18 +73,18 @@ extern void ripple_it_serv_init(ripple_thd_block_t b, unsigned dim,
 #if RIPPLE_THD_IT_SERV_DBG
   qurt_printf("entering init\n");
 #endif
-  assert(dim == 0);
+  assert(dim == 0 && "ripple_thd_parallel_dyn only supports dimension 0\n");
   it_serv_t *serv = _ripple_get_it_serv(b, dim);
-  // For now we assume that all the threads we have are involved
+  size_t zero = 0;
+// For now we assume that all the threads we have are involved
+#ifdef RIPPLE_THD_USE_QHPI
   const size_t thid = ripple_thd_id(b, dim);
-  size_t local_epoch =
-      __atomic_load_n(&(serv->local_epoch[thid]), memory_order_relaxed);
-  size_t next_global_epoch = local_epoch + 1;
+#endif
   // Start the next epoch.
   // First thread to hit this instance of the init() initializes the it_serv
-  if (__atomic_compare_exchange_n(
-          &(serv->epoch), &local_epoch, next_global_epoch,
-          /*weak=*/0, memory_order_acq_rel, memory_order_acquire)) {
+  if (__atomic_compare_exchange_n(&(serv->epoch), &zero, 1,
+                                  /*weak=*/0, memory_order_acq_rel,
+                                  memory_order_acquire)) {
 
 // Only update the iteration server when the current one is depleted
 #ifdef RIPPLE_THD_QHPI_DEBUG
@@ -101,7 +101,6 @@ extern void ripple_it_serv_init(ripple_thd_block_t b, unsigned dim,
       }
 #endif
     }
-    serv->local_epoch[thid] = next_global_epoch;
 #ifdef RIPPLE_THD_USE_QHPI
     // QHPI can have a number of threads ("slices") that is larger than the
     // number of concurrent threads the underlying system actually supports.
@@ -125,7 +124,6 @@ extern void ripple_it_serv_init(ripple_thd_block_t b, unsigned dim,
     __atomic_store_n(&(serv->to_exit), n_thd, memory_order_release);
     __atomic_store_n(&(serv->to_init), n_thd - 1, memory_order_release);
   } else {
-    serv->local_epoch[thid] = next_global_epoch;
     while (__atomic_load_n(&(serv->to_init), memory_order_acquire) == 0)
       ;
     __atomic_fetch_sub(&(serv->to_init), 1, memory_order_acq_rel);
@@ -150,11 +148,17 @@ extern void ripple_it_serv_exit(ripple_thd_block_t b, unsigned dim,
   // If there is an upcoming init() using the same it_serv, it will need to be
   // "maintained," i.e. reinitialized.
   // We allow maintenance to happen as soon as all the threads have exited.
-#if RIPPLE_THD_IT_SERV_DBG
-  int32_t old_to_exit =
-#endif
+  size_t old_to_exit =
       // acquire isn't necessary here.
-      __atomic_fetch_sub(&(serv->to_exit), 1, memory_order_release);
+      __atomic_fetch_sub(&(serv->to_exit), 1, memory_order_acq_rel);
+
+  // If we're the last one to end the iteration server region,
+  // reset the epoch to 0. This lets the next ripple_it_serv_init know that we
+  // are done with the iteration server.
+  if (old_to_exit == 1) {
+    __atomic_store_n(&(serv->epoch), 0, memory_order_seq_cst);
+  }
+
   // If we need to do a post-barrier, wait,
   // unless we are the last participant to leave this it_serv_t.
 #if RIPPLE_THD_IT_SERV_DBG
@@ -171,7 +175,7 @@ extern void ripple_it_serv_exit(ripple_thd_block_t b, unsigned dim,
 /// @return an "optional iteration, i.e. a pair {iteration, has_value}"
 RIPPLE_THD_SCALAR
 extern ripple_opt_it ripple_it_serv_next(ripple_thd_block_t b, unsigned dim) {
-  assert(dim == 0);
+  assert(dim == 0 && "ripple_thd_parallel_dyn only supports dimension 0\n");
 
   it_serv_t *serv = _ripple_get_it_serv(b, dim);
   int32_t end = serv->end;

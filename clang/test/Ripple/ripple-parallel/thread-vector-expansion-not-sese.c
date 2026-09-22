@@ -8,7 +8,7 @@
 
 void check(int Chunk, int64_t N, int32_t start, int64_t end, float x[restrict N],
            float y[restrict N], float xpy[restrict N]) {
-  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL, 1, 0, 1);
+  ripple_thd_block_t ThreadBlockT = ripple_thd_set_block_shape(NULL, 0, 1, RIPPLE_THD_DYNAMIC);
   ripple_block_t BSV = ripple_set_block_shape(0, 16);
   #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlockT) Dims(0) ThreadChunk(Chunk)
@@ -26,7 +26,7 @@ void check(int Chunk, int64_t N, int32_t start, int64_t end, float x[restrict N]
 
 void check2(int Chunk, int64_t N, int32_t start, int64_t end, float x[restrict N],
             float y[restrict N], float xpy[restrict N]) {
-  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL, 1, 0, 1);
+  ripple_thd_block_t ThreadBlockT = ripple_thd_set_block_shape(NULL, 0, 1, RIPPLE_THD_DYNAMIC);
   ripple_block_t BSV = ripple_set_block_shape(0, 16);
   #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlockT) Dims(0) ThreadChunk(Chunk)
@@ -44,7 +44,7 @@ void check2(int Chunk, int64_t N, int32_t start, int64_t end, float x[restrict N
 
 void check3(int Chunk, int64_t N, int32_t start, int64_t end, float x[restrict N],
             float y[restrict N], float xpy[restrict N]) {
-  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL, 1, 0, 1);
+  ripple_thd_block_t ThreadBlockT = ripple_thd_set_block_shape(NULL, 0, 1, RIPPLE_THD_DYNAMIC);
   ripple_block_t BSV = ripple_set_block_shape(0, 16);
   #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlockT) Dims(0) ThreadChunk(Chunk)

@@ -24,12 +24,7 @@ typedef qurt_barrier_t ripple_thd_barrier_t;
 #include "ripple/ripple_thd_block.h"
 #include "ripple/ripple_thd_conventions.h"
 #include "ripple/ripple_thd_qurt.h"
-#include "ripple/ripple_thd_qurt_pool.h"
 #include <ripple/thread.h>
-
-#define RIPPLE_THD_QURT_STACK_ALIGN 8
-#define ALIGN_TO(addr, align)                                                  \
-  (((((size_t)(addr)) + (align)-1) / (align)) * (align))
 
 /// @brief Encodes an integer @p id into a string pointed at @p nm_ptr
 /// @p 0 <= id < 100.
@@ -64,24 +59,15 @@ typedef qurt_barrier_t ripple_thd_barrier_t;
     id;                                                                        \
   })
 
+#define ADD_BYTES(addr, bytes, type) (type)(((char *)(addr)) + (bytes))
+#define ALIGN_TO(addr, align) (((addr) + (align)-1) / (align)) * (align)
 // ______________________________ Core API Helpers _____________________________
 
 RIPPLE_THD_SCALAR
 inline size_t _ripple_thd_flat_id(void *underlying) {
   char thd_name[QURT_RIPPLE_MAX_THD_NAME_SIZE];
   qurt_thread_get_name(thd_name, QURT_RIPPLE_MAX_THD_NAME_SIZE);
-  size_t hw_id = _qurt_ripple_thd_read_id(thd_name);
-  qthd_runtime_t *rt = (qthd_runtime_t *)underlying;
-  return rt->sw_ids[hw_id];
-}
-
-RIPPLE_THD_SCALAR
-extern void _set_sw_id(void *underlying, size_t sw_id) {
-  char thd_name[QURT_RIPPLE_MAX_THD_NAME_SIZE];
-  qurt_thread_get_name(thd_name, QURT_RIPPLE_MAX_THD_NAME_SIZE);
-  size_t hw_id = _qurt_ripple_thd_read_id(thd_name);
-  qthd_runtime_t *rt = (qthd_runtime_t *)underlying;
-  rt->sw_ids[hw_id] = sw_id;
+  return _qurt_ripple_thd_read_id(thd_name);
 }
 
 /* @brief full number of threads available from the runtime.*/
@@ -95,123 +81,79 @@ _ripple_thd_flat_shape(void *underlying) {
 RIPPLE_THD_SCALAR
 inline __attribute__((always_inline)) ripple_thd_block_t
 _ripple_get_thd_block(void *underlying, unsigned block_id) {
-  assert(underlying != RTHD_NULL);
+  assert(underlying != NULL);
   qthd_runtime_t *rt = (qthd_runtime_t *)underlying;
-  ripple_thd_block_t block =
-      (RTHD_RCAST(qthd_runtime_t *, rt))->ripple_rt[block_id];
-  assert(block != RTHD_NULL);
-  return block;
-}
-
-RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) ripple_thd_block_t
-_ripple_init_thd_block(void *underlying, unsigned block_id) {
-  ripple_thd_block_t block =
-      (ripple_thd_block_t)malloc(sizeof(struct ripple_thread_block));
-  assert(block != RTHD_NULL);
-  qthd_runtime_t *rt = (qthd_runtime_t *)underlying;
-  rt->ripple_rt[block_id] = block;
-  return block;
-}
-
-/* @brief Cleans up this block in memory, and initializes the related state
-of the underlying runtime. */
-RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) void
-_ripple_clear_thd_block(void *underlying, unsigned block_id) {
-  qthd_runtime_t *rt = (qthd_runtime_t *)underlying;
-  free(rt->ripple_rt[block_id]);
-  rt->ripple_rt[block_id] = RTHD_NULL;
+  return ADD_BYTES(rt->ripple_rt, sizeof(struct ripple_thread_block) * block_id,
+                   ripple_thd_block_t);
 }
 
 // _________________________ Underlying runtime ________________________________
 
 RIPPLE_THD_SCALAR
 qthd_runtime_t *qthd_runtime_init(unsigned n_thd_) {
-  qthd_runtime_t *rt = (qthd_runtime_t *)malloc(sizeof(qthd_runtime_t));
-  unsigned max_n_thd = qurt_hvx_get_units();
+  unsigned max_n_thd = ripple_num_hvx();
   if (n_thd_ > max_n_thd) {
     qurt_printf("[Note] Capping # qthd threads to %u\n", max_n_thd);
     n_thd_ = max_n_thd;
   }
+
+  // Layout: qthd_runtime_t | qthd_infos | stacks
+  size_t rt_size = sizeof(qthd_runtime_t) + n_thd_ * sizeof(qthd_info_t);
+  // stacks: align to 8 and allocate
+  size_t before_stack_size = ALIGN_TO(rt_size, 8);
+  rt_size = before_stack_size + n_thd_ * RIPPLE_THD_QURT_STACK_SIZE;
+  qthd_runtime_t *rt = (qthd_runtime_t *)qurt_malloc(rt_size);
+  rt->thd_info = ADD_BYTES(rt, sizeof(qthd_runtime_t), qthd_info_t *);
   rt->n_thd = n_thd_;
-  rt->threads = (qurt_thread_t *)malloc(n_thd_ * sizeof(qurt_thread_t));
-  rt->attrs = (qurt_thread_attr_t *)malloc(n_thd_ * sizeof(qurt_thread_attr_t));
-  rt->ctxs = (context_f_args_t *)malloc(n_thd_ * sizeof(context_f_args_t));
-  rt->sw_ids = (size_t *)malloc(n_thd_ * sizeof(size_t));
-  rt->stack_allocations = (char **)malloc(n_thd_ * sizeof(char *));
-  rt->stack = (char **)malloc(n_thd_ * sizeof(char *));
-  rt->pool = (qthd_worker_pool_t)malloc(sizeof(struct qthd_worker_pool));
 
   for (unsigned t = 0; t < n_thd_; ++t) {
+    qthd_info_t *info = &(rt->thd_info[t]);
+    info->stack = ADD_BYTES(
+        rt, before_stack_size + t * RIPPLE_THD_QURT_STACK_SIZE, char *);
     // Generate mini-names "0", "1", etc, which we'll convert back to ints
     // to use as thread ids.
-    _qurt_ripple_thd_write_id(rt->names + QURT_RIPPLE_MAX_THD_NAME_SIZE * t, t);
-    rt->sw_ids[t] = t;
-    // Overallocate so the usable stack can be aligned without memalign.
-    rt->stack_allocations[t] =
-        (char *)malloc(RIPPLE_THD_QURT_STACK_SIZE + RIPPLE_THD_QURT_STACK_ALIGN);
-    rt->stack[t] =
-        (char *)ALIGN_TO(rt->stack_allocations[t], RIPPLE_THD_QURT_STACK_ALIGN);
-  }
-  rt->return_status = (int *)malloc(n_thd_ * sizeof(int));
-  for (unsigned i = 0; i < RIPPLE_THD_QURT_MAX_BLOCKS; ++i) {
-    rt->ripple_rt[i] = NULL; // Ripple blocks get initialized in ripple_thd_init
+    _qurt_ripple_thd_write_id(info->name, t);
+    // stacks must be 8-byte aligned
   }
   return rt;
 }
 
 RIPPLE_THD_SCALAR
-extern void qthd_runtime_exit(qthd_runtime_t *rt) {
-  unsigned n_thd = rt->n_thd;
-  free(rt->threads);
-  free(rt->attrs);
-  free(rt->ctxs);
-  free(rt->sw_ids);
-  for (unsigned t = 0; t < n_thd; ++t) {
-    free(rt->stack_allocations[t]);
-  }
-  free(rt->stack_allocations);
-  free(rt->stack);
-  free(rt->return_status);
-  free(rt->pool);
-  for (unsigned block_id = 0; block_id < RIPPLE_THD_QURT_MAX_BLOCKS;
-       ++block_id) {
-    if (rt->ripple_rt[block_id] == NULL)
-      continue;
-    free(rt->ripple_rt[block_id]);
-    rt->ripple_rt[block_id] = NULL;
-  }
-  free(rt);
-}
+extern void qthd_runtime_exit(qthd_runtime_t *rt) { qurt_free(rt); }
+
+// | ripple_thread_blocks | it_servs | barriers |
+
+extern size_t _size_its(unsigned max_dims, unsigned n_thd, unsigned flags);
+extern size_t _size_bars(unsigned max_dims, unsigned n_thd, unsigned flags);
+
+/// @brief size of a thread block (for other modules)
+extern size_t _size_thd_block() { return sizeof(struct ripple_thread_block); }
 
 /// @brief initializes @p n_blocks ripple thd blocks associated with the
 /// underlying runtime.
 RIPPLE_THD_SCALAR
-extern ripple_thd_block_t ripple_thd_init(int PE_id, void *underlying,
-                                          unsigned n_blocks, unsigned flags,
-                                          unsigned max_dims) {
+extern void *ripple_thd_init(int PE_id, void *underlying, unsigned n_blocks,
+                             unsigned flags, unsigned max_dims) {
   assert(n_blocks <= RIPPLE_THD_QURT_MAX_BLOCKS &&
          "QuRT-Ripple supports up to 2 blocks for now");
   qthd_runtime_t *qrt = (qthd_runtime_t *)underlying;
   qrt->n_blocks = n_blocks;
-  _ripple_thd_init(PE_id, underlying, n_blocks, flags, max_dims);
-  qurt_thread_t const id = qurt_thread_get_id();
-  int parent_priority = qurt_thread_get_priority(id);
-  qthd_worker_pool_init(qrt->pool, qrt, parent_priority,
-                        RIPPLE_THD_QURT_STACK_SIZE);
-  return _ripple_get_thd_block(underlying, 0);
+  size_t size_block = _size_thd_block();
+  size_t size_its = _size_its(max_dims, qrt->n_thd, flags);
+  size_t size_bars = _size_bars(max_dims, qrt->n_thd, flags);
+  size_t to_alloc = n_blocks * (size_block + size_its) + size_bars;
+  qrt->ripple_rt = (ripple_thd_block_t)qurt_malloc(to_alloc);
+  assert(qrt->ripple_rt != NULL &&
+         "Not enough heap space for the Ripple runtime");
+  _ripple_thd_init(PE_id, underlying, n_blocks, qrt->n_thd, flags, max_dims);
+  return qrt;
 }
 
 RIPPLE_THD_SCALAR
 extern void ripple_thd_exit(void *underlying) {
+  assert(underlying != NULL && "underlying runtime object has to be non-NULL");
   qthd_runtime_t *qrt = (qthd_runtime_t *)underlying;
-  qthd_worker_pool_exit(qrt->pool);
-  // Deallocate the shared barriers
-  _ripple_thd_barriers_dealloc(qrt->ripple_rt[0]->barriers);
-  for (unsigned block = 0; block < qrt->n_blocks; ++block) {
-    _ripple_clear_thd_block(underlying, block);
-  }
+  qurt_free(qrt->ripple_rt);
 }
 
 // ________________________________ Barrier interface __________________________
@@ -232,25 +174,10 @@ _ripple_thd_barrier_exit(ripple_thd_barrier_t *barriers, size_t bar_id) {
 }
 
 RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) ripple_thd_barrier_t *
-_ripple_thd_barriers_alloc(void *underlying, unsigned n_thd,
-                           unsigned max_dims) {
-  assert(max_dims <= 3 && "QuRT Ripple runtime supports up to 3 thd dims");
-  return (ripple_thd_barrier_t *)malloc(RIPPLE_THD_MAX_BARRIER_3D(n_thd) *
-                                        sizeof(ripple_thd_barrier_t));
-}
-
-RIPPLE_THD_SCALAR
-inline __attribute__((always_inline)) void
-_ripple_thd_barriers_dealloc(ripple_thd_barrier_t *base) {
-  free(base);
-}
+extern size_t _ripple_barrier_size() { return sizeof(ripple_thd_barrier_t); }
 
 RIPPLE_THD_SCALAR
 inline __attribute__((always_inline)) void
 _ripple_thd_barrier(ripple_thd_barrier_t *base, unsigned idx) {
   qurt_barrier_wait(&(base[idx]));
 }
-
-#undef ALIGN_TO
-#undef RIPPLE_THD_QURT_STACK_ALIGN
