@@ -91,10 +91,12 @@ typedef struct ripple_thread_block *ripple_thd_block_t;
 /// and RIPPLE_THD_USE_DYN for dynamic load balancing
 /// @param max_dims the maximum number of thread dimensions to use.
 /// This impacts the size of the runtime objects.
+/// @return an underlying runtime object that can be passed to the Ripple thread
+/// API. This can be the same as @p underlying, depending upon the targeted
+/// runtime (cf individual Ripple runtime documentations).
 RIPPLE_THD_SCALAR
-extern ripple_thd_block_t ripple_thd_init(int PE_id, void *underlying,
-                                          unsigned n_blocks, unsigned flags,
-                                          unsigned max_dims);
+extern void *ripple_thd_init(int PE_id, void *underlying, unsigned n_blocks,
+                             unsigned flags, unsigned max_dims);
 
 /// @brief Tears down the Ripple runtime objects associated with the underlying
 /// runtime object @p underlying.
@@ -105,17 +107,18 @@ extern void ripple_thd_exit(void *underlying);
 //
 //
 
-/// @brief declares a multi-dimensional block-of-threads shape.
-/// Waits for all the threads to call it before declaring the new shape.
-/// @param PE_id the processing element ID. For HVX, use the HVX_THD
-/// constant
+/// A constant to represent that a thread block size is
+/// "whatever number to complete the block size to the number of threads
+/// managed by the underlying runtime"
+#define RIPPLE_THD_DYNAMIC 4294967295u
+
+/// @brief gets a multi-dimensional block-of-threads shape from the @p
+/// underlying runtime. The shape is expected to match the number of threads
+/// given to us Waits for all the threads to call it before declaring the new
+/// shape.
 /// @param block_id id of the block we want to give a certain shape
 /// @param ...shape the block shape
 /// @return a runtime descriptor pointer
-// inline __attribute__((always_inline))
-/// @brief Gets the Ripple block from the underlying runtime and
-/// gives it a specific shape.
-/// The shape is expected to match the number of threads given to us
 /// by @p underlying.
 /// TODO: In QHPI, add a state that keeps track of the HW-thread shape
 //        (vs. slice-shape as here), to understand which dimensions are
@@ -147,7 +150,8 @@ RIPPLE_THD_SCALAR
 __attribute__((always_inline, pure)) extern int
 ripple_thd_is_main(ripple_thd_block_t block, unsigned dims);
 
-/// @brief Waits until all threads have reached the barrier
+/// @brief Waits until all threads along dimensions @p dims have reached the
+/// barrier.
 /// @param block ripple runtime object pointer
 /// @param dims block dimensions that need to synchronize.
 RIPPLE_THD_SCALAR

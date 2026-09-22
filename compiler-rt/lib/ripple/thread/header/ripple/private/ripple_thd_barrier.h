@@ -19,13 +19,7 @@
 
 // How long do we wait for a it_serv_t to be depleted before we look again
 /// @brief methods to wait or yield if the wait becomes too long
-#if (defined(RIPPLE_THD_USE_QHPI) || defined(RIPPLE_THD_USE_QURT))
-// TODO: tune these parameters
-#define RIPPLE_THD_MAX_SPINS 8192
-#else
-#warning Assuming a POSIX-compliant underlying thread runtime for Ripple
 #define RIPPLE_THD_MAX_SPINS 512
-#endif
 
 // Opaque declaration
 #ifndef RIPPLE_THD_BARRIER_IS_DEFINED
@@ -45,7 +39,7 @@ RIPPLE_THD_SCALAR
 extern void _ripple_thd_barrier_exit(ripple_thd_barrier_t *barriers,
                                      size_t bar_id);
 
-/// @allocates and initializes
+/// @brief allocates and (pre-)initializes the barriers.
 RIPPLE_THD_SCALAR
 extern ripple_thd_barrier_t *
 _ripple_thd_barriers_alloc(void *underlying, unsigned n_thd, unsigned max_dims);
@@ -53,3 +47,11 @@ _ripple_thd_barriers_alloc(void *underlying, unsigned n_thd, unsigned max_dims);
 RIPPLE_THD_SCALAR
 extern __attribute__((always_inline)) void
 _ripple_thd_barriers_dealloc(ripple_thd_barrier_t *base);
+
+/// @brief Number of barriers we allocate to serve the ripple_thd blocks.
+RIPPLE_THD_SCALAR
+extern size_t n_bars_to_alloc(unsigned max_dims, unsigned n_slices);
+
+/// @brief Size (in bytes) of the barriers we use.
+RIPPLE_THD_SCALAR
+extern size_t _ripple_barrier_size();

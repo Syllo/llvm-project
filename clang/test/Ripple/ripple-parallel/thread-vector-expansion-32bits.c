@@ -9,7 +9,8 @@
 
 // CHECK-LABEL: define dso_local void @check(
 // CHECK-SAME: i32 noundef [[CHUNK:%.*]], i32 noundef [[START:%.*]], i64 noundef [[END:%.*]], ptr noundef [[X:%.*]], ptr noundef [[Y:%.*]], ptr noundef [[XPY:%.*]]) #[[ATTR0:[0-9]+]] {
-// CHECK:    [[CHUNK_ADDR:%.*]] = alloca i32, align 4
+// CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    [[CHUNK_ADDR:%.*]] = alloca i32, align 4
 // CHECK-NEXT:    [[START_ADDR:%.*]] = alloca i32, align 4
 // CHECK-NEXT:    [[END_ADDR:%.*]] = alloca i64, align 8
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca ptr, align 4
@@ -53,7 +54,7 @@
 // CHECK-NEXT:    store ptr [[X]], ptr [[X_ADDR]], align 4
 // CHECK-NEXT:    store ptr [[Y]], ptr [[Y_ADDR]], align 4
 // CHECK-NEXT:    store ptr [[XPY]], ptr [[XPY_ADDR]], align 4
-// CHECK-NEXT:    [[CALL:%.*]] = call ptr @ripple_thd_init(i32 noundef 0, ptr noundef null, i32 noundef 1, i32 noundef 0, i32 noundef 1) #[[ATTR4:[0-9]+]]
+// CHECK-NEXT:    [[CALL:%.*]] = call ptr (ptr, i32, i32, ...) @ripple_thd_set_block_shape(ptr noundef null, i32 noundef 0, i32 noundef 1, i32 noundef -1) #[[ATTR4:[0-9]+]]
 // CHECK-NEXT:    store ptr [[CALL]], ptr [[THREADBLOCKT]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = call ptr @llvm.ripple.block.setshape.i32(i32 0, i32 16, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1)
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[BSV]], align 4
@@ -389,12 +390,12 @@
 // CHECK:       [[FOR_END130]]:
 // CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_END131:.*]]
 // CHECK:       [[RIPPLE_PAR_FOR_END131]]:
-// CHECK-NEXT:    call void @ripple_thd_exit(ptr noundef null) #[[ATTR4]]
 // CHECK-NEXT:    ret void
 //
 void check(int Chunk, int32_t start, int64_t end, float *x,
            float *y, float *xpy) {
-  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL, 1, 0, 1);
+  ripple_thd_block_t ThreadBlockT =
+    ripple_thd_set_block_shape(NULL, 0, 1, RIPPLE_THD_DYNAMIC);
   ripple_block_t BSV = ripple_set_block_shape(0, 16);
   #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlockT) Dims(0) ThreadChunk(Chunk)
@@ -405,7 +406,6 @@ void check(int Chunk, int32_t start, int64_t end, float *x,
   #endif
   for (int i = start; i < end; ++i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(NULL);
 }
 
 //.

@@ -27,10 +27,6 @@ extern size_t _ripple_thd_flat_id(void *underlying);
 extern size_t _ripple_thd_flat_shape(void *underlying);
 
 /// @brief remembers the base address of the current thread runtime
-extern ripple_thd_block_t _ripple_init_thd_block(void *underlying,
-                                                 unsigned block_id);
-
-/// @brief remembers the base address of the current thread runtime
 extern ripple_thd_block_t _ripple_get_thd_block(void *underlying,
                                                 unsigned block_id);
 
@@ -45,8 +41,8 @@ extern void _ripple_clear_thd_block(void *underlying, unsigned block_id);
 /// (e.g. RIPPLE_THD_USE_BAR, RIPPLE_THD_USE_DYN)
 /// @return block #0
 extern ripple_thd_block_t _ripple_thd_init(int PE_id, void *underlying,
-                                           unsigned n_blocks, unsigned flags,
-                                           unsigned max_dims);
+                                           unsigned n_blocks, unsigned n_thd,
+                                           unsigned flags, unsigned max_dims);
 
 #ifdef __cplusplus
 } // extern "C"

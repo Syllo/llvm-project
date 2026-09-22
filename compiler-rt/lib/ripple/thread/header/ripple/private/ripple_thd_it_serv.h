@@ -33,13 +33,8 @@ typedef struct _ripple_it_serv {
   int32_t to_exit;
   /// # threads that have yet to init the current instance of this it_serv
   int32_t to_init;
-  // global epoch for all iteration servers
+  // global epoch for all iteration servers (really just a 0/1 value)
   size_t epoch;
-  // local epochs
-  // OPT: make local_epochs a local variable to each participant thread
-  //      (e.g. as a stack variable)
-  size_t local_epoch[RIPPLE_MAX_THD_COUNT];
-
 } it_serv_t;
 
 #ifdef __cplusplus

@@ -38,7 +38,7 @@
 // CHECK-NEXT:    store ptr [[X]], ptr [[X_ADDR]], align 8
 // CHECK-NEXT:    store ptr [[Y]], ptr [[Y_ADDR]], align 8
 // CHECK-NEXT:    store ptr [[XPY]], ptr [[XPY_ADDR]], align 8
-// CHECK-NEXT:    [[CALL:%.*]] = call ptr @ripple_thd_init(i32 noundef 0, ptr noundef null) #[[ATTR2:[0-9]+]]
+// CHECK-NEXT:    [[CALL:%.*]] = call ptr (ptr, i32, i32, ...) @ripple_thd_set_block_shape(ptr noundef null, i32 noundef 0, i32 noundef 1, i32 noundef -1) #[[ATTR2:[0-9]+]]
 // CHECK-NEXT:    store ptr [[CALL]], ptr [[THREADBLOCK]], align 8
 // CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_BEGIN:.*]]
 // CHECK:       [[RIPPLE_PAR_FOR_BEGIN]]:
@@ -220,21 +220,19 @@
 // CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_END:.*]]
 // CHECK:       [[RIPPLE_PAR_FOR_END]]:
 // CHECK-NEXT:    [[TMP59:%.*]] = load ptr, ptr [[THREADBLOCK]], align 8
-// CHECK-NEXT:    call void @ripple_thd_exit(ptr noundef [[TMP59]]) #[[ATTR2]]
 // CHECK-NEXT:    ret void
 //
 void check(int32_t start, int64_t end, float *x,
            float *y, float *xpy) {
-  ripple_thd_block_t ThreadBlock = ripple_thd_init(0, NULL, 1, 0, 1);
+  ripple_thd_block_t ThreadBlock = ripple_thd_set_block_shape(NULL, 0, 1, RIPPLE_THD_DYNAMIC);
   int64_t i;
 #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlock) Dims(0) Schedule(static)
 #else
-  ripple_parallel_thd(ThreadBlock, 1, 0, 0);
+  ripple_thd_parallel(ThreadBlock, 1, 0, 0);
 #endif
   for (i = start; i < end; ++i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(ThreadBlock);
 }
 
 // CHECK-LABEL: define dso_local void @check2(
@@ -265,7 +263,7 @@ void check(int32_t start, int64_t end, float *x,
 // CHECK-NEXT:    store ptr [[X]], ptr [[X_ADDR]], align 8
 // CHECK-NEXT:    store ptr [[Y]], ptr [[Y_ADDR]], align 8
 // CHECK-NEXT:    store ptr [[XPY]], ptr [[XPY_ADDR]], align 8
-// CHECK-NEXT:    [[CALL:%.*]] = call ptr @ripple_thd_init(i32 noundef 0, ptr noundef null) #[[ATTR2]]
+// CHECK-NEXT:    [[CALL:%.*]] = call ptr (ptr, i32, i32, ...) @ripple_thd_set_block_shape(ptr noundef null, i32 noundef 0, i32 noundef 1, i32 noundef -1) #[[ATTR2]]
 // CHECK-NEXT:    store ptr [[CALL]], ptr [[THREADBLOCK]], align 8
 // CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_BEGIN:.*]]
 // CHECK:       [[RIPPLE_PAR_FOR_BEGIN]]:
@@ -446,12 +444,11 @@ void check(int32_t start, int64_t end, float *x,
 // CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_END:.*]]
 // CHECK:       [[RIPPLE_PAR_FOR_END]]:
 // CHECK-NEXT:    [[TMP57:%.*]] = load ptr, ptr [[THREADBLOCK]], align 8
-// CHECK-NEXT:    call void @ripple_thd_exit(ptr noundef [[TMP57]]) #[[ATTR2]]
 // CHECK-NEXT:    ret void
 //
 void check2(int32_t chunk, int32_t start, int32_t end, float *x,
             float *y, float *xpy) {
-  ripple_thd_block_t ThreadBlock = ripple_thd_init(0, NULL);
+  ripple_thd_block_t ThreadBlock = ripple_thd_set_block_shape(NULL, 0, 1, RIPPLE_THD_DYNAMIC);
 #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlock) Dims(0) ThreadChunk(chunk)
 #else
@@ -459,7 +456,6 @@ void check2(int32_t chunk, int32_t start, int32_t end, float *x,
 #endif
   for (int32_t i = start; i < end; ++i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(ThreadBlock);
 }
 
 // CHECK-LABEL: define dso_local void @check3(
@@ -488,7 +484,7 @@ void check2(int32_t chunk, int32_t start, int32_t end, float *x,
 // CHECK-NEXT:    store ptr [[X]], ptr [[X_ADDR]], align 8
 // CHECK-NEXT:    store ptr [[Y]], ptr [[Y_ADDR]], align 8
 // CHECK-NEXT:    store ptr [[XPY]], ptr [[XPY_ADDR]], align 8
-// CHECK-NEXT:    [[CALL:%.*]] = call ptr @ripple_thd_init(i32 noundef 0, ptr noundef null) #[[ATTR2]]
+// CHECK-NEXT:    [[CALL:%.*]] = call ptr (ptr, i32, i32, ...) @ripple_thd_set_block_shape(ptr noundef null, i32 noundef 0, i32 noundef 1, i32 noundef -1) #[[ATTR2]]
 // CHECK-NEXT:    store ptr [[CALL]], ptr [[THREADBLOCK]], align 8
 // CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_BEGIN:.*]]
 // CHECK:       [[RIPPLE_PAR_FOR_BEGIN]]:
@@ -669,12 +665,11 @@ void check2(int32_t chunk, int32_t start, int32_t end, float *x,
 // CHECK-NEXT:    br label %[[RIPPLE_PAR_FOR_END:.*]]
 // CHECK:       [[RIPPLE_PAR_FOR_END]]:
 // CHECK-NEXT:    [[TMP56:%.*]] = load ptr, ptr [[THREADBLOCK]], align 8
-// CHECK-NEXT:    call void @ripple_thd_exit(ptr noundef [[TMP56]]) #[[ATTR2]]
 // CHECK-NEXT:    ret void
 //
 void check3(int32_t start, int32_t end, float *x,
             float *y, float *xpy) {
-  ripple_thd_block_t ThreadBlock = ripple_thd_init(0, NULL, 1, 0, 1);
+  ripple_thd_block_t ThreadBlock = ripple_thd_set_block_shape(NULL, 0, 1, RIPPLE_THD_DYNAMIC);
 #ifdef USING_PRAGMA
   #pragma ripple parallel Block(ThreadBlock) Dims(0) ThreadChunk(22)
 #else
@@ -682,7 +677,6 @@ void check3(int32_t start, int32_t end, float *x,
 #endif
   for (int32_t i = end - 1; i >= start; --i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(NULL);
 }
 //.
 // CHECK: [[LOOP5]] = distinct !{[[LOOP5]], [[META6:![0-9]+]]}

@@ -12,7 +12,8 @@
 
 void check(int Chunk, int64_t N, int32_t start, int64_t end, float x[restrict N],
            float y[restrict N], float xpy[restrict N]) {
-  ripple_thd_block_t ThreadBlockT = ripple_thd_init(0, NULL, 1, 0, 1);
+  ripple_thd_block_t ThreadBlockT =
+    ripple_thd_set_block_shape(NULL, 0, 1, RIPPLE_THD_DYNAMIC);
   ripple_thd_parallel_dyn(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
   ripple_thd_parallel(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
   ripple_thd_parallel_dyn(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
@@ -25,6 +26,5 @@ void check(int Chunk, int64_t N, int32_t start, int64_t end, float x[restrict N]
   ripple_thd_parallel(ThreadBlockT, Chunk, RIPPLE_THD_PAR_DFT, 0);
   for (int i = start; i < end; ++i)
     xpy[i] = x[i] + y[i];
-  ripple_thd_exit(NULL);
 }
 
