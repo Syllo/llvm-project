@@ -1,8 +1,8 @@
 // REQUIRES: hexagon-registered-target || x86-registered-target || aarch64-registered-target
 
-// RUN: %if hexagon-registered-target %{ %clang -ffreestanding -S --target=hexagon -mhvx -mv81 -mhvx-length=128B -O2 -fenable-ripple -fdisable-ripple-lib -emit-llvm %s -o - | FileCheck %s %}
-// RUN: %if x86-registered-target %{ %clang -ffreestanding -S --target=x86_64-unknown-linux-gnu -O2 -fenable-ripple -fdisable-ripple-lib -emit-llvm %s -o - | FileCheck %s %}
-// RUN: %if aarch64-registered-target %{ %clang -ffreestanding -S --target=aarch64-unknown-linux-gnu -O2 -fenable-ripple -fdisable-ripple-lib -emit-llvm %s -o - | FileCheck %s %}
+// RUN: %if hexagon-registered-target %{ %clang -ffreestanding -S --target=hexagon -mhvx -mv81 -mhvx-length=128B -O2 -fenable-ripple -fdisable-ripple-lib -emit-llvm %s -o - | FileCheck %s -DINDEX_TYPE=i32 --check-prefixes=CHECK,HEXAGON,ROW-UNFOLDED %}
+// RUN: %if x86-registered-target %{ %clang -ffreestanding -S --target=x86_64-unknown-linux-gnu -O2 -fenable-ripple -fdisable-ripple-lib -emit-llvm %s -o - | FileCheck %s -DINDEX_TYPE=i64 --check-prefixes=CHECK,FOLDED,ROW-UNFOLDED %}
+// RUN: %if aarch64-registered-target %{ %clang -ffreestanding -S --target=aarch64-unknown-linux-gnu -O2 -fenable-ripple -fdisable-ripple-lib -emit-llvm %s -o - | FileCheck %s -DINDEX_TYPE=i64 --check-prefixes=CHECK,FOLDED,AARCH64 %}
 
 #include "ripple_test.h"
 
@@ -28,15 +28,17 @@
 // CHECK: [[ROW_LOAD0:%[^ ]+]] = {{.*}}call <16 x i16> @llvm.masked.load.v16i16.p0
 //
 // Second window starts at byte offset 64.
-// CHECK: [[ROW_BASE1:%[^ ]+]] = getelementptr i8, ptr %A, i64 64
+// CHECK: [[ROW_BASE1:%[^ ]+]] = getelementptr i8, ptr %A, [[INDEX_TYPE]] 64
 // CHECK: [[ROW_LOAD1:%[^ ]+]] = {{.*}}call <16 x i16> @llvm.masked.load.v16i16.p0(ptr align 2 [[ROW_BASE1]]
 //
 // Place the second window in result lanes 4-7.
-// CHECK: [[ROW_POS1:%[^ ]+]] = shufflevector <16 x i16> [[ROW_LOAD1]], <16 x i16> poison, <16 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 0, i32 1, i32 2, i32 3
+// ROW-UNFOLDED: [[ROW_POS1:%[^ ]+]] = shufflevector <16 x i16> [[ROW_LOAD1]], <16 x i16> poison, <16 x i32> <i32 poison, i32 poison, i32 poison, i32 poison, i32 0, i32 1, i32 2, i32 3
 //
 // Merge lanes 0-3 from the first window with lanes 4-7 from the second.
 // Indices 20-23 mean lanes 4-7 of the second shuffle operand.
-// CHECK: [[ROW_MERGE1:%[^ ]+]] = shufflevector <16 x i16> [[ROW_LOAD0]], <16 x i16> [[ROW_POS1]], <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 20, i32 21, i32 22, i32 23
+// ROW-UNFOLDED: [[ROW_MERGE1:%[^ ]+]] = shufflevector <16 x i16> [[ROW_LOAD0]], <16 x i16> [[ROW_POS1]], <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 20, i32 21, i32 22, i32 23
+// AArch64 folds the lane placement into this merge.
+// AARCH64: [[ROW_MERGE1:%[^ ]+]] = shufflevector <16 x i16> [[ROW_LOAD0]], <16 x i16> [[ROW_LOAD1]], <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 16, i32 17, i32 18, i32 19, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
 //
 // Remaining two window loads.
 // CHECK-COUNT-2: call <16 x i16> @llvm.masked.load.v16i16.p0
@@ -80,15 +82,19 @@ void multi_window_load_row_major(int16_t A[32][32], int16_t *Out) {
 // CHECK-LABEL: define{{.*}}@multi_window_load_shuffle_col_major
 // CHECK-NOT: llvm.masked.gather
 // CHECK: [[COL_LOAD0:%[^ ]+]] = {{.*}}call <16 x i16> @llvm.masked.load.v16i16.p0
-// CHECK: [[COL_BASE1:%[^ ]+]] = getelementptr i8, ptr %A, i64 64
+// HEXAGON: [[COL_POS0:%[^ ]+]] = shufflevector <16 x i16> [[COL_LOAD0]], <16 x i16> poison, <16 x i32> <i32 0, i32 poison, i32 poison, i32 poison, i32 1, i32 poison, i32 poison, i32 poison, i32 2, i32 poison, i32 poison, i32 poison, i32 3, i32 poison, i32 poison, i32 poison>
+// CHECK: [[COL_BASE1:%[^ ]+]] = getelementptr i8, ptr %A, [[INDEX_TYPE]] 64
 // CHECK: [[COL_LOAD1:%[^ ]+]] = {{.*}}call <16 x i16> @llvm.masked.load.v16i16.p0(ptr align 2 [[COL_BASE1]]
 //
 // Window 0 contributes offsets [0,2,4,6] to result lanes [0,4,8,12].
 // Window 1 contributes offsets [64,66,68,70] to result lanes [1,5,9,13].
 //
-// Indices 0-3 select lanes from COL_LOAD0.
-// Indices 16-19 select lanes 0-3 from COL_LOAD1.
-// CHECK: [[COL_MERGE01:%[^ ]+]] = shufflevector <16 x i16> [[COL_LOAD0]], <16 x i16> [[COL_LOAD1]], <16 x i32> <i32 0, i32 16, i32 poison, i32 poison, i32 1, i32 17, i32 poison, i32 poison, i32 2, i32 18, i32 poison, i32 poison, i32 3, i32 19, i32 poison, i32 poison>
+// X86 and AArch64 fold lane placement into the merge: indices 0-3 select
+// COL_LOAD0 and indices 16-19 select COL_LOAD1. Hexagon retains the two
+// placement shuffles and merges their corresponding lanes instead.
+// FOLDED: [[COL_MERGE01:%[^ ]+]] = shufflevector <16 x i16> [[COL_LOAD0]], <16 x i16> [[COL_LOAD1]], <16 x i32> <i32 0, i32 16, i32 poison, i32 poison, i32 1, i32 17, i32 poison, i32 poison, i32 2, i32 18, i32 poison, i32 poison, i32 3, i32 19, i32 poison, i32 poison>
+// HEXAGON: [[COL_POS1:%[^ ]+]] = shufflevector <16 x i16> [[COL_LOAD1]], <16 x i16> poison, <16 x i32> <i32 poison, i32 0, i32 poison, i32 poison, i32 poison, i32 1, i32 poison, i32 poison, i32 poison, i32 2, i32 poison, i32 poison, i32 poison, i32 3, i32 poison, i32 poison>
+// HEXAGON: [[COL_MERGE01:%[^ ]+]] = shufflevector <16 x i16> [[COL_POS0]], <16 x i16> [[COL_POS1]], <16 x i32> <i32 0, i32 17, i32 poison, i32 poison, i32 4, i32 21, i32 poison, i32 poison, i32 8, i32 25, i32 poison, i32 poison, i32 12, i32 29, i32 poison, i32 poison>
 //
 // CHECK-COUNT-2: call <16 x i16> @llvm.masked.load.v16i16.p0
 //
@@ -104,7 +110,7 @@ void multi_window_load_shuffle_col_major(int16_t A[32][32], int16_t *Out) {
 // All windows are are of size = 1, fallback to
 // llvm.masked.gather
 // CHECK-LABEL: define{{.*}}@no_multi_window_load
-// CHECK: getelementptr i8, ptr %A, <16 x i64> <i64 0, i64 64, i64 128, i64 192, i64 2048, i64 2112, i64 2176, i64 2240, i64 4096, i64 4160, i64 4224, i64 4288, i64 6144, i64 6208, i64 6272, i64 6336>
+// CHECK: getelementptr i8, ptr %A, <16 x [[INDEX_TYPE]]> <[[INDEX_TYPE]] 0, [[INDEX_TYPE]] 64, [[INDEX_TYPE]] 128, [[INDEX_TYPE]] 192, [[INDEX_TYPE]] 2048, [[INDEX_TYPE]] 2112, [[INDEX_TYPE]] 2176, [[INDEX_TYPE]] 2240, [[INDEX_TYPE]] 4096, [[INDEX_TYPE]] 4160, [[INDEX_TYPE]] 4224, [[INDEX_TYPE]] 4288, [[INDEX_TYPE]] 6144, [[INDEX_TYPE]] 6208, [[INDEX_TYPE]] 6272, [[INDEX_TYPE]] 6336>
 // CHECK: llvm.masked.gather
 void no_multi_window_load(int16_t A[32][32], int16_t *Out) {
     ripple_block_t BS = ripple_set_block_shape(VEC, 4, 4);

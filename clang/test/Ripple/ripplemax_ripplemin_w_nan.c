@@ -5,7 +5,7 @@
 #include "ripple_test.h"
 
 // CHECK-LABEL: define dso_local void @test1(
-// CHECK-SAME: ptr noundef writeonly captures(none) initializes((0, 4)) [[MAX:%.*]], ptr noundef writeonly captures(none) initializes((0, 4)) [[MIN:%.*]], ptr noundef writeonly captures(none) initializes((0, 4)) [[REALMAX:%.*]], ptr noundef writeonly captures(none) initializes((0, 4)) [[REALMIN:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
+// CHECK-SAME: ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[MAX:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[MIN:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[REALMAX:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[REALMIN:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTRIPPLE_REDUCTION:%.*]] = tail call reassoc float @llvm.vector.reduce.fmax.v3f32(<3 x float> <float 3.140000e+00, float 6.280000e+00, float 9.420000e+00>)
 // CHECK-NEXT:    store float [[DOTRIPPLE_REDUCTION]], ptr [[MAX]], align 4, !tbaa [[TBAA6:![0-9]+]]
