@@ -15,16 +15,18 @@ entry:
   ret void
 }
 
-define dso_local void @convert_i16_fp16_to_fp32(ptr noundef writeonly %dest, ptr noundef readonly %in_array) {
+; CHECK-LABEL: define dso_local void @convert_i16_fp6_to_fp32(
+define dso_local void @convert_i16_fp6_to_fp32(ptr noundef writeonly %dest, ptr noundef readonly %in_array) {
 entry:
   %BS = tail call ptr @llvm.ripple.block.setshape.i64(i64 0, i64 64, i64 1, i64 1, i64 1, i64 1, i64 1, i64 1, i64 1, i64 1, i64 1)
   %idx = tail call i64 @llvm.ripple.block.index.i64(ptr %BS, i64 0)
   %in_ptr = getelementptr inbounds i16, ptr %in_array, i64 %idx
   %val = load i16, ptr %in_ptr, align 2
-  ; CHECK: %[[LOAD:.*]] = load <64 x half>, ptr %in_array
-  ; CHECK: %[[RESULT:.*]] = fpext <64 x half> %[[LOAD]] to <64 x float>
-  %half = bitcast i16 %val to half
-  %result = fpext half %half to float
+  ; CHECK: .ripple.call.loop.body.call.block:
+  ; CHECK: %[[RESULT:.*]] = extractelement <64 x i6> %fp6.ripple.LS.instance, i64 %ripple.scalarcall.iterator
+  ; CHECK: call float @llvm.convert.from.arbitrary.fp.f32.i6(i6 %[[RESULT]], metadata !"Float6E3M2FN")
+  %fp6 = trunc i16 %val to i6
+  %result = call float @llvm.convert.from.arbitrary.fp.f32.i6(i6 %fp6, metadata !"Float6E3M2FN")
   %out_ptr = getelementptr inbounds float, ptr %dest, i64 %idx
   store float %result, ptr %out_ptr, align 4
   ret void
@@ -308,7 +310,7 @@ entry:
 declare i32 @llvm.abs.i32(i32, i1 immarg) #0
 
 ; Function Attrs: nocallback nofree nosync nounwind willreturn memory(none)
-declare float @llvm.convert.from.fp16.f32(i16) #1
+declare float @llvm.convert.from.arbitrary.fp.f32.i6(i6, metadata) #1
 
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
 declare i32 @llvm.ctlz.i32(i32, i1 immarg) #0
