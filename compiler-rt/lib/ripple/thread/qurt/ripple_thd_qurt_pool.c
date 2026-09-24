@@ -14,12 +14,14 @@
 #include "ripple/ripple_thd_qurt_pool.h"
 #include <stdlib.h>
 
-#ifdef __NO_QURT__
-typedef union qurt_barrier qurt_barrier_t;
-int qurt_barrier_init(qurt_barrier_t *barrier, unsigned int threads_total);
-int qurt_barrier_destroy(qurt_barrier_t *barrier);
-int qurt_barrier_wait(qurt_barrier_t *barrier);
+#ifdef RIPPLE_THD_QURT_DEBUG
+#define SHOW_SEM(sem)                                                          \
+  qurt_printf("line %u, sem count: %u\n", __LINE__, (sem)->count);
+#else
+#define SHOW_SEM(sem) (void)0
 #endif
+
+extern void _set_sw_id(void *underlying, size_t sw_id);
 
 // Worker thread entry function
 static void qthd_worker_thread_main(void *arg) {
@@ -32,10 +34,15 @@ static void qthd_worker_thread_main(void *arg) {
 
   while (1) {
     // Wait for the parent thread to tell us that work is ready
-    qurt_barrier_wait(&(pool->bar));
-    if (pool->stop) {
-      break;
-    } else {
+    size_t sw_id = ripple_thd_qurt_sem_wait(&(pool->todo));
+    _set_sw_id(pool->rt, sw_id);
+    SHOW_SEM(&pool->todo);
+    int local_stop = pool->stop; // protect "stop" against concurrent changes
+    if (!local_stop) {
+#ifdef RIPPLE_THD_QURT_DEBUG
+      qurt_printf("Thd %p running %p(%p)\n", qurt_thread_get_id(),
+                  pool->task.func, pool->task.arg);
+#endif
       // Execute task
       task_func_t func = pool->task.func;
       void *task_arg = pool->task.arg;
@@ -43,10 +50,12 @@ static void qthd_worker_thread_main(void *arg) {
         func(task_arg);
       }
     }
+    ripple_thd_qurt_sem_post(&(pool->done), 1);
+    SHOW_SEM(&pool->done);
+    if (local_stop)
+      break;
     // Wait for everyone to be ready to exit
-    qurt_barrier_wait(&(pool->bar));
   }
-
   err = qurt_hvx_unlock();
   if (err != QURT_EOK) {
     qurt_printf("FAILED to unlock HVX\n");
@@ -59,17 +68,19 @@ void qthd_worker_pool_init(qthd_worker_pool_t pool, qthd_runtime_t *rt,
                            int priority, size_t stack_size) {
   pool->rt = rt;
   pool->stop = 0;
-  // This is a parent-children barrier
-  // TODO: to be robust to cases when thread_creates fail, create an initial
-  // sync with all the children thread and initialize the barrier when the
-  // thread count is known.
-  qurt_barrier_init(&(pool->bar), rt->n_thd + 1);
 
-  for (int t = 0; t < rt->n_thd; t++) {
+  ripple_thd_qurt_sem_init(&(pool->todo), 0);
+  ripple_thd_qurt_sem_init(&(pool->done), 0);
+
+  for (unsigned t = 0; t < rt->n_thd; t++) {
     qurt_thread_attr_t attr;
 
     qurt_thread_attr_init(&attr);
     qurt_thread_attr_set_stack_size(&attr, stack_size);
+    if (((size_t)rt->stack[t]) % 8 != 0) {
+      qurt_printf("[Warning] Thread stack for thread %u (%p) not aligned!\n", t,
+                  rt->stack[t]);
+    }
     qurt_thread_attr_set_stack_addr(&attr,
                                     (unsigned long long *)rt->stack[t]);
     qurt_thread_attr_set_priority(&attr, priority);
@@ -112,21 +123,27 @@ void qthd_worker_pool_dispatch(qthd_worker_pool_t pool, task_func_t func,
                                void *arg) {
   pool->task.func = func;
   pool->task.arg = arg;
+  unsigned n_thd = pool->rt->n_thd;
 
-  // Wake workers
-  qurt_barrier_wait(&(pool->bar));
+  // Tell workers there is work to do
+  ripple_thd_qurt_sem_post(&pool->todo, n_thd);
+  SHOW_SEM(&pool->todo);
 
-  // Wait for all workers to finish
-  qurt_barrier_wait(&(pool->bar));
+  // Wait for all the tasks to be done
+  for (unsigned t = 0; t < n_thd; ++t) {
+    ripple_thd_qurt_sem_wait(&pool->done);
+    SHOW_SEM(&pool->done);
+  }
 }
 
 void qthd_worker_pool_exit(qthd_worker_pool_t pool) {
   pool->stop = 1;
-  qurt_barrier_wait(&(pool->bar));
+  // OPT: we don't really have to wait for the "stop" task to be done,
+  // since we're doing a join right after this.
+  qthd_worker_pool_dispatch(pool, NULL, NULL);
 
   int status;
   for (unsigned i = 0; i < pool->rt->n_thd; i++) {
     qurt_thread_join(pool->rt->threads[i], &status);
   }
-  qurt_barrier_destroy(&(pool->bar));
 }
