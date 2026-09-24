@@ -250,6 +250,43 @@ allBasicBlocksFromToBFS(BasicBlock *From, BasicBlock *To,
   return Visited;
 }
 
+static Intrinsic::ID getRippleVPReductionIntrinsicID(Intrinsic::ID ID) {
+  switch (ID) {
+  default:
+    llvm_unreachable("Unexpected reduction intrinsic");
+  case Intrinsic::vector_reduce_add:
+    return Intrinsic::vp_reduce_add;
+  case Intrinsic::vector_reduce_mul:
+    return Intrinsic::vp_reduce_mul;
+  case Intrinsic::vector_reduce_and:
+    return Intrinsic::vp_reduce_and;
+  case Intrinsic::vector_reduce_or:
+    return Intrinsic::vp_reduce_or;
+  case Intrinsic::vector_reduce_xor:
+    return Intrinsic::vp_reduce_xor;
+  case Intrinsic::vector_reduce_smax:
+    return Intrinsic::vp_reduce_smax;
+  case Intrinsic::vector_reduce_smin:
+    return Intrinsic::vp_reduce_smin;
+  case Intrinsic::vector_reduce_umax:
+    return Intrinsic::vp_reduce_umax;
+  case Intrinsic::vector_reduce_umin:
+    return Intrinsic::vp_reduce_umin;
+  case Intrinsic::vector_reduce_fmax:
+    return Intrinsic::vp_reduce_fmax;
+  case Intrinsic::vector_reduce_fmin:
+    return Intrinsic::vp_reduce_fmin;
+  case Intrinsic::vector_reduce_fmaximum:
+    return Intrinsic::vp_reduce_fmaximum;
+  case Intrinsic::vector_reduce_fminimum:
+    return Intrinsic::vp_reduce_fminimum;
+  case Intrinsic::vector_reduce_fadd:
+    return Intrinsic::vp_reduce_fadd;
+  case Intrinsic::vector_reduce_fmul:
+    return Intrinsic::vp_reduce_fmul;
+  }
+}
+
 Constant *getRippleNeutralReductionElement(Intrinsic::ID ID, Type *EltTy,
                                            FastMathFlags FMF) {
   assert(VPReductionIntrinsic::isVPReduction(ID) &&
@@ -2902,7 +2939,7 @@ void Ripple::padToTargetSIMDWidth() {
                                   : FastMathFlags();
 
           auto VPReduceID =
-              VPIntrinsic::getForIntrinsic(ReduceI->getIntrinsicID());
+              getRippleVPReductionIntrinsicID(ReduceI->getIntrinsicID());
           irBuilder.SetInsertPoint(ReduceI);
           auto *StartValue =
               (ReduceI->getIntrinsicID() == Intrinsic::vector_reduce_fadd ||
@@ -7659,7 +7696,7 @@ bool LinearSeries::isScalarOrSplat() const {
 }
 
 bool Ripple::hasNoVectorDimension() const {
-  return none_of(idTypes.begin(), idTypes.end(),
+  return none_of(idTypes,
                  [](auto &entry) { return entry.second == VectorDimension; });
 }
 

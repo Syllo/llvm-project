@@ -20,7 +20,8 @@ namespace llvm {
 
 class Module;
 
-class InlineBitcodeLibraryPass : public PassInfoMixin<InlineBitcodeLibraryPass> {
+class InlineBitcodeLibraryPass
+    : public OptionalPassInfoMixin<InlineBitcodeLibraryPass> {
 public:
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
 };

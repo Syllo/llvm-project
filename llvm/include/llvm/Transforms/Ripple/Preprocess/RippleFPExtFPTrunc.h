@@ -30,11 +30,10 @@ namespace llvm {
 
 class Function;
 
-class RippleFPExtFPTruncPass : public PassInfoMixin<RippleFPExtFPTruncPass> {
+class RippleFPExtFPTruncPass
+    : public RequiredPassInfoMixin<RippleFPExtFPTruncPass> {
 public:
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-
-  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

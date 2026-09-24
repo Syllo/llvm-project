@@ -29,7 +29,8 @@ template <typename ValueTy> class AssertingVH;
 class Function;
 class TargetMachine;
 
-class RippleSESEPass : public PassInfoMixin<RippleSESEPass> {
+// Run RippleSESE when optnone is set.
+class RippleSESEPass : public RequiredPassInfoMixin<RippleSESEPass> {
   TargetMachine *TM;
   Ripple::ProcessingStatus &PS;
   DenseSet<AssertingVH<Function>> &SpecializationsPending,
@@ -42,9 +43,6 @@ public:
       : TM(TM), PS(PS), SpecializationsPending(SpecializationsPending),
         SpecializationsAvailable(SpecializationsAvailable) {}
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-
-  // Run RippleSESE when optnone is set
-  static bool isRequired() { return true; }
 };
 
 } // namespace llvm
