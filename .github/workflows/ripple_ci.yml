@@ -28,7 +28,7 @@ env:
 
 jobs:
   build_and_test:
-    if: github.repository_owner == 'Ripple-Programming'
+    if: github.repository_owner == 'qualcomm'
     name: Build and Test ripple
     runs-on: [self-hosted, ubuntu-24.04]
     strategy:
@@ -95,7 +95,7 @@ jobs:
         run: cmake --build build-ripple-test-suite --target check -- -k 0
 
   hexagon_build_and_test:
-    if: github.repository_owner == 'Ripple-Programming'
+    if: github.repository_owner == 'qualcomm'
     name: Build and Test ripple
     runs-on: [self-hosted, ubuntu-24.04]
     strategy:
