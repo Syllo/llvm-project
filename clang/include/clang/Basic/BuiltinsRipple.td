@@ -208,6 +208,18 @@ def RippleReshape : Builtin, RippleAllTypesTemplate {
   let Prototype = "T(void *, T)";
 }
 
+def RippleFromFixedVector : Builtin {
+  let Spellings = ["__builtin_ripple_from_fixed_vector"];
+  let Attributes = [NoThrow, CustomTypeChecking];
+  let Prototype = "void(...)";
+}
+
+def RippleToFixedVector : Builtin {
+  let Spellings = ["__builtin_ripple_to_fixed_vector"];
+  let Attributes = [NoThrow, CustomTypeChecking];
+  let Prototype = "void(...)";
+}
+
 def RippleReinterpI8 : Builtin, RippleAllTypesTemplate {
   let Spellings = ["__builtin_ripple_reinterp_i8_"];
   let Attributes = [NoThrow, CustomTypeChecking];

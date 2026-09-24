@@ -14294,6 +14294,10 @@ def note_acc_reduction_combiner_forming
            "operator|final assignment operator}0">;
 
 // Ripple diagnostics.
+def err_ripple_fixed_vector_type : Error<
+  "ripple fixed-vector conversion requires %select{an integer or floating-point vector|an integer or floating-point scalar}0 (current type is %1)">;
+def err_ripple_fixed_vector_count : Error<
+  "ripple fixed-vector conversion vector element count must be a positive integer constant no greater than %0">;
 def err_ripple_block_shape_argument
     : Error<"%0 takes a ripple block shape"
     " (ripple_block_t) as 1st argument (current type is %1)">;

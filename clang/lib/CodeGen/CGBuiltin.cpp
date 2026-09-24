@@ -7048,6 +7048,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
   CASE_RIPPLE_ALL_FLOAT_BUILTIN(Name)
 
   case Builtin::BI__builtin_ripple_get_index:
+  case Builtin::BI__builtin_ripple_from_fixed_vector:
+  case Builtin::BI__builtin_ripple_to_fixed_vector:
   case Builtin::BI__builtin_ripple_get_size:
   case Builtin::BI__builtin_ripple_set_shape:
   case Builtin::BI__builtin_ripple_parallel_idx:

@@ -329,6 +329,29 @@ RValue CodeGenFunction::emitRippleBuiltin(const CallExpr *E,
 
   switch (BuiltinID) {
 
+  case Builtin::BI__builtin_ripple_from_fixed_vector:
+  case Builtin::BI__builtin_ripple_to_fixed_vector: {
+    bool ToRipple = BuiltinID == Builtin::BI__builtin_ripple_from_fixed_vector;
+    Value *Input = EmitScalarExpr(E->getArg(1));
+    auto ID = ToRipple ? llvm::Intrinsic::ripple_from_fixed_vector
+                       : llvm::Intrinsic::ripple_to_fixed_vector;
+    // to_fixed_vector's count is consumed by Sema to form E's result type. Keep
+    // the intrinsic vector-typed for one element, even though the C/C++ builtin
+    // result is scalar in that case.
+    llvm::Type *ResultTy = intrinsicsReturnType();
+    llvm::Type *VectorTy = ToRipple ? Input->getType() : ResultTy;
+    if (!ToRipple && !VectorTy->isVectorTy())
+      VectorTy = llvm::FixedVectorType::get(VectorTy, 1);
+    SmallVector<Value *, 2> Args;
+    if (ToRipple)
+      Args.push_back(EmitScalarExpr(E->getArg(0)));
+    Args.push_back(Input);
+    Value *Result = Builder.CreateCall(CGM.getIntrinsic(ID, VectorTy), Args);
+    if (!ToRipple && !ResultTy->isVectorTy())
+      Result = Builder.CreateBitCast(Result, ResultTy);
+    return RValue::get(Result);
+  }
+
   case Builtin::BI__builtin_ripple_parallel_idx:
     CGM.Error(Loc, "not within the scope of a ripple_parallel with matching "
                    "block shape (Block) and dimensions (Dims)");

@@ -92,6 +92,7 @@ class DILocalVariable;
 
 struct RippleBlockShapeLookupResult {
   IntrinsicInst *BlockShape = nullptr;
+  Argument *BlockShapeArgument = nullptr;
   bool Ambiguous = false;
   Instruction *AmbiguousAccess = nullptr;
   Instruction *FirstAmbiguousSource = nullptr;
@@ -100,6 +101,8 @@ struct RippleBlockShapeLookupResult {
   RippleBlockShapeLookupResult() = default;
   explicit RippleBlockShapeLookupResult(IntrinsicInst *BlockShape)
       : BlockShape(BlockShape) {}
+  explicit RippleBlockShapeLookupResult(Argument *BlockShapeArgument)
+      : BlockShapeArgument(BlockShapeArgument) {}
   RippleBlockShapeLookupResult(Instruction *AmbiguousAccess,
                                Instruction *FirstAmbiguousSource,
                                Instruction *SecondAmbiguousSource)
@@ -115,6 +118,7 @@ struct RippleBlockShapeLookupResult {
 ///
 /// If @p DetectAmbiguity is true, the lookup keeps walking after the first
 /// reaching block shape to detect multiple possible reaching sources.
+/// An unresolved function argument is returned in BlockShapeArgument.
 RippleBlockShapeLookupResult
 findRippleBlockShapeIntrinsic(const Use &RippleBlockShapePtr, MemorySSA &MSSA,
                               DominatorTree &DT, bool DetectAmbiguity = false,
@@ -1398,6 +1402,10 @@ public:
     return getBlockShapeIntrinsicHelper<true>(RippleBlockShapePtr);
   }
 
+  /// Trace an SSA value, including O0 load/store forwarding, back to a
+  /// function argument.
+  Argument *findArgumentSource(const Use &U);
+
   /// @brief Returns the linearseries attached to an instruction, or nullptr if
   /// not a linear series.
   const LinearSeries *getLinseriesFor(const Instruction *I) const {
@@ -1788,6 +1796,12 @@ private:
     return rippleReshapeIntrinsics(const_cast<Instruction *>(I));
   }
 
+  /// Conversions between native vectors and Ripple tensors.
+  static IntrinsicInst *rippleFixedVectorIntrinsics(Instruction *I);
+  static const IntrinsicInst *rippleFixedVectorIntrinsics(const Instruction *I) {
+    return rippleFixedVectorIntrinsics(const_cast<Instruction *>(I));
+  }
+
   /// @brief Returns all intrinsics that are Ripple reinterp instructions
   /// @param I an instruction
   /// @return a pointer if I is a Ripple reinterp, nullptr otherwise
@@ -2071,6 +2085,7 @@ private:
 
   /// @brief Checks the given ripple reinterp intrinsics for issues
   Error checkRippleReinterpIntrinsics(IntrinsicInst *I);
+  Error checkRippleFixedVectorIntrinsics(IntrinsicInst *I);
 
   /// @brief Checks the given reduction intrinsics for issues
   Error checkRippleReductionIntrinsics(IntrinsicInst *I);

@@ -40,6 +40,44 @@ Clang exposes the Ripple API as core (target-independent) builtins:
   - Math: ``__builtin_ripple_sqrt``, ``__builtin_ripple_exp``, ``__builtin_ripple_log``, etc.
   - Shuffle/Broadcast: ``__builtin_ripple_shuffle_*``, ``__builtin_ripple_broadcast_*``, ``__builtin_ripple_slice_*``.
 
+Native Vector Conversions
+-------------------------
+
+``__builtin_ripple_from_fixed_vector(block, vector)`` returns a scalar with the
+vector's element type. The result is a Ripple value whose shape is the shape of
+the supplied block.
+``__builtin_ripple_to_fixed_vector(count, scalar)`` returns a native vector of
+``count`` elements of the scalar's type, except that a count of one returns the
+scalar type directly. The count must be a positive integer constant no greater
+than half the compiler's maximum ``int`` value (``INT_MAX / 2``); it determines
+the return type and is not an LLVM intrinsic operand. The Ripple value's
+propagated shape determines the source shape.
+
+The ``vec_to_ripple`` and ``ripple_to_vec`` helpers use these builtins. When a
+function is processed with an active Ripple shape, the conversions operate on
+the complete resolved block. The native-vector value and Ripple value must have
+equal total bit width. Ripple diagnoses unequal widths after shape propagation,
+and neither fixed-vector value is transformed by Ripple. The pass lowers both
+conversions without temporary arrays.
+
+``vec_to_ripple(block, vector)`` infers both the element type and element count
+from the vector argument. Legacy untyped vectors can explicitly select an
+element type with ``vec_to_ripple<type>(block, vector)`` in C++ or
+``vec_to_ripple(type, block, vector)`` in C. In C++,
+``ripple_to_vec<count>(value)`` can infer the element type from ``value``. In C,
+the equivalent spelling is ``ripple_to_vec(count, value)``. Both languages also
+provide an explicit element-type form: ``ripple_to_vec<count, type>(value)`` in
+C++ and ``ripple_to_vec(count, type, value)`` in C. An explicit type may be
+needed when integer promotions or a legacy target API obscure the operation's
+semantic element type.
+
+Passing a block shape as a function argument is intended only to request
+specialization. The callee's definition must be available in the same LLVM
+module as the call so Ripple can specialize it using the concrete block shape.
+The unspecialized function remains a scalar fallback, where ``vec_to_ripple``
+selects lane zero and ``ripple_to_vec`` broadcasts the scalar. The C++ helpers
+remain templates.
+
 Ripple Semantics Analysis
 -------------------------
 

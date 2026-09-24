@@ -27,6 +27,12 @@ let TargetPrefix = "ripple" in {
 // - reinterp
 //   - reinterprets a tensor's bits with a possibly different element width;
 //     changing the width remaps bits between logical lanes
+// - from.fixed.vector / to.fixed.vector
+//   - cross the boundary between lane-wise Ripple values and a native fixed
+//     vector, which is not transformed by Ripple
+//   - to.fixed.vector exposes the whole block outside Ripple, so all lanes of
+//     the block must agree on the conversion point; convergence must be
+//     preserved until Ripple lowers the conversion to a whole-value bitcast
 
 // Ripple dim; takes as input a processing element (PE) identifier (e.g., 0 vector,
 // 1 thread, 2 core) and dimension index; returns it's multi-dimensional index.
@@ -57,6 +63,19 @@ def int_ripple_stack : DefaultAttrsIntrinsic<[llvm_any_ty], [llvm_ptr_ty, LLVMMa
 // need IntrConvergent. The block-shape operand only describes the result view.
 def int_ripple_reshape : DefaultAttrsIntrinsic<[llvm_any_ty], [llvm_ptr_ty, LLVMMatchType<0>],
                             [IntrNoMem, IntrWillReturn]>;
+
+// Convert between a native vector and a Ripple tensor with the same element
+// type. The block describes the scalar side's shape. Ripple checks equal total
+// bit widths after shape propagation and lowers each conversion to a bitcast.
+def int_ripple_from_fixed_vector :
+  DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+    [llvm_ptr_ty, llvm_anyvector_ty],
+    [IntrNoMem, IntrConvergent, IntrWillReturn]>;
+
+def int_ripple_to_fixed_vector :
+  DefaultAttrsIntrinsic<[llvm_anyvector_ty],
+    [LLVMVectorElementType<0>],
+    [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 
 // Keep IntrConvergent: changing the element width can remap bits between
 // logical lanes (see comment on top).

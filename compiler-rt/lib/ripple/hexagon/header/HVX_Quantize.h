@@ -48,7 +48,7 @@ uint16_t hvx_quantize_f32_to_u16(float scale_f, int32_t out_offset,
 RIPPLE_CANDIDATE_INLINE v128u8 ripple_pure_ew_hvx_quantize_f32_to_u8(
     float scale_f, int16_t out_offset, const v128f32 in) {
   auto BS = ripple_set_block_shape(0, 128);
-  float xf = vec_to_ripple<128, float>(BS, in);
+  float xf = vec_to_ripple<float>(BS, in);
 
   xf = xf * scale_f;
 
@@ -58,14 +58,14 @@ RIPPLE_CANDIDATE_INLINE v128u8 ripple_pure_ew_hvx_quantize_f32_to_u8(
 
   xh = __builtin_ripple_add_sat_i16(xh, out_offset);
 
-  v128u16 vh = ripple_to_vec<128, uint16_t>(BS, xh);
+  v128u16 vh = ripple_to_vec<128, uint16_t>(xh);
   return Q6_Vub_vpack_VhVh_sat(Q6_V_hi_W(vh), Q6_V_lo_W(vh));
 }
 
 RIPPLE_CANDIDATE_INLINE v64u16 ripple_pure_ew_hvx_quantize_f32_to_u16(
     float scale_f, int32_t out_offset, const v64f32 in) {
   auto BS = ripple_set_block_shape(0, 64);
-  float xf = vec_to_ripple<64, float>(BS, in);
+  float xf = vec_to_ripple<float>(BS, in);
 
   xf = xf * scale_f;
 
@@ -81,6 +81,6 @@ RIPPLE_CANDIDATE_INLINE v64u16 ripple_pure_ew_hvx_quantize_f32_to_u16(
 
   xw = __builtin_ripple_add_sat_i32(xw, out_offset);
 
-  v64u32 vw = ripple_to_vec<64, uint32_t>(BS, xw);
+  v64u32 vw = ripple_to_vec<64, uint32_t>(xw);
   return Q6_Vuh_vpack_VwVw_sat(Q6_V_hi_W(vw), Q6_V_lo_W(vw));
 }

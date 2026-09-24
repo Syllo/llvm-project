@@ -60,8 +60,8 @@ RIPPLE_CANDIDATE_INLINE v64bf16 ripple_ew_pure_to_bf16_trunc(v64f32 In) {
         hvx_cast_from_i32(__hvx_bfloat_split((V64I32In), o), ForType);         \
     v64u16 CutMant =                                                           \
         hvx_cast_from_i32(__hvx_bfloat_split((V64I32In), e), ForType);         \
-    uint16_t Truncated = vec_to_ripple<64, uint16_t>((b), Trunc);              \
-    uint16_t CutMantissa = vec_to_ripple<64, uint16_t>((b), CutMant);          \
+    uint16_t Truncated = vec_to_ripple<uint16_t>((b), Trunc);                  \
+    uint16_t CutMantissa = vec_to_ripple<uint16_t>((b), CutMant);              \
     constexpr uint16_t Signless = 0x7FFF;                                      \
     constexpr uint16_t Inf = 0x7F80;                                           \
     constexpr uint16_t U16Nan = 0x7FC0;                                        \
@@ -73,7 +73,7 @@ RIPPLE_CANDIDATE_INLINE v64bf16 ripple_ew_pure_to_bf16_trunc(v64f32 In) {
         (TruncsToInf & NonZeroCutMantissa) ? SignedNan : Truncated;            \
     __bf16 Result;                                                             \
     __builtin_memcpy(&Result, &TruncWithNan, sizeof(Result));                  \
-    ripple_to_vec<64, __bf16>(b, Result);                                      \
+    ripple_to_vec<64, __bf16>(Result);                                         \
   })
 
 RIPPLE_CANDIDATE_INLINE v64bf16 ripple_ew_pure_to_bf16_nan(v64f32 Vin) {
@@ -85,14 +85,14 @@ RIPPLE_CANDIDATE_INLINE v64bf16 ripple_ew_pure_to_bf16_round(v64f32 Vin) {
   constexpr uint32_t OxeightOOO = 0x00008000u;
   constexpr uint32_t Oxonef = 0x0001FFFF;
   ripple_block_t b = ripple_set_block_shape(0, 64);
-  float In = vec_to_ripple<64, float>(b, Vin);
+  float In = vec_to_ripple<float>(b, Vin);
   uint32_t bits;
   __builtin_memcpy(&bits, &In, sizeof(bits));
   if (((bits & Oxonef) != OxeightOOO) & ((bits & OxeightOOO) == OxeightOOO) &
       ((bits & 0x7F800000) != 0x7F800000)) {
     bits += OxeightOOO;
   }
-  v64i32 PreRounded = hvx_cast_to_i32(ripple_to_vec<64, uint32_t>(b, bits));
+  v64i32 PreRounded = hvx_cast_to_i32(ripple_to_vec<64, uint32_t>(bits));
   return __hvx_bfloat_shiftNan(PreRounded, b);
 }
 

@@ -52,6 +52,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <tuple>
 #include <utility>
@@ -1896,6 +1897,82 @@ void SemaRipple::ActOnDuplicateDimensionIndex(const RippleComputeConstruct &S) {
     } else
       DimensionIds.insert(DimIndex);
   }
+}
+
+bool SemaRipple::CheckFixedVectorBuiltin(CallExpr *Call, unsigned BuiltinID) {
+  // Scalar fallback lowers to an LLVM shufflevector. Its implementation stores
+  // lane indices in the compiler's native int and validates indices against
+  // twice the input vector length.
+  constexpr int MaxFixedVectorElements = std::numeric_limits<int>::max() / 2;
+
+  bool ToRipple = BuiltinID == Builtin::BI__builtin_ripple_from_fixed_vector;
+  if (SemaRef.checkArgCount(Call, 2))
+    return true;
+
+  auto &Context = SemaRef.Context;
+  for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
+    ExprResult Arg =
+        SemaRef.DefaultFunctionArrayLvalueConversion(Call->getArg(I));
+    if (Arg.isInvalid())
+      return true;
+    Call->setArg(I, Arg.get());
+    if (Arg.get()->isTypeDependent()) {
+      Call->setType(Context.DependentTy);
+      return false;
+    }
+  }
+  if (ToRipple && CheckHasRippleBlockType(Call->getArg(0), BuiltinID))
+    return true;
+
+  unsigned ValueArg = 1;
+  QualType ValueTy = Call->getArg(ValueArg)->getType();
+  QualType ElementTy = ValueTy;
+  const auto *VecTy = ValueTy->getAs<VectorType>();
+  if (ToRipple && VecTy)
+    ElementTy = VecTy->getElementType();
+  if ((ToRipple && !VecTy) || (!ToRipple && VecTy) ||
+      !ElementTy->isBuiltinType() || ElementTy->isBooleanType() ||
+      (!ElementTy->isIntegerType() && !ElementTy->isRealFloatingType())) {
+    SemaRef.Diag(Call->getArg(ValueArg)->getExprLoc(),
+                 diag::err_ripple_fixed_vector_type)
+        << !ToRipple << ValueTy;
+    return true;
+  }
+  if (ToRipple) {
+    Call->setType(ElementTy.getUnqualifiedType());
+    return false;
+  }
+
+  Expr *Count = Call->getArg(0);
+  if (Count->isValueDependent()) {
+    Call->setType(Context.DependentTy);
+    return false;
+  }
+  auto Elements = Count->getIntegerConstantExpr(Context);
+  if (!Count->getType()->isIntegerType() || !Elements ||
+      Elements->isNegative() || Elements->isZero() ||
+      Elements->getActiveBits() > 32 ||
+      Elements->getZExtValue() >
+          static_cast<uint64_t>(MaxFixedVectorElements)) {
+    SemaRef.Diag(Count->getExprLoc(), diag::err_ripple_fixed_vector_count)
+        << MaxFixedVectorElements;
+    return true;
+  }
+  if (Elements->isOne()) {
+    Call->setType(ElementTy.getUnqualifiedType());
+    return false;
+  }
+  uint64_t Bytes = Elements->getZExtValue() *
+                   Context.getTypeSizeInChars(ElementTy).getQuantity();
+  auto *Size =
+      IntegerLiteral::Create(Context, llvm::APInt(64, Bytes),
+                             Context.UnsignedLongLongTy, Count->getExprLoc());
+  QualType ResultTy = SemaRef.BuildVectorType(ElementTy.getUnqualifiedType(),
+                                              Size, Call->getExprLoc());
+  if (ResultTy.isNull())
+    return true;
+  Call->setType(ResultTy);
+  return false;
 }
 
 bool SemaRipple::CheckHasRippleBlockType(const Expr *E, unsigned BuiltinID) {

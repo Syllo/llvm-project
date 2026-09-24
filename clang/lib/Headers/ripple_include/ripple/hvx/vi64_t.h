@@ -35,11 +35,11 @@
 #include <ripple_hvx.h>
 
 #ifdef __cplusplus
-#define vi64_r2v(n, t, b, x) ripple_to_vec<n, t>(b, x)
-#define vi64_v2r(n, t, b, x) vec_to_ripple<n, t>(b, x)
+#define vi64_r2v(n, t, b, x) ripple_to_vec<n, t>(x)
+#define vi64_v2r(t, b, x) vec_to_ripple<t>(b, x)
 #else
-#define vi64_r2v(n, t, b, x) ripple_to_vec(n, t, b, x)
-#define vi64_v2r(n, t, b, x) vec_to_ripple(n, t, b, x)
+#define vi64_r2v(n, t, b, x) ripple_to_vec(n, t, x)
+#define vi64_v2r(t, b, x) vec_to_ripple(t, b, x)
 #endif
 
 #ifndef VI64_HVX_PE
@@ -91,8 +91,8 @@ hvx_vi64_add(hvx_vi64_t a, hvx_vi64_t b) {
   HVX_Vector sum_hi = Q6_Vw_vadd_VwVwQ_carry(a_hi, b_hi, &carry);
 
   hvx_vi64_t r;
-  r.lo = vi64_v2r(32, long, one_plane, sum_lo);
-  r.hi = vi64_v2r(32, long, one_plane, sum_hi);
+  r.lo = vi64_v2r(long, one_plane, sum_lo);
+  r.hi = vi64_v2r(long, one_plane, sum_hi);
   return r;
 }
 
@@ -110,8 +110,8 @@ hvx_vi64_sub(hvx_vi64_t a, hvx_vi64_t b) {
   HVX_Vector dif_hi = Q6_Vw_vsub_VwVwQ_carry(a_hi, b_hi, &borrow);
 
   hvx_vi64_t r;
-  r.lo = vi64_v2r(32, long, one_plane, dif_lo);
-  r.hi = vi64_v2r(32, long, one_plane, dif_hi);
+  r.lo = vi64_v2r(long, one_plane, dif_lo);
+  r.hi = vi64_v2r(long, one_plane, dif_hi);
   return r;
 }
 
@@ -132,8 +132,8 @@ static inline __attribute__((always_inline)) hvx_vi64_t hvx_vi64_mul32(long a,
   /* prod is a vector pair: lo=even result, hi=odd result.
    * For signed 32×32→64, lo = lower 32 bits, hi = upper 32 bits. */
   hvx_vi64_t r;
-  r.lo = vi64_v2r(32, long, one_plane, Q6_V_lo_W(prod));
-  r.hi = vi64_v2r(32, long, one_plane, Q6_V_hi_W(prod));
+  r.lo = vi64_v2r(long, one_plane, Q6_V_lo_W(prod));
+  r.hi = vi64_v2r(long, one_plane, Q6_V_hi_W(prod));
   return r;
 }
 
@@ -144,7 +144,7 @@ hvx_vi64_to_i64(hvx_vi64_t v) {
   HVX_Vector hiV = vi64_r2v(32, long, one_plane, v.hi);
   HVX_Vector loV = vi64_r2v(32, long, one_plane, v.lo);
   v32i64 flat = (v32i64)Q6_W_vshuff_VVR(hiV, loV, -4);
-  return vi64_v2r(32, long long, one_plane, flat);
+  return vi64_v2r(long long, one_plane, flat);
 }
 
 /// @brief Converts a block of 32 flat int64s to 32 vertical int64.
@@ -158,8 +158,8 @@ hvx_vi64_from_i64(long long flat) {
   HVX_Vector flatLoV = Q6_V_lo_W(flatV);
   HVX_Vector flatHiV = Q6_V_hi_W(flatV);
 
-  long lo = vi64_v2r(32, long, one_plane, flatLoV);
-  long hi = vi64_v2r(32, long, one_plane, flatHiV);
+  long lo = vi64_v2r(long, one_plane, flatLoV);
+  long hi = vi64_v2r(long, one_plane, flatHiV);
   return hvx_vi64_from_lohi(lo, hi);
 }
 
@@ -179,8 +179,8 @@ hvx_vi64_asr_31(hvx_vi64_t a, long shift) {
   HVX_VectorPair valV = Q6_Ww_vasrinto_WwVwVw(halfRotated, aHiV, shiftV);
   HVX_Vector valV_lo = Q6_V_lo_W(valV);
   HVX_Vector valV_hi = Q6_V_hi_W(valV);
-  long val_lo = vi64_v2r(32, long, one_plane, valV_lo);
-  long val_hi = vi64_v2r(32, long, one_plane, valV_hi);
+  long val_lo = vi64_v2r(long, one_plane, valV_lo);
+  long val_hi = vi64_v2r(long, one_plane, valV_hi);
   return hvx_vi64_from_lohi(val_lo, val_hi);
 }
 
@@ -204,8 +204,8 @@ hvx_vi64_mac(hvx_vi64_t acc, long a, long b) {
   acc_hi = Q6_Vw_vadd_VwVwQ_carry(acc_hi, Q6_V_hi_W(prod), &carry);
 
   hvx_vi64_t r;
-  r.lo = vi64_v2r(32, long, one_plane, acc_lo);
-  r.hi = vi64_v2r(32, long, one_plane, acc_hi);
+  r.lo = vi64_v2r(long, one_plane, acc_lo);
+  r.hi = vi64_v2r(long, one_plane, acc_hi);
   return r;
 }
 
@@ -226,8 +226,8 @@ hvx_vi64_msc(hvx_vi64_t acc, long a, long b) {
   acc_hi = Q6_Vw_vsub_VwVwQ_carry(acc_hi, Q6_V_hi_W(prod), &borrow);
 
   hvx_vi64_t r;
-  r.lo = vi64_v2r(32, long, one_plane, acc_lo);
-  r.hi = vi64_v2r(32, long, one_plane, acc_hi);
+  r.lo = vi64_v2r(long, one_plane, acc_lo);
+  r.hi = vi64_v2r(long, one_plane, acc_hi);
   return r;
 }
 
@@ -240,8 +240,9 @@ hvx_vi64_msc(hvx_vi64_t acc, long a, long b) {
 
 #ifdef __cplusplus
 
-static inline __attribute__((always_inline)) hvx_vi64_t
-operator+(hvx_vi64_t a, hvx_vi64_t b) {
+static inline
+    __attribute__((always_inline)) hvx_vi64_t operator+(hvx_vi64_t a,
+                                                        hvx_vi64_t b) {
   return hvx_vi64_add(a, b);
 }
 

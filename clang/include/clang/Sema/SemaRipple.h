@@ -73,6 +73,8 @@ public:
 
   bool CheckHasRippleBlockType(const Expr *E, unsigned BuiltinID);
 
+  bool CheckFixedVectorBuiltin(CallExpr *Call, unsigned BuiltinID);
+
   struct AnnotationData {
     SourceRange DimsRange;
     UnqualifiedId BlockShape;

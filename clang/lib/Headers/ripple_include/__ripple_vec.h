@@ -106,150 +106,68 @@ typedef struct ripple_block_shape *ripple_block_t;
 /* ______________________ Interaction with C vector type ____________________ */
 
 #ifdef __cplusplus
-/// \brief Converts a <N_EL x T> vector to a 1-d Ripple block of T
-/// for processing element BS.
-/// Ripple block size assumed to be less than or equal to N_EL.
+
+/// Converts a Ripple value of T to a <N_EL x T> vector, or to T when N_EL is
+/// one. The Ripple value must contain exactly N_EL elements.
 template <__SIZE_TYPE__ N_EL, typename T>
-[[gnu::always_inline]] T __attribute__((vector_size(sizeof(T) * N_EL)))
-ripple_to_vec(ripple_block_t BS, T x) {
-  __attribute__((aligned(__alignof__(
-      T __attribute__((vector_size(sizeof(T) * N_EL))))))) T tmp[N_EL];
-  tmp[ripple_id(BS, 0)] = x;
-  return *((T __attribute__((vector_size(sizeof(T) * N_EL))) *)tmp);
+[[gnu::always_inline]] auto ripple_to_vec(T x)
+    -> decltype(__builtin_ripple_to_fixed_vector(N_EL, x)) {
+  return __builtin_ripple_to_fixed_vector(N_EL, x);
 }
 
-/// \brief Converts a 1-d Ripple block of T to a <N_EL x T> vector.
-/// Ripple block size assumed to be less than or equal to N_EL.
-template <__SIZE_TYPE__ N_EL, typename T>
-[[gnu::always_inline]] T
-vec_to_ripple(ripple_block_t BS,
-              T __attribute__((vector_size(sizeof(T) * N_EL))) x) {
-  __attribute__((aligned(__alignof__(
-      T __attribute__((vector_size(sizeof(T) * N_EL))))))) T tmp[N_EL];
-  *((T __attribute__((vector_size(sizeof(T) * N_EL))) *)tmp) = x;
-  return tmp[ripple_id(BS, 0)];
+/// Converts a vector to a Ripple block with the vector's element type.
+/// The block must contain exactly as many elements as the vector.
+template <typename Vec>
+[[gnu::always_inline]] auto vec_to_ripple(ripple_block_t BS, Vec x)
+    -> decltype(__builtin_ripple_from_fixed_vector(BS, x)) {
+  return __builtin_ripple_from_fixed_vector(BS, x);
 }
 
-/// \brief Converts a <N_EL x T> vector to a 2-d Ripple block of T.
-/// Ripple block size assumed to be less than or equal to N_EL.
-template <__SIZE_TYPE__ N_EL, typename T>
-[[gnu::always_inline]] T __attribute__((vector_size(sizeof(T) * N_EL)))
-ripple_to_vec_2d(ripple_block_t BS, T x) {
-  __attribute__((aligned(__alignof__(
-      T __attribute__((vector_size(sizeof(T) * N_EL))))))) T tmp[N_EL];
-  tmp[ripple_get_block_size(BS, 0) * ripple_id(BS, 1) + ripple_id(BS, 0)] = x;
-  return *((T __attribute__((vector_size(sizeof(T) * N_EL))) *)tmp);
+/// Converts a vector to a Ripple block of T, reinterpreting the vector's
+/// elements as T. The block must contain sizeof(Vec) / sizeof(T) elements.
+template <typename T, typename Vec>
+[[gnu::always_inline]] T vec_to_ripple(ripple_block_t BS, Vec x) {
+  using TypedVec = T __attribute__((vector_size(sizeof(Vec))));
+  return __builtin_ripple_from_fixed_vector(BS, reinterpret_cast<TypedVec>(x));
 }
 
-/// \brief Converts a 2-d Ripple block of T to a <N_EL x T> vector.
-/// Ripple block size assumed to be less than or equal to N_EL.
-template <__SIZE_TYPE__ N_EL, typename T>
-[[gnu::always_inline]] T
-vec_to_ripple_2d(ripple_block_t BS,
-                 T __attribute__((vector_size(sizeof(T) * N_EL))) x) {
-  __attribute__((aligned(__alignof__(
-      T __attribute__((vector_size(sizeof(T) * N_EL))))))) T tmp[N_EL];
-  *((T __attribute__((vector_size(sizeof(T) * N_EL))) *)tmp) = x;
-  return tmp[ripple_get_block_size(BS, 0) * ripple_id(BS, 1) +
-             ripple_id(BS, 0)];
-}
+#else // !defined __cplusplus
 
-/// \brief Converts a <N_EL x T> vector to a 3-d Ripple block of T.
-/// Ripple block size assumed to be less than or equal to N_EL.
-template <__SIZE_TYPE__ N_EL, typename T>
-[[gnu::always_inline]] T __attribute__((vector_size(sizeof(T) * N_EL)))
-ripple_to_vec_3d(ripple_block_t BS, T x) {
-  __attribute__((aligned(__alignof__(
-      T __attribute__((vector_size(sizeof(T) * N_EL))))))) T tmp[N_EL];
-  tmp[(ripple_get_block_size(BS, 1) * ripple_get_block_size(BS, 0)) *
-          ripple_id(BS, 2) +
-      ripple_get_block_size(BS, 0) * ripple_id(BS, 1) + ripple_id(BS, 0)] = x;
-  return *((T __attribute__((vector_size(sizeof(T) * N_EL))) *)tmp);
-}
+/// Converts a Ripple value of T to a <N_EL x T> vector, or to T when N_EL is
+/// one. The Ripple value must contain exactly N_EL elements.
+#define __RIPPLE_TO_VEC_INFER(N_EL, x)                                         \
+  __builtin_ripple_to_fixed_vector((N_EL), (x))
+#define __RIPPLE_TO_VEC_TYPED(N_EL, T, x)                                      \
+  __builtin_ripple_to_fixed_vector((N_EL), (T)(x))
+#define __RIPPLE_TO_VEC_INVALID(...)                                           \
+  _Pragma("GCC error \"ripple_to_vec accepts only 2 or 3 arguments\"")
+#define __RIPPLE_TO_VEC_SELECT(                                                \
+    _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, \
+    NAME, ...)                                                                 \
+  NAME
+#define ripple_to_vec(...)                                                     \
+  __RIPPLE_TO_VEC_SELECT(                                                      \
+      __VA_ARGS__, __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_INVALID,           \
+      __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_INVALID,                        \
+      __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_INVALID,                        \
+      __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_INVALID,                        \
+      __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_INVALID,                        \
+      __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_INVALID,                        \
+      __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_TYPED,                          \
+      __RIPPLE_TO_VEC_INFER)(__VA_ARGS__)
 
-/// \brief Converts a 3-d Ripple block of T to a <N_EL x T> vector.
-/// Ripple block size assumed to be less than or equal to N_EL.
-template <__SIZE_TYPE__ N_EL, typename T>
-[[gnu::always_inline]] T
-vec_to_ripple_3d(ripple_block_t BS,
-                 T __attribute__((vector_size(sizeof(T) * N_EL))) x) {
-  __attribute__((aligned(__alignof__(
-      T __attribute__((vector_size(sizeof(T) * N_EL))))))) T tmp[N_EL];
-  *((T __attribute__((vector_size(sizeof(T) * N_EL))) *)tmp) = x;
-  return tmp[(ripple_get_block_size(BS, 1) * ripple_get_block_size(BS, 0)) *
-                 ripple_id(BS, 2) +
-             ripple_get_block_size(BS, 0) * ripple_id(BS, 1) +
-             ripple_id(BS, 0)];
-}
-
-#else // ! defined __cplusplus
-
-/// \brief Converts a <N_EL x T> vector to a 1-d Ripple block of T
-/// for processing element BS.
-/// Ripple block size assumed to be less than or equal to N_EL.
-#define ripple_to_vec(N_EL, T, BS, x)                                          \
-  ({                                                                           \
-    __attribute__((aligned(__alignof__(                                        \
-        T __attribute__((vector_size(sizeof(T) * N_EL))))))) T tmp[N_EL];      \
-    tmp[ripple_id(BS, 0)] = x;                                                 \
-    *((T __attribute__((vector_size(sizeof(T) * N_EL))) *)tmp);                \
-  })
-
-/// \brief Converts a 1-d Ripple block of T to a <N_EL x T> vector.
-/// Ripple block size assumed to be less than or equal to N_EL.
-#define vec_to_ripple(N_EL, T, BS, x)                                          \
-  ({                                                                           \
-    __attribute__((aligned(__alignof__(                                        \
-        T __attribute__((vector_size(sizeof(T) * N_EL))))))) T tmp[N_EL];      \
-    *((T __attribute__((vector_size(sizeof(T) * N_EL))) *)tmp) = x;            \
-    tmp[ripple_id(BS, 0)];                                                     \
-  })
-
-/// \brief Converts a <N_EL x T> vector to a 2-d Ripple block of T.
-/// Ripple block size assumed to be less than or equal to N_EL.
-#define ripple_to_vec_2d(N_EL, T, BS, x)                                       \
-  ({                                                                           \
-    __attribute__((aligned(__alignof__(                                        \
-        T __attribute__((vector_size(sizeof(T) * N_EL))))))) T tmp[N_EL];      \
-    tmp[ripple_get_block_size(BS, 0) * ripple_id(BS, 1) + ripple_id(BS, 0)] =  \
-        x;                                                                     \
-    *((T __attribute__((vector_size(sizeof(T) * N_EL))) *)tmp);                \
-  })
-
-/// \brief Converts a 2-d Ripple block of T to a <N_EL x T> vector.
-/// Ripple block size assumed to be less than or equal to N_EL.
-#define vec_to_ripple_2d(N_EL, T, BS, x)                                       \
-  ({                                                                           \
-    __attribute__((aligned(__alignof__(                                        \
-        T __attribute__((vector_size(sizeof(T) * N_EL))))))) T tmp[N_EL];      \
-    *((T __attribute__((vector_size(sizeof(T) * N_EL))) *)tmp) = x;            \
-    tmp[ripple_get_block_size(BS, 0) * ripple_id(BS, 1) + ripple_id(BS, 0)];   \
-  })
-
-/// \brief Converts a <N_EL x T> vector to a 3-d Ripple block of T.
-/// Ripple block size assumed to be less than or equal to N_EL.
-#define ripple_to_vec_3d(N_EL, T, BS, x)                                       \
-  ({                                                                           \
-    __attribute__((aligned(__alignof__(                                        \
-        T __attribute__((vector_size(sizeof(T) * N_EL))))))) T tmp[N_EL];      \
-    tmp[(ripple_get_block_size(BS, 1) * ripple_get_block_size(BS, 0)) *        \
-            ripple_id(BS, 2) +                                                 \
-        ripple_get_block_size(BS, 0) * ripple_id(BS, 1) + ripple_id(BS, 0)] =  \
-        x;                                                                     \
-    *((T __attribute__((vector_size(sizeof(T) * N_EL))) *)tmp);                \
-  })
-
-/// \brief Converts a 3-d Ripple block of T to a <N_EL x T> vector.
-/// Ripple block size assumed to be less than or equal to N_EL.
-#define vec_to_ripple_3d(N_EL, T, BS, x)                                       \
-  ({                                                                           \
-    __attribute__((aligned(__alignof__(                                        \
-        T __attribute__((vector_size(sizeof(T) * N_EL))))))) T tmp[N_EL];      \
-    *((T __attribute__((vector_size(sizeof(T) * N_EL))) *)tmp) = x;            \
-    tmp[(ripple_get_block_size(BS, 1) * ripple_get_block_size(BS, 0)) *        \
-            ripple_id(BS, 2) +                                                 \
-        ripple_get_block_size(BS, 0) * ripple_id(BS, 1) + ripple_id(BS, 0)];   \
-  })
+/// Converts a vector to a Ripple block with the vector's element type.
+/// The block must contain exactly as many elements as the vector.
+#define __RIPPLE_VEC_TO_RIPPLE_INFER(BS, x)                                    \
+  __builtin_ripple_from_fixed_vector((BS), (x))
+#define __RIPPLE_VEC_TO_RIPPLE_TYPED(T, BS, x)                                 \
+  __builtin_ripple_from_fixed_vector(                                          \
+      (BS), (T __attribute__((vector_size(sizeof(x)))))(x))
+#define __RIPPLE_VEC_TO_RIPPLE_SELECT(_1, _2, _3, NAME, ...) NAME
+#define vec_to_ripple(...)                                                     \
+  __RIPPLE_VEC_TO_RIPPLE_SELECT(                                               \
+      __VA_ARGS__, __RIPPLE_VEC_TO_RIPPLE_TYPED,                               \
+      __RIPPLE_VEC_TO_RIPPLE_INFER)(__VA_ARGS__)
 
 #endif // __cplusplus
 

@@ -94,6 +94,8 @@
 #include <cstdlib>
 #include <initializer_list>
 #include <iterator>
+#include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <queue>
@@ -125,6 +127,12 @@ raw_ostream &printBitVector(raw_ostream &OS, const BitVector &V) {
   }
   return OS << '}';
 }
+// Scalar fallback lowers to a shufflevector. ShuffleVectorInst stores lane
+// indices in the compiler's native int and validates them against twice the
+// input vector length.
+constexpr int MaxRippleFixedVectorElements =
+    std::numeric_limits<int>::max() / 2;
+constexpr StringRef RippleFunBlockShapeAttrKey("ripple.function.block-shape");
 
 ////////////////////////////////////////////////////////////////////////////////
 ///                             Local Classes                                ///
@@ -1918,6 +1926,11 @@ IntrinsicInst *Ripple::rippleReshapeIntrinsics(Instruction *I) {
   return intrinsicWithId(I, {Intrinsic::ripple_reshape});
 }
 
+IntrinsicInst *Ripple::rippleFixedVectorIntrinsics(Instruction *I) {
+  return intrinsicWithId(I, {Intrinsic::ripple_from_fixed_vector,
+                             Intrinsic::ripple_to_fixed_vector});
+}
+
 IntrinsicInst *Ripple::rippleReinterpIntrinsics(Instruction *I) {
   return intrinsicWithId(
       I, {Intrinsic::ripple_reinterp_i8, Intrinsic::ripple_reinterp_u8,
@@ -1969,13 +1982,75 @@ IntrinsicInst *Ripple::rippleSliceIntrinsic(Instruction *I) {
 }
 
 IntrinsicInst *Ripple::rippleIntrinsicsWithBlockShapeOperand(Instruction *I) {
-  return intrinsicWithId(I, {Intrinsic::ripple_broadcast,
-                             Intrinsic::ripple_stack, Intrinsic::ripple_reshape,
-                             Intrinsic::ripple_block_getsize,
-                             Intrinsic::ripple_block_index});
+  return intrinsicWithId(
+      I, {Intrinsic::ripple_broadcast, Intrinsic::ripple_stack,
+          Intrinsic::ripple_reshape, Intrinsic::ripple_from_fixed_vector,
+          Intrinsic::ripple_block_getsize, Intrinsic::ripple_block_index});
 }
 
 PreservedAnalyses Ripple::cleanupRippleSingleLane(ProcessingStatus Status) {
+  auto IsArgumentBlockShape = [this](const Use &U) {
+    auto Lookup = findRippleBlockShapeIntrinsic(U, MemSSA, domTree);
+    return Lookup.BlockShapeArgument != nullptr;
+  };
+  bool HasArgumentBlockShape = any_of(instructions(F), [&](Instruction &I) {
+    auto *BlockUser = rippleIntrinsicsWithBlockShapeOperand(&I);
+    return BlockUser &&
+           IsArgumentBlockShape(BlockUser->getArgOperandUse(0));
+  });
+
+  auto UsesArgumentFallback = [&](IntrinsicInst *Bitcast) {
+    bool ToRipple =
+        Bitcast->getIntrinsicID() == Intrinsic::ripple_from_fixed_vector;
+    if (ToRipple)
+      return IsArgumentBlockShape(Bitcast->getArgOperandUse(0));
+    return HasArgumentBlockShape ||
+           findArgumentSource(Bitcast->getArgOperandUse(0));
+  };
+
+  // Extract/splat only for unresolved function inputs. A locally known
+  // rank-zero shape still has one element, so apply the normal total-bit-width
+  // requirement before mutating the function.
+  if (Status == ProcessingStatus::Success) {
+    for (Instruction &I : instructions(F)) {
+      auto *Bitcast = rippleFixedVectorIntrinsics(&I);
+      if (!Bitcast)
+        continue;
+      bool ToRipple = Bitcast->getIntrinsicID() ==
+                      Intrinsic::ripple_from_fixed_vector;
+      if (UsesArgumentFallback(Bitcast))
+        continue;
+
+      Type *NativeTy =
+          ToRipple ? Bitcast->getArgOperand(1)->getType() : Bitcast->getType();
+      auto *VecTy = dyn_cast<FixedVectorType>(NativeTy);
+      if (!VecTy || (!VecTy->getElementType()->isIntegerTy() &&
+                     !VecTy->getElementType()->isFloatingPointTy())) {
+        F.getContext().diagnose(DiagnosticInfoRippleWithLoc(
+            DS_Error, F, sanitizeRippleLocation(Bitcast),
+            "Ripple fixed-vector conversion requires a fixed integer or floating-point "
+            "vector"));
+        Status = ProcessingStatus::SemanticsCheckFailure;
+        break;
+      }
+
+      uint64_t ElementBits =
+          VecTy->getElementType()->getScalarSizeInBits();
+      uint64_t NativeBits = VecTy->getNumElements() * ElementBits;
+      if (NativeBits != ElementBits) {
+        std::string Message;
+        raw_string_ostream OS(Message);
+        OS << "Ripple fixed-vector conversion width mismatch: native vector has " << NativeBits
+           << " bits, but Ripple value with scalar shape has " << ElementBits
+           << " bits";
+        F.getContext().diagnose(DiagnosticInfoRippleWithLoc(
+            DS_Error, F, sanitizeRippleLocation(Bitcast), OS.str()));
+        Status = ProcessingStatus::SemanticsCheckFailure;
+        break;
+      }
+    }
+  }
+
   for (auto &I : make_early_inc_range(instructions(F))) {
     if (IntrinsicInst *BlockInst = rippleBlockIntrinsics(&I)) {
       auto BlockIterator = BlockInst->getIterator();
@@ -2016,6 +2091,43 @@ PreservedAnalyses Ripple::cleanupRippleSingleLane(ProcessingStatus Status) {
       auto StackIterator = StackInst->getIterator();
       invalidateRippleDataFor(&I);
       ReplaceInstWithValue(StackIterator, StackInst->getOperand(1));
+    } else if (IntrinsicInst *FixedVectorInst =
+                   rippleFixedVectorIntrinsics(&I)) {
+      auto It = FixedVectorInst->getIterator();
+      irBuilder.SetInsertPoint(FixedVectorInst);
+      Value *Result = PoisonValue::get(FixedVectorInst->getType());
+      if (Status == ProcessingStatus::Success) {
+        bool ToRipple = FixedVectorInst->getIntrinsicID() ==
+                        Intrinsic::ripple_from_fixed_vector;
+        Value *Input = FixedVectorInst->getArgOperand(ToRipple ? 1 : 0);
+        if (!UsesArgumentFallback(FixedVectorInst)) {
+          Result = irBuilder.CreateBitCast(Input, FixedVectorInst->getType());
+        } else if (ToRipple) {
+          // A single-lane Ripple block sees the first native vector lane.
+          Result = irBuilder.CreateExtractElement(Input, uint64_t(0));
+        } else {
+          // A scalar Ripple value is broadcast to every native vector lane.
+          auto *ResultTy = cast<VectorType>(FixedVectorInst->getType());
+          uint64_t ElementCount =
+              ResultTy->getElementCount().getKnownMinValue();
+          if (ElementCount >
+              static_cast<uint64_t>(MaxRippleFixedVectorElements)) {
+            DiagnosticInfoRippleWithLoc DI(
+                DS_Error, F, sanitizeRippleLocation(FixedVectorInst),
+                Twine("Ripple scalar fallback cannot broadcast to a native "
+                      "vector with ") +
+                    Twine(ElementCount) + " elements; the maximum is " +
+                    Twine(MaxRippleFixedVectorElements));
+            F.getContext().diagnose(DI);
+            Status = ProcessingStatus::SemanticsCheckFailure;
+          } else {
+            Result = irBuilder.CreateVectorSplat(ResultTy->getElementCount(),
+                                                 Input);
+          }
+        }
+      }
+      invalidateRippleDataFor(FixedVectorInst);
+      ReplaceInstWithValue(It, Result);
     } else if (IntrinsicInst *ReshapeInst = rippleReshapeIntrinsics(&I)) {
       auto ReshapeIterator = ReshapeInst->getIterator();
       invalidateRippleDataFor(&I);
@@ -2167,7 +2279,19 @@ PreservedAnalyses Ripple::run() {
         return Call && canBeSpecialized(Call->getCalledFunction()) &&
                hasBlockShapeArgument(*Call);
       });
-  if (tensorRank() == 0 && !HasBlockSpecializationCall)
+  // An ambiguous block-shape access must still reach the normal validation
+  // path even when the function otherwise has no active lane dimensions.
+  bool HasAmbiguousBlockShapeAccess =
+      any_of(instructions(F), [&](Instruction &I) {
+        auto *BlockUser = rippleIntrinsicsWithBlockShapeOperand(&I);
+        return BlockUser &&
+               findRippleBlockShapeIntrinsic(BlockUser->getArgOperandUse(0),
+                                              MemSSA, domTree,
+                                              /*DetectAmbiguity=*/true)
+                   .Ambiguous;
+      });
+  if (tensorRank() == 0 && !HasBlockSpecializationCall &&
+      !HasAmbiguousBlockShapeAccess)
     return cleanupRippleSingleLane(ProcessingStatus::Success);
 
   // Expensive, only do once!
@@ -2421,15 +2545,40 @@ void Ripple::padToTargetSIMDWidth() {
     return GetPaddedLength(UndefValue::get(VectorTy));
   };
 
+  /// IsFixedVectorBoundaryBitcast: True for the bitcasts that lowering emits
+  /// for llvm.ripple.from.fixed.vector and llvm.ripple.to.fixed.vector. They
+  /// straddle the Ripple domain and a native vector whose type is pinned by the
+  /// user's C vector type and the target's register class, so exactly one side
+  /// carries a vector Ripple shape. Such a bitcast must keep its exact width:
+  /// padding it would rewrite the native type, and the two sides need not even
+  /// share an element type (an HVX pair is <64 x i32> against <32 x i64>).
+  auto IsFixedVectorBoundaryBitcast = [this](const Instruction *I) -> bool {
+    const auto *BC = dyn_cast<BitCastInst>(I);
+    if (!BC || !BC->getType()->isVectorTy())
+      return false;
+    const Value *Src = BC->getOperand(0);
+    if (!Src->getType()->isVectorTy())
+      return false;
+    // Only instructions carry tensor shapes here; a vector-typed Argument or
+    // Constant is native by construction, and querying its Ripple shape is
+    // ill-defined.
+    auto IsTensor = [this](const Value *V) {
+      const auto *VI = dyn_cast<Instruction>(V);
+      return VI && getRippleShape(VI).isVector();
+    };
+    return IsTensor(BC) != IsTensor(Src);
+  };
+
   /// GetPaddedV: For a value V, returns a value V', such that V' is
   /// V padded with undef values so that it is a vector values with \p
   /// PaddedLength number of elements.
   /// Note: The following things must be true about \p V:
   /// - V should be a constant, OR,
   /// - V must be an instruction previously padded with its natural padded
-  /// length and must have its record in InstToPadded.
+  /// length and must have its record in InstToPadded, unless it is a
+  /// native fixed-vector boundary generated by ripple.from.fixed.vector.
   auto GetPaddedV =
-      [this, &GetPaddedLength](
+      [this, &GetPaddedLength, &IsFixedVectorBoundaryBitcast](
           Value *V, const unsigned PaddedLength,
           DenseMap<std::pair<Value *, unsigned>, Value *> &InstToPadded)
       -> Value * {
@@ -2595,13 +2744,24 @@ void Ripple::padToTargetSIMDWidth() {
       auto NaturalPaddedLngthI = GetPaddedLength(I);
       // Note: the contract offered by `InstToPadded` is that an input
       // Instruction, Inst, must have been padded with its
-      // "GetPaddedLength(Inst)" earlier to calling this routine.
-      Value *VWithDifferentPad =
-          InstToPadded.at({I, NaturalPaddedLngthI});
+      // "GetPaddedLength(Inst)" earlier to calling this routine. The one
+      // exception is an instruction padding deliberately skipped, i.e. a
+      // native fixed-vector boundary, whose type the hardware pins: widen
+      // from the exact-width value itself.
+      Value *VWithDifferentPad = I;
+      unsigned SourceLength =
+          cast<FixedVectorType>(I->getType())->getNumElements();
+      if (auto It = InstToPadded.find({I, NaturalPaddedLngthI});
+          It != InstToPadded.end()) {
+        VWithDifferentPad = It->second;
+        SourceLength = NaturalPaddedLngthI;
+      } else {
+        assert(IsFixedVectorBoundaryBitcast(I) &&
+               "unmapped instruction must be a native fixed-vector conversion");
+      }
 
       std::vector<int> MaskEls(PaddedLength, -1);
-      for (unsigned IEl = 0; IEl < std::min(PaddedLength, NaturalPaddedLngthI);
-           ++IEl)
+      for (unsigned IEl = 0; IEl < std::min(PaddedLength, SourceLength); ++IEl)
         MaskEls[IEl] = IEl;
 
       LLVM_DEBUG(dbgs() << "[padToTargetSIMD] Expanding " << *VWithDifferentPad
@@ -2666,14 +2826,15 @@ void Ripple::padToTargetSIMDWidth() {
   ///   unsupported.
   auto GetInstructionsThatMustBePadded =
       [this, &GetPaddedLength, &GetMaxPaddedLength, &GetAllocaPaddedLength,
-       &CastToReductionIntrinsic]() -> Expected<std::set<Instruction *>> {
+       &CastToReductionIntrinsic,
+       &IsFixedVectorBoundaryBitcast]() -> Expected<std::set<Instruction *>> {
     std::set<Instruction *> MustBePadded;
     std::queue<Instruction *> Worklist;
     Error UnsupportedPaddingErr = Error::success();
 
     auto AnyValuesKnownToBeMustPadded =
-        [&MustBePadded, &UnsupportedPaddingErr](ArrayRef<Value *> Values,
-                                                unsigned PaddedLength) -> bool {
+        [this, &MustBePadded, &UnsupportedPaddingErr](
+            ArrayRef<Value *> Values, unsigned PaddedLength) -> bool {
       for (Value *V : Values) {
         if (auto *VType = dyn_cast<FixedVectorType>(V->getType())) {
           bool TypeAlignsWellWithPaddedLength =
@@ -2683,15 +2844,20 @@ void Ripple::padToTargetSIMDWidth() {
               return true;
             continue;
           }
+          if (isa<Argument>(V)) {
+            // A native vector argument with scalar Ripple shape keeps its
+            // fixed width. A pending specialization can give an argument a
+            // varying Ripple shape, in which case its uses need padding.
+            if (getRippleShape(V, /*ShapePropagation=*/true).isScalar())
+              continue;
+            if (!TypeAlignsWellWithPaddedLength)
+              return true;
+            continue;
+          }
           if (auto *I = dyn_cast<Instruction>(V)) {
             if (!TypeAlignsWellWithPaddedLength)
               return true;
             if (MustBePadded.find(I) != MustBePadded.end())
-              return true;
-            continue;
-          }
-          if (isa<Argument>(V)) {
-            if (!TypeAlignsWellWithPaddedLength)
               return true;
             continue;
           }
@@ -2790,6 +2956,10 @@ void Ripple::padToTargetSIMDWidth() {
           MustBePadded.insert(I);
           AddUserInstsToWorklist(I, Worklist);
         }
+      } else if (IsFixedVectorBoundaryBitcast(I)) {
+        // Padding stops at the boundary. The view keeps its exact width and
+        // GetPaddedV widens it for whichever users need padded lanes, so it is
+        // deliberately left out of MustBePadded.
       } else if (auto *CastI = dyn_cast<CastInst>(I)) {
         auto *SrcVal = CastI->getOperand(0);
         unsigned PaddedLength = GetMaxPaddedLength({CastI, SrcVal});
@@ -3023,7 +3193,12 @@ void Ripple::padToTargetSIMDWidth() {
       if (InstsThatMustBePadded.find(&I) != InstsThatMustBePadded.end()) {
         InstsThatMustBePaddedRPOT.push_back(&I);
       } else {
-        if (getRippleShape(&I).isVector()) {
+        // A native fixed-vector conversion is the one vector-shaped instruction left out
+        // of MustBePadded whose type does not already match its padded length,
+        // so it is not its own padded form. Leave it unmapped and let
+        // GetPaddedV widen from its exact width on demand.
+        if (getRippleShape(&I).isVector() &&
+            !IsFixedVectorBoundaryBitcast(&I)) {
           auto PaddedLength = GetPaddedLength(&I);
           InstToPadded.insert_or_assign({&I, PaddedLength}, &I);
         }
@@ -3761,6 +3936,47 @@ void Ripple::padToTargetSIMDWidth() {
     OldPhi->removeIncomingValueIf([](unsigned X) { return true; }, false);
   }
 
+  // Re-anchor the native fixed-vector conversion boundaries. A
+  // ripple.to.fixed.vector view has scalar Ripple shape, so it was never queued
+  // for padding, but its tensor operand may have been: narrow that back to the
+  // exact width the native side pins instead of rewriting the view. A
+  // ripple.from.fixed.vector view needs nothing here, since GetPaddedV widens
+  // it on demand for the users that want padded lanes.
+  for (auto *BB : getFuncRPOT()) {
+    for (auto &I : *BB) {
+      if (!IsFixedVectorBoundaryBitcast(&I))
+        continue;
+      auto *BC = cast<BitCastInst>(&I);
+      bool ToRipple = getRippleShape(BC).isVector();
+      // The Ripple side is the one padding would have wanted to widen.
+      Value *RippleSide = ToRipple ? cast<Value>(BC) : BC->getOperand(0);
+      unsigned ExactLength =
+          cast<FixedVectorType>(RippleSide->getType())->getNumElements();
+      unsigned PaddedLength = GetPaddedLength(RippleSide);
+
+      if (auto *Op = dyn_cast<Instruction>(RippleSide);
+          !ToRipple && Op && PaddedLength != ExactLength &&
+          InstsThatMustBePadded.find(Op) != InstsThatMustBePadded.end()) {
+        irBuilder.SetInsertPoint(BC);
+        Value *Padded = GetPaddedV(Op, PaddedLength, InstToPadded);
+        BC->setOperand(0,
+                       ExtractStartingSubVec(irBuilder, Padded, ExactLength));
+      }
+
+      if (PaddedLength != ExactLength && ORE.enabled()) {
+        ORE.emit([&] {
+          OptimizationRemarkMissed R(DEBUG_TYPE, "PadToTargetSIMDBoundary", BC);
+          R << "SIMD padding stops at a native vector boundary: this "
+            << ore::NV("ExactLength", ExactLength)
+            << "-lane conversion is not widened to "
+            << ore::NV("PaddedLength", PaddedLength)
+            << " lanes because the native vector type is fixed by the target";
+          return R;
+        });
+      }
+    }
+  }
+
   OldPhiToNewPhi.clear();
   InstToPadded.clear();
   InstsThatMustBePadded.clear();
@@ -4164,6 +4380,42 @@ void Ripple::genVectorInstructions() {
       setRippleShape(NewVectorI, toShape);
     }
     setReplacementFor(rippleStack, NewVectorI, toShape);
+  };
+
+  auto processRippleFixedVector = [&](IntrinsicInst *I,
+                                  const TensorShape &ToShape) {
+    LLVM_DEBUG(dbgs() << "Lowering Ripple fixed-vector conversion " << *I << " to shape "
+                      << ToShape << "\n");
+    irBuilder.SetInsertPoint(I);
+    bool ToRipple = I->getIntrinsicID() == Intrinsic::ripple_from_fixed_vector;
+    Value *Input = I->getArgOperand(ToRipple ? 1 : 0);
+    Type *DstTy = I->getType();
+    if (ToRipple) {
+      // Resolve native inputs, including arguments of a pending specialization,
+      // without broadcasting their already materialized vector type.
+      Input = getTensorUse(I->getArgOperandUse(1)).first;
+      if (ToShape.isVector())
+        DstTy = FixedVectorType::get(DstTy, ToShape.flatShape());
+    } else {
+      const TensorShape &InputShape =
+          getRippleShape(I->getArgOperand(0), /*ShapePropagation=*/true);
+      if (InputShape.isScalar()) {
+        auto *ResultTy = cast<FixedVectorType>(DstTy);
+        Input = irBuilder.CreateVectorSplat(ResultTy->getElementCount(), Input);
+        // This constructs a native vector, so both instructions produced by
+        // CreateVectorSplat retain scalar Ripple shape.
+        if (auto *Shuffle = dyn_cast<ShuffleVectorInst>(Input))
+          setRippleShape(Shuffle->getOperand(0), ScalarShape);
+        setRippleShape(Input, ScalarShape);
+      } else {
+        Input = getTensorUse(I->getArgOperandUse(0)).first;
+      }
+    }
+    // Preserve a distinct shape view even when the LLVM types are identical.
+    // IRBuilder's folding bitcast would relabel a shared native/tensor value.
+    auto *View = irBuilder.Insert(new BitCastInst(Input, DstTy),
+                                  tensorizedName(I->getName(), ToShape));
+    setReplacementFor(I, View, ToShape);
   };
 
   auto processRippleReshape = [&](IntrinsicInst *rippleReshape,
@@ -5282,6 +5534,15 @@ void Ripple::genVectorInstructions() {
     // Gather the instructions in the BB to vectorize
     SmallVector<Instruction *, 16> toProcess;
     for (auto &I : *BB) {
+      // Fixed-vector conversion intrinsics always need lowering. In particular,
+      // ripple.to.fixed.vector has scalar Ripple shape even when its input must
+      // be splatted to BS. Likewise, ripple.from.fixed.vector has scalar shape
+      // for a one-element native vector.
+      if (rippleFixedVectorIntrinsics(&I)) {
+        toProcess.push_back(&I);
+        continue;
+      }
+
       // For LinearSeries we need to process a vector base
       auto CS = getCachedSeries(&I);
       auto IShape = getRippleShape(&I);
@@ -5303,6 +5564,11 @@ void Ripple::genVectorInstructions() {
     }
     // Generate the vectorized instructions
     for (auto *I : toProcess) {
+      if (IntrinsicInst *Bitcast = rippleFixedVectorIntrinsics(I)) {
+        processRippleFixedVector(Bitcast, getRippleShape(Bitcast));
+        continue;
+      }
+
       auto CS = getCachedSeries(I);
       const TensorShape &toShape =
           CS ? CS.LS->getBaseShape() : getRippleShape(I);
@@ -7188,6 +7454,12 @@ Ripple::ConstructedSeries Ripple::getLinearSeriesFor(Instruction *I) {
   if (!I)
     return {};
 
+  // Fixed-vector conversions form a boundary between the Ripple and native
+  // vector domains. Do not propagate Ripple-specific series information across
+  // it; in particular, a native vector result must not become a scalar series.
+  if (rippleFixedVectorIntrinsics(I))
+    return {};
+
   // TODO: Remove when llvm has entirely transitioned to record instead of
   // intrinsics for debug info!
   if (isa<DbgInfoIntrinsic>(I))
@@ -7850,7 +8122,14 @@ Ripple::vectorizableOperands(const Instruction *I) {
   else if (rippleBlockIntrinsics(I))
     // No operand to vectorize for block intrinsics
     Begin = End;
-  else if (rippleBroadcastIntrinsic(I)) {
+  else if (auto *Bitcast = rippleFixedVectorIntrinsics(I)) {
+    bool ToRipple =
+        Bitcast->getIntrinsicID() == Intrinsic::ripple_from_fixed_vector;
+    Begin = Bitcast->arg_begin() + ToRipple;
+    // The native vector is already materialized; only the scalar side can
+    // require tensorization. The block handle is never vectorized.
+    End = Begin + !ToRipple;
+  } else if (rippleBroadcastIntrinsic(I)) {
     // The value being broadcasted is the third argument
     Begin = std::next(cast<CallInst>(I)->arg_begin(), 2);
     End = std::next(Begin);
@@ -8013,6 +8292,12 @@ Ripple::inferShapeFromOperands(const Instruction *I, bool AllowPartialPhi,
     return computeRippleShapeForBitsetIntrinsic(
         RippleBroadcast,
         getRippleShape(BroadcastingValue, /* ShapePropagation */ true));
+  } else if (const IntrinsicInst *Bitcast = rippleFixedVectorIntrinsics(I)) {
+    if (Bitcast->getIntrinsicID() == Intrinsic::ripple_to_fixed_vector)
+      return ScalarShape;
+    auto *BS = getBlockShapeIntrinsic(Bitcast->getArgOperandUse(0));
+    assert(BS);
+    return setShapeToTensorShape(BS);
   } else if (const IntrinsicInst *RippleStack = rippleStackIntrinsics(I)) {
     auto *ShapeII = getBlockShapeIntrinsic(RippleStack->getArgOperandUse(0));
     assert(ShapeII);
@@ -8437,7 +8722,8 @@ bool Ripple::isRippleIntrinsics(const Instruction *I) {
   return rippleBlockIntrinsics(I) || rippleReduceIntrinsics(I) ||
          rippleShuffleIntrinsics(I) || rippleBroadcastIntrinsic(I) ||
          rippleSliceIntrinsic(I) || rippleStackIntrinsics(I) ||
-         rippleReshapeIntrinsics(I) || rippleReinterpIntrinsics(I);
+         rippleReshapeIntrinsics(I) || rippleReinterpIntrinsics(I) ||
+         rippleFixedVectorIntrinsics(I);
 }
 
 DebugLoc Ripple::sanitizeRippleLocation(const Instruction *I) {
@@ -8691,6 +8977,68 @@ Error Ripple::checkRippleReshapeIntrinsics(IntrinsicInst *I) {
     }
   }
 
+  return Error::success();
+}
+
+Error Ripple::checkRippleFixedVectorIntrinsics(IntrinsicInst *I) {
+  auto Diagnose = [&](const Twine &Message) -> Error {
+    F.getContext().diagnose(DiagnosticInfoRippleWithLoc(
+        DS_Error, F, sanitizeRippleLocation(I), Message));
+    return createStringError(inconvertibleErrorCode(), Message);
+  };
+  bool ToRipple = I->getIntrinsicID() == Intrinsic::ripple_from_fixed_vector;
+  Type *NativeTy = ToRipple ? I->getArgOperand(1)->getType() : I->getType();
+  auto *VecTy = dyn_cast<FixedVectorType>(NativeTy);
+  if (!VecTy || (!VecTy->getElementType()->isIntegerTy() &&
+                 !VecTy->getElementType()->isFloatingPointTy()))
+    return Diagnose(
+        "Ripple fixed-vector conversion requires a fixed integer or floating-point vector");
+
+  uint64_t ElementBits = VecTy->getElementType()->getScalarSizeInBits();
+  uint64_t NativeBits = VecTy->getNumElements() * ElementBits;
+  const TensorShape &InputShape = getRippleShape(
+      I->getArgOperand(ToRipple ? 1 : 0), /*ShapePropagation=*/true);
+  TensorShape RippleShape = ToRipple
+                                ? setShapeToTensorShape(getBlockShapeIntrinsic(
+                                      I->getArgOperandUse(0)))
+                                : InputShape;
+  uint64_t RippleBits = RippleShape.flatShape() * ElementBits;
+  bool ScalarToVecFallback = !ToRipple && InputShape.isScalar();
+  if (ScalarToVecFallback && isPendingRippleSpecialization(F) &&
+      F.hasFnAttribute(RippleFunBlockShapeAttrKey)) {
+    // A concrete block descriptor is part of this specialization's contract.
+    // Even when the operand itself is uniform, validate ripple.to.fixed.vector
+    // against that exact block rather than treating it like an unresolved
+    // helper fallback.
+    auto BlockShapes = cantFail(parseBlockShapeAttribute(
+        F.getFnAttribute(RippleFunBlockShapeAttrKey).getValueAsString()));
+    SmallVector<const TensorShape *, 1> InputShapes{&InputShape};
+    RippleShape =
+        cantFail(getSpecializationMaskShape(InputShapes, BlockShapes));
+    RippleBits = RippleShape.flatShape() * ElementBits;
+    ScalarToVecFallback = false;
+  }
+  if (!ScalarToVecFallback && NativeBits != RippleBits) {
+    std::string Message;
+    raw_string_ostream OS(Message);
+    OS << "Ripple fixed-vector conversion width mismatch: native vector has " << NativeBits
+       << " bits, but Ripple value with shape " << RippleShape << " has "
+       << RippleBits << " bits";
+    return Diagnose(OS.str());
+  }
+  if (!ToRipple && InputShape.isScalar() &&
+      VecTy->getNumElements() >
+          static_cast<uint64_t>(MaxRippleFixedVectorElements))
+    return Diagnose(Twine("Ripple scalar fallback cannot broadcast to a "
+                          "native vector with ") +
+                    Twine(VecTy->getNumElements()) +
+                    " elements; the maximum is " +
+                    Twine(MaxRippleFixedVectorElements));
+  if (ToRipple) {
+    if (InputShape.isVector())
+      return Diagnose(
+          "Ripple fixed-vector conversion native vector must be uniform over the block");
+  }
   return Error::success();
 }
 
@@ -9316,6 +9664,9 @@ Error Ripple::checkRippleSemantics() {
     } else if (IntrinsicInst *RippleStackI = rippleStackIntrinsics(&I)) {
       AllErrors = llvm::joinErrors(std::move(AllErrors),
                                    checkRippleStackIntrinsics(RippleStackI));
+    } else if (IntrinsicInst *Bitcast = rippleFixedVectorIntrinsics(&I)) {
+      AllErrors = llvm::joinErrors(std::move(AllErrors),
+                                   checkRippleFixedVectorIntrinsics(Bitcast));
     } else if (IntrinsicInst *RippleReshapeI = rippleReshapeIntrinsics(&I)) {
       AllErrors = llvm::joinErrors(
           std::move(AllErrors), checkRippleReshapeIntrinsics(RippleReshapeI));
@@ -10866,7 +11217,6 @@ namespace {
 // info: later RippleModulePass specialization steps need it after function
 // cloning, while debug info is optional source provenance.
 constexpr StringRef RippleFunShapeAttrKey("ripple.function.shape");
-constexpr StringRef RippleFunBlockShapeAttrKey("ripple.function.block-shape");
 
 template <typename T> T exchange(T &Value, T NewValue) {
   T OldValue = Value;
@@ -11602,6 +11952,54 @@ Ripple::getSpecializationMaskShape(llvm::iterator_range<IteratorT> Args) const {
   return getSpecializationMaskShape(ArgShapes, BlockShapes);
 }
 
+Argument *Ripple::findArgumentSource(const Use &U) {
+  MemorySSAWalker *Walker = MemSSA.getWalker();
+  if (!Walker)
+    return nullptr;
+
+  AAResults &AA = MemSSA.getAA();
+  SmallPtrSet<Value *, 8> Visited;
+  std::function<Argument *(Value *)> FindArgument;
+  FindArgument = [&](Value *V) -> Argument * {
+    if (auto *Arg = dyn_cast<Argument>(V))
+      return Arg;
+    if (!V || !Visited.insert(V).second)
+      return nullptr;
+
+    if (auto *Cast = dyn_cast<CastInst>(V))
+      return FindArgument(Cast->getOperand(0));
+    if (auto *Freeze = dyn_cast<FreezeInst>(V))
+      return FindArgument(Freeze->getOperand(0));
+
+    auto *Load = dyn_cast<LoadInst>(V);
+    if (!Load)
+      return nullptr;
+    auto *MemoryUse =
+        dyn_cast_or_null<llvm::MemoryUse>(MemSSA.getMemoryAccess(Load));
+    if (!MemoryUse)
+      return nullptr;
+
+    Argument *Result = nullptr;
+    bool InvalidSource = false;
+    visitAllClobberingInstructionsImpl(
+        MemoryUse, MemSSA, *Walker, AA, domTree,
+        [&](Instruction *Clobber) {
+          auto *Store = dyn_cast<StoreInst>(Clobber);
+          Argument *Found =
+              Store ? FindArgument(Store->getValueOperand()) : nullptr;
+          if (!Found || (Result && Result != Found)) {
+            InvalidSource = true;
+            return false;
+          }
+          Result = Found;
+          return true;
+        },
+        /*VisitUnreachableFromEntry=*/false);
+    return InvalidSource ? nullptr : Result;
+  };
+  return FindArgument(U.get());
+}
+
 RippleBlockShapeLookupResult llvm::findRippleBlockShapeIntrinsic(
     const Use &RippleBlockShapePtr, MemorySSA &MSSA, DominatorTree &DT,
     bool DetectAmbiguity, bool VisitUnreachableFromEntry) {
@@ -11642,6 +12040,9 @@ RippleBlockShapeLookupResult llvm::findRippleBlockShapeIntrinsic(
     if (IntrinsicInst *II = getRippleSetShape(BSPtr))
       return RippleBlockShapeLookupResult(II);
 
+    if (auto *Arg = dyn_cast<Argument>(BSPtr))
+      return RippleBlockShapeLookupResult(Arg);
+
     // Most likely case in O0, coming from clang.
     if (auto *LoadBS = dyn_cast<LoadInst>(BSPtr)) {
       auto *Use = dyn_cast_or_null<MemoryUse>(MSSA.getMemoryAccess(LoadBS));
@@ -11661,7 +12062,7 @@ RippleBlockShapeLookupResult llvm::findRippleBlockShapeIntrinsic(
               // An exact clobber that is not a usable block-shape store is
               // still a possible source. If we already found a shape, that
               // makes the load ambiguous.
-              if (Result.BlockShape) {
+              if (Result.BlockShape || Result.BlockShapeArgument) {
                 Result = RippleBlockShapeLookupResult(
                     Access, Result.FirstAmbiguousSource, Clobber);
                 return false;
@@ -11686,6 +12087,8 @@ RippleBlockShapeLookupResult llvm::findRippleBlockShapeIntrinsic(
               LLVM_DEBUG(dbgs()
                          << "Found BS stored by clobber " << *II << "\n");
               Found = RippleBlockShapeLookupResult(II);
+            } else if (auto *Arg = dyn_cast<Argument>(StoredValue)) {
+              Found = RippleBlockShapeLookupResult(Arg);
             } else if (auto *Load = dyn_cast<LoadInst>(StoredValue)) {
               Found = findBlockShape(Load);
               AmbiguousAccess = Load;
@@ -11695,13 +12098,14 @@ RippleBlockShapeLookupResult llvm::findRippleBlockShapeIntrinsic(
               Result = Found;
               return false;
             }
-            if (!Found.BlockShape)
+            if (!Found.BlockShape && !Found.BlockShapeArgument)
               return markUnresolvedClobber(AmbiguousAccess);
 
             // With ambiguity detection enabled, continue after the first shape
             // so we can diagnose a second reaching source instead of silently
             // choosing one.
-            if (DetectAmbiguity && Result.BlockShape) {
+            if (DetectAmbiguity &&
+                (Result.BlockShape || Result.BlockShapeArgument)) {
               Result = RippleBlockShapeLookupResult(
                   AmbiguousAccess, Result.FirstAmbiguousSource, Store);
               return false;
@@ -11713,6 +12117,7 @@ RippleBlockShapeLookupResult llvm::findRippleBlockShapeIntrinsic(
             }
 
             Result.BlockShape = Found.BlockShape;
+            Result.BlockShapeArgument = Found.BlockShapeArgument;
             Result.FirstAmbiguousSource = Store;
             // Stop after the first found shape unless the caller asked us to
             // keep looking for ambiguity.

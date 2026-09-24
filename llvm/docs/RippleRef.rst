@@ -305,6 +305,48 @@ These intrinsics compose with the lower-level block-shape primitives:
   **associated Ripple shape** changes. The pass will later materialize the
   appropriate scalar/vector code during transformation and specialization.
 
+.. _ripple-fixed-vector:
+
+``llvm.ripple.from.fixed.vector`` and ``llvm.ripple.to.fixed.vector``
+------------------------------------------------------------------
+
+These intrinsics convert between a native fixed vector and a Ripple tensor
+with the same element type. Both are overloaded on the native vector type:
+
+.. code-block:: llvm
+
+  declare i64 @llvm.ripple.from.fixed.vector.v32i64(ptr %block, <32 x i64> %v)
+  declare <32 x i64> @llvm.ripple.to.fixed.vector.v32i64(i64 %x)
+
+``from.fixed.vector`` assigns the supplied block shape to its scalar result.
+Its fixed-vector operand is outside the Ripple domain and must not itself vary
+over Ripple dimensions. ``to.fixed.vector`` returns a fixed vector with scalar
+Ripple shape. Its scalar operand's propagated
+Ripple shape determines which complete value is materialized; a scalar shape
+is broadcast to the native vector width. Elements are flattened with dimension
+zero varying fastest.
+
+The ``from.fixed.vector`` block must belong to a vector processing element, and
+vector elements must be integers or floating-point values. LLVM's intrinsic type
+checking enforces that the scalar type matches the native vector's element
+type. When a function is processed with an active Ripple shape, the conversions
+operate on the complete resolved value. After shape propagation, Ripple checks
+that the native vector value and non-scalar Ripple value have equal total bit
+width. Unequal widths are an error.
+
+The intrinsics are convergent and do not access memory. Ripple materializes
+any necessary broadcast on the scalar side and lowers the conversion itself
+to a whole-value bitcast, which is an identity when the lowered types match.
+The conversion has no mask operand and introduces no temporary storage.
+
+When a function has no active Ripple dimensions but defines its block shape
+locally, the equal-total-bit-width requirement still applies and the conversion
+is lowered to a whole-value bitcast. When the block shape is instead an
+unresolved function argument, single-lane cleanup lowers ``from.fixed.vector``
+to extraction of fixed-vector element zero and ``to.fixed.vector`` to a scalar splat across
+the native vector. This exceptional fallback keeps the original helper's LLVM
+IR well typed until callers using concrete block shapes have been specialized.
+
 .. _ripple-broadcast:
 
 ``llvm.ripple.broadcast``

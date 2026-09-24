@@ -4105,6 +4105,11 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
       return ExprError();
     break;
 
+  case Builtin::BI__builtin_ripple_from_fixed_vector:
+  case Builtin::BI__builtin_ripple_to_fixed_vector:
+    if (Ripple().CheckFixedVectorBuiltin(TheCall, BuiltinID))
+      return ExprError();
+    break;
   case Builtin::BI__builtin_ripple_broadcast_i8:
   case Builtin::BI__builtin_ripple_broadcast_u8:
   case Builtin::BI__builtin_ripple_broadcast_i16:

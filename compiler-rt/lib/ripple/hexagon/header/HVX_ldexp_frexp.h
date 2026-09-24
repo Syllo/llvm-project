@@ -24,11 +24,11 @@
 
 // The vector conversion helpers are templates in C++ and macros in C.
 #ifdef __cplusplus
-#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec<N, T>((BS), (X))
-#define _VEC_TO_RIPPLE(N, T, BS, X) vec_to_ripple<N, T>((BS), (X))
+#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec<N, T>((X))
+#define _VEC_TO_RIPPLE(N, T, BS, X) vec_to_ripple<T>((BS), (X))
 #else
-#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec(N, T, (BS), (X))
-#define _VEC_TO_RIPPLE(N, T, BS, X) vec_to_ripple(N, T, (BS), (X))
+#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec(N, T, (X))
+#define _VEC_TO_RIPPLE(N, T, BS, X) vec_to_ripple(T, (BS), (X))
 #endif
 
 // {{{ frexp
