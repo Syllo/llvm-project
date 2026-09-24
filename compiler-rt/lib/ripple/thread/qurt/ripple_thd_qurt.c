@@ -66,7 +66,18 @@ RIPPLE_THD_SCALAR
 inline size_t _ripple_thd_flat_id(void *underlying) {
   char thd_name[QURT_RIPPLE_MAX_THD_NAME_SIZE];
   qurt_thread_get_name(thd_name, QURT_RIPPLE_MAX_THD_NAME_SIZE);
-  return _qurt_ripple_thd_read_id(thd_name);
+  size_t hw_id = _qurt_ripple_thd_read_id(thd_name);
+  qthd_runtime_t *rt = (qthd_runtime_t *)underlying;
+  return rt->sw_ids[hw_id];
+}
+
+RIPPLE_THD_SCALAR
+extern void _set_sw_id(void *underlying, size_t sw_id) {
+  char thd_name[QURT_RIPPLE_MAX_THD_NAME_SIZE];
+  qurt_thread_get_name(thd_name, QURT_RIPPLE_MAX_THD_NAME_SIZE);
+  size_t hw_id = _qurt_ripple_thd_read_id(thd_name);
+  qthd_runtime_t *rt = (qthd_runtime_t *)underlying;
+  rt->sw_ids[hw_id] = sw_id;
 }
 
 /* @brief full number of threads available from the runtime.*/
@@ -123,6 +134,7 @@ qthd_runtime_t *qthd_runtime_init(unsigned n_thd_) {
   rt->threads = (qurt_thread_t *)malloc(n_thd_ * sizeof(qurt_thread_t));
   rt->attrs = (qurt_thread_attr_t *)malloc(n_thd_ * sizeof(qurt_thread_attr_t));
   rt->ctxs = (context_f_args_t *)malloc(n_thd_ * sizeof(context_f_args_t));
+  rt->sw_ids = (size_t *)malloc(n_thd_ * sizeof(size_t));
   rt->stack = (char **)malloc(n_thd_ * sizeof(char *));
   rt->pool = (qthd_worker_pool_t)malloc(sizeof(struct qthd_worker_pool));
 
@@ -130,6 +142,7 @@ qthd_runtime_t *qthd_runtime_init(unsigned n_thd_) {
     // Generate mini-names "0", "1", etc, which we'll convert back to ints
     // to use as thread ids.
     _qurt_ripple_thd_write_id(rt->names + QURT_RIPPLE_MAX_THD_NAME_SIZE * t, t);
+    rt->sw_ids[t] = t;
     // stacks must be 8-byte aligned
     rt->stack[t] = (char *)memalign(8, RIPPLE_THD_QURT_STACK_SIZE);
   }
@@ -146,6 +159,7 @@ extern void qthd_runtime_exit(qthd_runtime_t *rt) {
   free(rt->threads);
   free(rt->attrs);
   free(rt->ctxs);
+  free(rt->sw_ids);
   for (unsigned t = 0; t < n_thd; ++t) {
     free(rt->stack[t]);
   }

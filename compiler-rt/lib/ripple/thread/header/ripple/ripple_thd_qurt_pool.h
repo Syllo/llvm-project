@@ -12,10 +12,10 @@
 
 #pragma once
 
+#include "ripple/private/ripple_thd_qurt_sem.h"
 #include "ripple/ripple_thd_qurt.h"
 #ifdef __NO_QURT__
 #else
-#include <qurt_barrier.h>
 #include <qurt_thread.h>
 #endif
 typedef void *(*task_func_t)(void *arg);
@@ -29,7 +29,8 @@ typedef struct qthd_worker_pool {
   qthd_runtime_t *rt;
 
   task_t task;
-  qurt_barrier_t bar;
+  ripple_thd_qurt_sem_t todo;
+  ripple_thd_qurt_sem_t done;
 
   int stop;
 } *qthd_worker_pool_t;

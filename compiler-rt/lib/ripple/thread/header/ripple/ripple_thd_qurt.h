@@ -53,6 +53,8 @@ typedef struct qthd_runtime {
   context_f_args_t *ctxs;
   /// @brief an array to store the names (really, the IDs) of the threads
   char names[QURT_RIPPLE_MAX_THD_NAME_SIZE * QURT_MAX_HTHREAD_LIMIT];
+  /// Software IDs assigned to the worker threads for the current dispatch.
+  size_t *sw_ids;
   /// @brief thread stacks (one per thread)
   char **stack;
   // A place to put the return status returned by all threads.
