@@ -21,14 +21,12 @@ namespace llvm {
 class Module;
 class TargetMachine;
 
-class RippleModulePass : public PassInfoMixin<RippleModulePass> {
+class RippleModulePass : public RequiredPassInfoMixin<RippleModulePass> {
   TargetMachine *TM;
 
 public:
   RippleModulePass(TargetMachine *TM) : TM(TM) {}
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
-
-  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

@@ -31,11 +31,9 @@ namespace llvm {
 class Function;
 
 class RippleFPExtFPTruncRevertPass
-    : public PassInfoMixin<RippleFPExtFPTruncRevertPass> {
+    : public RequiredPassInfoMixin<RippleFPExtFPTruncRevertPass> {
 public:
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-
-  static bool isRequired() { return true; }
 };
 
 } // namespace llvm

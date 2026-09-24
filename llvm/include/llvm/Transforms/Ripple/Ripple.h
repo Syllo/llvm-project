@@ -2196,7 +2196,8 @@ inline raw_ostream &operator<<(raw_ostream &OS,
   return OS;
 }
 
-class RipplePass : public PassInfoMixin<RipplePass> {
+// Run Ripple when optnone is set.
+class RipplePass : public RequiredPassInfoMixin<RipplePass> {
   TargetMachine *TM;
   Ripple::ProcessingStatus &PS;
   DenseSet<AssertingVH<Function>> &SpecializationsPending,
@@ -2209,9 +2210,6 @@ public:
       : TM(TM), PS(PS), SpecializationsPending(SpecializationsPending),
         SpecializationsAvailable(SpecializationsAvailable) {}
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-
-  // Run Ripple when optnone is set
-  static bool isRequired() { return true; }
 };
 
 namespace RippleCL {
