@@ -1545,9 +1545,8 @@ Ripple::replacementValueAndShape(Value *V) const {
   } else if (Argument *Arg = dyn_cast<Argument>(V)) {
     // When we are specializing this function, the original arguments are
     // duplicated, with the Ripple arguments following the original ones. Only
-    // the original arguments in the first half map to distinct Ripple
-    // replacements. A Ripple argument in the second half must not need
-    // replacement.
+    // the original arguments in the first half require replacement; each maps
+    // to its distinct corresponding Ripple argument in the second half.
     if (isPendingRippleSpecialization(F)) {
       if (Arg->getArgNo() >= F.arg_size() / 2)
         report_fatal_error("Only original arguments from the first half of a "
@@ -12110,16 +12109,28 @@ PreservedAnalyses RipplePass::run(Function &F, FunctionAnalysisManager &AM) {
   std::vector<std::pair<Ripple::PEIdentifier, Ripple::DimType>> dimensionTypes =
       {{0, Ripple::VectorDimension}};
 
-  Ripple rippleExpander(TM, F, AM, dimensionTypes, PS, SpecializationsPending,
-                        SpecializationsAvailable);
-  // Check that the Ripple intrinsics are adhere to the specification
-  Error e = rippleExpander.validate();
-  if (e) {
-    std::string errMsg = toString(std::move(e));
-    report_fatal_error(StringRef(errMsg), false);
+  PreservedAnalyses PA;
+  {
+    Ripple rippleExpander(TM, F, AM, dimensionTypes, PS, SpecializationsPending,
+                          SpecializationsAvailable);
+    // Check that the Ripple intrinsics adhere to the specification.
+    Error e = rippleExpander.validate();
+    if (e) {
+      std::string errMsg = toString(std::move(e));
+      report_fatal_error(StringRef(errMsg), false);
+    }
+    PA = rippleExpander.run();
   }
 
-  PreservedAnalyses PA = rippleExpander.run();
+  // Final specializations own the lowered bodies. The pending prototype may
+  // still have a scalar return type while its temporary body returns a vector.
+  // Remove it before function-pass verification, after releasing Ripple's
+  // value handles. The module driver will erase the pending declaration.
+  if (PS == Ripple::ProcessingStatus::Success &&
+      SpecializationsPending.contains(&F)) {
+    AM.clear(F, F.getName());
+    F.deleteBody();
+  }
 
   return PA;
 }
