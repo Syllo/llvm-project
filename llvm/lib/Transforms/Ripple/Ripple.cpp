@@ -11508,6 +11508,13 @@ void Ripple::emitRippleRemarks(bool ShapePropagationFailure) {
   if (!ORE.enabled())
     return;
 
+  // Native vector operands retain scalar Ripple shape. Remarks can also run
+  // after failed propagation, when some instruction shapes are unavailable.
+  auto GetOperandShape = [&](const Use &U) {
+    return &getRippleShape(U.get(), /*ShapePropagation=*/true,
+                           ShapePropagationFailure);
+  };
+
   auto sortDILocationByFileLineColumn = [](const DILocation *a,
                                            const DILocation *b) -> bool {
     if (!a || !b)
@@ -11569,7 +11576,9 @@ void Ripple::emitRippleRemarks(bool ShapePropagationFailure) {
           llvm::make_range(F.arg_begin(), F.arg_begin() + F.arg_size() / 2),
           std::back_inserter(SpecializationArgShapes),
           [&](const Argument &A) { return &getRippleShape(&A); });
-      const TensorShape *ReturnShape = nullptr;
+      // A noreturn specialization has no ReturnInst, just as in
+      // finishSpecialization(), where its return shape stays scalar.
+      const TensorShape *ReturnShape = &ScalarShape;
       for (const auto &I : instructions(F))
         if (auto *Return = dyn_cast<ReturnInst>(&I)) {
           ReturnShape = &getRippleShape(
@@ -11647,7 +11656,7 @@ void Ripple::emitRippleRemarks(bool ShapePropagationFailure) {
           SmallVector<const TensorShape *> ArgShapes;
           ArgShapes.reserve(CallI->arg_size());
           transform(CallI->args(), std::back_inserter(ArgShapes),
-                    [&](auto &Use) { return &getRippleShape(Use); });
+                    GetOperandShape);
 
           R << "call to ripple API '" << CallI->getCalledOperand()->getName()
             << "' {shape: ";
@@ -11667,7 +11676,7 @@ void Ripple::emitRippleRemarks(bool ShapePropagationFailure) {
           SmallVector<const TensorShape *> ArgShapes;
           ArgShapes.reserve(CallI->arg_size());
           transform(CallI->args(), std::back_inserter(ArgShapes),
-                    [&](auto &Use) { return &getRippleShape(Use); });
+                    GetOperandShape);
           std::function<bool(size_t)> isBroadcastable = [](size_t) {
             return false;
           };
@@ -11712,7 +11721,7 @@ void Ripple::emitRippleRemarks(bool ShapePropagationFailure) {
             SmallVector<const TensorShape *> ArgShapes;
             ArgShapes.reserve(CallI->arg_size());
             transform(CallI->args(), std::back_inserter(ArgShapes),
-                      [&](auto &Use) { return &getRippleShape(Use); });
+                      GetOperandShape);
 
             R << "specialized call to '" << CallI->getCalledOperand()->getName()
               << "'; ";
@@ -11733,7 +11742,7 @@ void Ripple::emitRippleRemarks(bool ShapePropagationFailure) {
             SmallVector<const TensorShape *> ArgShapes;
             ArgShapes.reserve(CallI->arg_size());
             transform(CallI->args(), std::back_inserter(ArgShapes),
-                      [&](auto &Use) { return &getRippleShape(Use); });
+                      GetOperandShape);
             R << "call not vectorized: no suitable vector implementation found "
                  "for '"
               << CallI->getCalledOperand()->getName()
@@ -11749,7 +11758,7 @@ void Ripple::emitRippleRemarks(bool ShapePropagationFailure) {
         SmallVector<const TensorShape *> OperandShapes;
         OperandShapes.reserve(I->getNumOperands());
         transform(I->operands(), std::back_inserter(OperandShapes),
-                  [&](auto &Use) { return &getRippleShape(Use); });
+                  GetOperandShape);
 
         R << "instruction promoted to tensor {shape: ";
         auto VOps = vectorizableOperands(I);
