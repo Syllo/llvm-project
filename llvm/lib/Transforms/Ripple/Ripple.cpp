@@ -1537,6 +1537,13 @@ std::pair<Value *, const TensorShape *> Ripple::getTensorUse(const Use &U) {
   // Ripple generates tensors for Instructions only
   Instruction *User = cast<Instruction>(U.getUser());
   Value *UseVal = U.get();
+  // Calls can take native vector constants and arguments without tensor
+  // promotion. Pending-specialization arguments still need replacement below.
+  if (isa<CallInst>(User) && UseVal->getType()->isVectorTy() &&
+      (isa<Constant>(UseVal) ||
+       (isa<Argument>(UseVal) && !isPendingRippleSpecialization(F))))
+    return {UseVal, &ShapeIgnoredByRipple};
+
   // If the Use is a LS, we may have to instantiate it
   if (Instruction *UseI = dyn_cast<Instruction>(UseVal)) {
     if (auto UseCS = getCachedSeries(UseI)) {
@@ -1866,14 +1873,16 @@ Ripple::gatherRippleFunctionUsage(const Function &F) {
   for (const auto &I : instructions(F)) {
     if (const IntrinsicInst *BSI =
             intrinsicWithId(&I, {Intrinsic::ripple_block_setshape})) {
-      PEIdentifier ProcElem = *getConstantOperandValue(BSI, 0);
+      auto ProcElem = getConstantOperandValue(BSI, 0);
+      if (!ProcElem)
+        continue;
       DimSize Rank = 0;
       for (unsigned ArgIdx = 1, E = BSI->arg_size(); ArgIdx < E; ++ArgIdx) {
-        DimSize DS = *getConstantOperandValue(BSI, ArgIdx);
-        if (DS > 1)
+        auto DS = getConstantOperandValue(BSI, ArgIdx);
+        if (DS && *DS > 1)
           Rank = ArgIdx;
       }
-      auto Res = PERanks.insert({ProcElem, Rank});
+      auto Res = PERanks.insert({*ProcElem, Rank});
       // Key already present; take the maximum rank seen in this function
       if (!Res.second)
         Res.first->second = std::max(Res.first->second, Rank);
@@ -2152,8 +2161,15 @@ void Ripple::replaceDivCalls() {
 PreservedAnalyses Ripple::run() {
 
   LLVM_DEBUG(dbgs() << "[Ripple] Processing function " << F.getName() << "\n");
-  // There are no Ripple dimensions, nothing to be done!
-  if (tensorRank() == 0)
+  // A rank-zero caller may still need exact block-shape specializations so
+  // that conversions in the callee undergo normal bit-width validation.
+  bool HasBlockSpecializationCall =
+      any_of(instructions(F), [&](Instruction &I) {
+        auto *Call = dyn_cast<CallInst>(&I);
+        return Call && canBeSpecialized(Call->getCalledFunction()) &&
+               hasBlockShapeArgument(*Call);
+      });
+  if (tensorRank() == 0 && !HasBlockSpecializationCall)
     return cleanupRippleSingleLane(ProcessingStatus::Success);
 
   // Expensive, only do once!
@@ -3816,6 +3832,17 @@ Ripple::computeRippleShapeForBitsetIntrinsic(const IntrinsicInst *I,
 
 Error Ripple::validate() const {
   const std::string ErrorPrefix = "Ripple validation error: ";
+  for (const Instruction &I : instructions(F)) {
+    const auto *BSI = intrinsicWithId(&I, {Intrinsic::ripple_block_setshape});
+    if (!BSI)
+      continue;
+    for (unsigned ArgIdx = 0, E = BSI->arg_size(); ArgIdx < E; ++ArgIdx)
+      if (!getConstantOperandValue(BSI, ArgIdx))
+        return createStringError(
+            inconvertibleErrorCode(),
+            ErrorPrefix + "block shape operand " + std::to_string(ArgIdx) +
+                " must be a constant integer in function " + F.getName().str());
+  }
   for (auto &[DimId, DimRank] : PERanks) {
     // Check that the ID is known by the compiler
     if (idType(DimId) == UnknownDimType) {
@@ -5635,6 +5662,14 @@ void Ripple::applyMaskToOps(iterator_range<IteratorT> BBs, Value *VectorMask,
         PoisonValue::get(irBuilder.getInt8Ty())));
     MaskInsertionPoint = NewMaskInsertPoint;
     RemoveInsertionPoint = true;
+  }
+
+  // A single-lane specialization still has a <1 x i1> mask parameter, but
+  // scalar operations need an i1 condition.
+  if (MaskShape.isScalar()) {
+    irBuilder.SetInsertPoint(MaskInsertionPoint);
+    VectorMask = irBuilder.CreateBitCast(VectorMask, irBuilder.getInt1Ty());
+    setRippleShape(VectorMask, ScalarShape);
   }
 
   // A cache of the same mask, with different shapes
@@ -7996,10 +8031,14 @@ Ripple::inferShapeFromOperands(const Instruction *I, bool AllowPartialPhi,
           }
           return RetShape;
         } else {
-          // Ask for Specialization and stop shape propagation
-          RequiresWaitingForSpecialization = true;
-          if (requestSpecializationFor(*Call))
+          auto Requested = requestSpecializationFor(*Call);
+          RETURN_UNEXPECTED(Requested);
+          // Only wait when a specialization was actually queued. A rejected
+          // request must not leave the module driver waiting on an empty set.
+          if (*Requested) {
+            RequiresWaitingForSpecialization = true;
             return ScalarShape;
+          }
         }
       }
     }
@@ -10653,6 +10692,7 @@ namespace {
 // info: later RippleModulePass specialization steps need it after function
 // cloning, while debug info is optional source provenance.
 constexpr StringRef RippleFunShapeAttrKey("ripple.function.shape");
+constexpr StringRef RippleFunBlockShapeAttrKey("ripple.function.block-shape");
 
 template <typename T> T exchange(T &Value, T NewValue) {
   T OldValue = Value;
@@ -10696,6 +10736,80 @@ std::unique_ptr<TensorShape> parseTensorShape(StringRef Serialized,
 }
 
 } // namespace
+
+bool Ripple::hasBlockShapeArgument(const CallInst &Call) const {
+  return any_of(Call.args(), [this](const Use &Arg) {
+    return getBlockShapeIntrinsic(Arg) != nullptr;
+  });
+}
+
+Expected<std::string>
+Ripple::getCallBlockShapeAttribute(const CallInst &Call) const {
+  std::string Result;
+  {
+    raw_string_ostream OS(Result);
+    bool FirstBlock = true;
+    for (const Use &Arg : Call.args()) {
+      if (auto *BS = getBlockShapeIntrinsic(Arg)) {
+        if (!FirstBlock)
+          OS << ';';
+        FirstBlock = false;
+        SmallVector<uint64_t, RippleIntrinsicsMaxDims + 1> Operands;
+        // Ignore integer widths so equivalent descriptors have the same key.
+        for (unsigned I = 0; I != BS->arg_size(); ++I) {
+          auto Operand = getConstantOperandValue(BS, I);
+          if (!Operand)
+            return createStringError(
+                inconvertibleErrorCode(),
+                "Ripple block shape operand %u must be a constant integer", I);
+          Operands.push_back(*Operand);
+        }
+
+        OS << Arg.getOperandNo() << ',' << Operands.front();
+        ArrayRef<uint64_t> Dims = ArrayRef(Operands).drop_front();
+        while (!Dims.empty() && Dims.back() == 1)
+          Dims = Dims.drop_back();
+        for (uint64_t Dim : Dims)
+          OS << ',' << Dim;
+      }
+    }
+  }
+  return Result;
+}
+
+Expected<SmallVector<TensorShape, 4>>
+Ripple::parseBlockShapeAttribute(StringRef Serialized) const {
+  SmallVector<TensorShape, 4> BlockShapes;
+  if (Serialized.empty())
+    return BlockShapes;
+
+  SmallVector<StringRef, 4> SerializedShapes;
+  Serialized.split(SerializedShapes, ';', /*MaxSplit=*/-1,
+                   /*KeepEmpty=*/false);
+  for (StringRef SerializedShape : SerializedShapes) {
+    auto [ArgIdxPart, BlockPart] = SerializedShape.split(',');
+    auto [ProcElemPart, DimsPart] = BlockPart.split(',');
+    uint64_t ArgIdx;
+    PEIdentifier ProcElem;
+    auto LocalShape = parseTensorShape(DimsPart, RippleIntrinsicsMaxDims);
+    if (ArgIdxPart.getAsInteger(10, ArgIdx) ||
+        ProcElemPart.getAsInteger(10, ProcElem) || !LocalShape)
+      return createStringError(inconvertibleErrorCode(),
+                               "Malformed Ripple block-shape attribute");
+
+    TensorShape::Shape BlockShape(tensorRank(), DimSize(1));
+    for (auto [DimIdx, DS] : enumerate(*LocalShape)) {
+      if (DS > 1) {
+        if (DimIdx >= PERank(ProcElem))
+          return createStringError(inconvertibleErrorCode(),
+                                   "Malformed Ripple block-shape attribute");
+        BlockShape[rippleToTensor({ProcElem, DimIdx})] = DS;
+      }
+    }
+    BlockShapes.emplace_back(std::move(BlockShape));
+  }
+  return BlockShapes;
+}
 
 void Ripple::setFunctionShapeAttributes(Function &F,
                                         ArrayRef<const TensorShape *> ArgShapes,
@@ -10770,6 +10884,12 @@ Ripple::getRippleSpecializationFor(const CallInst &Call) const {
   if (!Call.getCalledFunction())
     return NoMatch;
 
+  auto BlockShapes = getCallBlockShapeAttribute(Call);
+  if (!BlockShapes) {
+    consumeError(BlockShapes.takeError());
+    return NoMatch;
+  }
+
   auto checkCandidate =
       [&](Function &Candidate) -> std::pair<Function *, TensorShape> {
     // We look for functions specialization with name
@@ -10777,7 +10897,9 @@ Ripple::getRippleSpecializationFor(const CallInst &Call) const {
     auto OriginalName = getOriginalName(Candidate.getName());
     assert(!OriginalName.empty() &&
            "We should only check specialization candidates");
-    if (OriginalName == Call.getCalledFunction()->getName()) {
+    if (OriginalName == Call.getCalledFunction()->getName() &&
+        Candidate.getFnAttribute(RippleFunBlockShapeAttrKey)
+                .getValueAsString() == *BlockShapes) {
       // Check if the input tensors match the function call
       SmallVector<std::unique_ptr<TensorShape>, 8> ArgShapes;
       std::unique_ptr<TensorShape> ReturnShape;
@@ -10793,7 +10915,8 @@ Ripple::getRippleSpecializationFor(const CallInst &Call) const {
 
         bool Match = true;
         for (unsigned Idx = 0, E = Call.arg_size(); Match && Idx < E; ++Idx)
-          if (*ArgShapes[Idx] != getRippleShape(Call.getArgOperand(Idx)))
+          if (*ArgShapes[Idx] != getRippleShape(Call.getArgOperand(Idx),
+                                                /*ShapePropagation=*/true))
             Match = false;
 
         if (Match) {
@@ -10844,19 +10967,36 @@ StringRef Ripple::getOriginalName(StringRef SpecializationName) {
   return OriginName;
 }
 
-bool Ripple::requestSpecializationFor(const CallInst &Call) {
+Expected<bool> Ripple::requestSpecializationFor(const CallInst &Call) {
   Function *CalledFunction = Call.getCalledFunction();
-  assert(getRippleSpecializationFor(Call).first == nullptr);
   assert(!CalledFunction->isDeclaration());
+
+  auto Diagnose = [&](const Twine &Reason) -> Error {
+    std::string Message = (Twine("Ripple cannot specialize function '") +
+                           CalledFunction->getName() + "': " + Reason)
+                              .str();
+    F.getContext().diagnose(DiagnosticInfoRippleWithLoc(
+        DS_Error, F, sanitizeRippleLocation(&Call), Message));
+    return createStringError(inconvertibleErrorCode(), Message);
+  };
+
+  auto BlockShapes = getCallBlockShapeAttribute(Call);
+  if (!BlockShapes)
+    return Diagnose(toString(BlockShapes.takeError()));
 
   SmallVector<const TensorShape *> ArgShapes;
   ArgShapes.reserve(Call.arg_size() * 2);
-  llvm::transform(Call.args(), std::back_inserter(ArgShapes),
-                  [&](auto &Arg) { return &getRippleShape(Arg.get()); });
+  llvm::transform(Call.args(), std::back_inserter(ArgShapes), [&](auto &Arg) {
+    return &getRippleShape(Arg.get(), /*ShapePropagation=*/true);
+  });
 
-  auto SpecMaskShape = TensorShape::broadcastShapeFromAll(ArgShapes);
+  auto SpecMaskShape = getSpecializationMaskShape(Call.args());
   if (!SpecMaskShape) {
-    consumeError(SpecMaskShape.takeError());
+    std::string Reason = toString(SpecMaskShape.takeError());
+    if (hasBlockShapeArgument(Call))
+      return Diagnose("cannot form a broadcast-compatible mask from the "
+                      "argument and block shapes: " +
+                      Reason);
     std::string ErrMsg;
     {
       llvm::raw_string_ostream RSO(ErrMsg);
@@ -10892,14 +11032,15 @@ bool Ripple::requestSpecializationFor(const CallInst &Call) {
 
     // The Ripple argument types
     for (const Argument &Arg : CalledFunction->args()) {
-      auto &TShape = getRippleShape(Call.getOperand(Arg.getArgNo()));
+      auto &TShape = getRippleShape(Call.getArgOperand(Arg.getArgNo()),
+                                    /*ShapePropagation=*/true);
       if (TShape.isVector()) {
         // If the argument is a vector we can't promote!
         if (Arg.getType()->isVectorTy() ||
             ((Arg.hasByValAttr() || Arg.hasStructRetAttr()) &&
              Arg.getPointeeInMemoryValueType()->isVectorTy()))
-          llvm_unreachable("TODO: migrate this to an error that we cannot "
-                           "promote this function's argument");
+          return Diagnose(Twine("argument ") + Twine(Arg.getArgNo()) +
+                          " has a varying native vector type");
         Type *PromotedType = VectorType::get(Arg.getType(), TShape.flatShape(),
                                              /*IsScalable*/ false);
         ArgTypes.push_back(PromotedType);
@@ -10955,21 +11096,26 @@ bool Ripple::requestSpecializationFor(const CallInst &Call) {
   // Copy the shapes for the ripple arguments
   llvm::copy(ArgShapes, std::back_inserter(ArgShapes));
   setFunctionShapeAttributes(*FClone, ArgShapes, ScalarShape);
+  if (!BlockShapes->empty())
+    FClone->addFnAttr(RippleFunBlockShapeAttrKey, *BlockShapes);
   LLVM_DEBUG(dbgs() << "Requesting specialization for call " << Call << ":";
              FClone->print(dbgs()));
 
   {
-    // Insert dummy (unused) block shapes so that ripple will run and will
-    // select this function's PE rank as minimum for its own PE rank
+    // Insert dummy (unused) block shapes so that Ripple will run and select
+    // this function's PE rank as a minimum. Scalar block specializations need
+    // one temporary dimension to enter the normal validation/finalization
+    // pipeline; the concrete block shape remains scalar.
     IRBuilder<> IRB(&*FClone->getEntryBlock().getFirstInsertionPt());
     auto *Int64Ty = IRB.getInt64Ty();
     auto *One = ConstantInt::get(Int64Ty, 1, false);
     auto *Two = ConstantInt::get(Int64Ty, 2, false);
     for (auto &[PEId, PERank] : PERanks) {
+      unsigned MinimumRank = std::max<unsigned>(PERank, 1);
       SmallVector<Value *, RippleIntrinsicsMaxDims + 1> RippleSetShapeArgs;
       RippleSetShapeArgs.push_back(ConstantInt::get(Int64Ty, PEId, false));
       for (unsigned i = 0; i < RippleIntrinsicsMaxDims; ++i)
-        RippleSetShapeArgs.push_back(i < PERank ? Two : One);
+        RippleSetShapeArgs.push_back(i < MinimumRank ? Two : One);
       IRB.CreateIntrinsic(Intrinsic::ripple_block_setshape, {Int64Ty},
                           RippleSetShapeArgs);
     }
@@ -10997,12 +11143,16 @@ bool Ripple::requestSpecializationFor(const CallInst &Call) {
     ArgShapes.resize(ArgShapes.size() / 2);
     setFunctionShapeAttributes(*ProcessedSpecialization, ArgShapes,
                                ScalarShape);
+    if (FClone->hasFnAttribute(RippleFunBlockShapeAttrKey))
+      ProcessedSpecialization->addFnAttr(
+          RippleFunBlockShapeAttrKey,
+          FClone->getFnAttribute(RippleFunBlockShapeAttrKey)
+              .getValueAsString());
     // Make this final declaration as an available specialization, we don't need
     // to wait for the specialization to be processed for it to be used
     SpecializationsAvailable.insert(ProcessedSpecialization);
 
     // Create the masked declaration of this specialization
-    assert(!SpecMaskShape->isScalar());
     VectorType *SpecMaskType = VectorType::get(
         irBuilder.getInt1Ty(), SpecMaskShape->flatShape(), /*Scalable*/ false);
     ArgTypes.push_back(SpecMaskType);
@@ -11020,30 +11170,29 @@ bool Ripple::requestSpecializationFor(const CallInst &Call) {
   return true;
 }
 
-TensorShape Ripple::getPendingSpecializationMaskShape(
-    SmallVectorImpl<const TensorShape *> &ArgumentShapes) const {
+SmallVector<const TensorShape *, 8>
+Ripple::getPendingSpecializationArgumentShapes() const {
+  SmallVector<const TensorShape *, 8> ArgumentShapes;
   ArgumentShapes.reserve(F.arg_size() / 2);
   for (unsigned ArgIdx = 0, E = F.arg_size() / 2; ArgIdx < E; ArgIdx++) {
     Argument *RippleArg = F.getArg(E + ArgIdx);
     ArgumentShapes.push_back(&getRippleShape(RippleArg));
   }
-  auto SpecMaskShape = TensorShape::broadcastShapeFromAll(ArgumentShapes);
-  if (!SpecMaskShape)
-    llvm_unreachable("We shouldn't be constructing ripple specializations when "
-                     "argument tensor shapes don't broadcast");
-  return SpecMaskShape.get();
-}
-
-TensorShape Ripple::getPendingSpecializationMaskShape() const {
-  SmallVector<const TensorShape *> ArgumentShapes;
-  return getPendingSpecializationMaskShape(ArgumentShapes);
+  return ArgumentShapes;
 }
 
 void Ripple::finishSpecializationMask() {
   if (!isPendingRippleSpecialization(F))
     return;
 
-  TensorShape MaskShape = getPendingSpecializationMaskShape();
+  auto ArgumentShapes = getPendingSpecializationArgumentShapes();
+  // The module pass strips input specialization attributes, so a pending
+  // specialization's attributes were created by this invocation and are well
+  // formed.
+  auto BlockShapes = cantFail(parseBlockShapeAttribute(
+      F.getFnAttribute(RippleFunBlockShapeAttrKey).getValueAsString()));
+  TensorShape MaskShape =
+      cantFail(getSpecializationMaskShape(ArgumentShapes, BlockShapes));
 
   // The function does not yet have the mask argument that will be present in
   // the masked specialization. Use a temporary value until cloning replaces it
@@ -11089,8 +11238,8 @@ void Ripple::finishSpecialization() {
     } else
       ReturnType = F.getReturnType();
   }
-  SmallVector<const TensorShape *> ArgumentShapes;
-  TensorShape MaskShape = getPendingSpecializationMaskShape(ArgumentShapes);
+  auto ArgumentShapes = getPendingSpecializationArgumentShapes();
+  const TensorShape &MaskShape = getRippleShape(TemporaryMask);
   Function *ProcessedSpecialization = nullptr;
   Function *MaskedSpecialization = nullptr;
   if (ReturnType->isVoidTy()) {
@@ -11152,6 +11301,10 @@ void Ripple::finishSpecialization() {
   }
 
   eraseFunctionSpecializationRelatedAttributes(*ProcessedSpecialization);
+  if (F.hasFnAttribute(RippleFunBlockShapeAttrKey))
+    ProcessedSpecialization->addFnAttr(
+        RippleFunBlockShapeAttrKey,
+        F.getFnAttribute(RippleFunBlockShapeAttrKey).getValueAsString());
   setFunctionShapeAttributes(*ProcessedSpecialization, ArgumentShapes,
                              *ReturnShape);
   LLVM_DEBUG(dbgs() << "\nFinal specialization of " << F.getName() << ":\n";
@@ -11225,6 +11378,7 @@ Function *Ripple::retrieveFinalSpecializationDecl(
 
 void Ripple::eraseFunctionSpecializationRelatedAttributes(Function &F) {
   F.removeFnAttr(RippleFunShapeAttrKey);
+  F.removeFnAttr(RippleFunBlockShapeAttrKey);
   F.removeFnAttr(RippleSpecializationFinalNameAttrKey);
 }
 
@@ -11245,14 +11399,33 @@ IntegerType *Ripple::getSpecializationMaskElementType() {
   return irBuilder.getInt1Ty();
 }
 
+Expected<TensorShape>
+Ripple::getSpecializationMaskShape(ArrayRef<const TensorShape *> ArgShapes,
+                                   ArrayRef<TensorShape> BlockShapes) const {
+  auto Shape = TensorShape::broadcastShapeFromAll(ArgShapes);
+  if (!Shape || !Shape->isScalar())
+    return Shape;
+
+  // A varying data argument already defines the mask shape. With only uniform
+  // (scalar Ripple shape) data arguments, block descriptors supply the context
+  // for masked specialization (e.g. a helper storing a uniform scalar to BS).
+  for (const TensorShape &BlockShape : BlockShapes)
+    if (Error E = Shape->combineShapeBcast(BlockShape))
+      return std::move(E);
+  return Shape;
+}
+
 template <typename IteratorT>
 Expected<TensorShape>
 Ripple::getSpecializationMaskShape(llvm::iterator_range<IteratorT> Args) const {
   SmallVector<const TensorShape *, 16> ArgShapes;
-  llvm::transform(Args, std::back_inserter(ArgShapes),
-                  [&](auto &Arg) { return &getRippleShape(Arg.get()); });
-
-  return TensorShape::broadcastShapeFromAll(ArgShapes);
+  SmallVector<TensorShape, 4> BlockShapes;
+  for (const Use &Arg : Args) {
+    ArgShapes.push_back(&getRippleShape(Arg.get(), /*ShapePropagation=*/true));
+    if (auto *BS = getBlockShapeIntrinsic(Arg))
+      BlockShapes.push_back(setShapeToTensorShape(BS));
+  }
+  return getSpecializationMaskShape(ArgShapes, BlockShapes);
 }
 
 RippleBlockShapeLookupResult llvm::findRippleBlockShapeIntrinsic(
@@ -11504,6 +11677,11 @@ bool Ripple::allInstructionOperandsHaveRippleShapes(const CallInst &CI) const {
 }
 
 bool Ripple::rippleVectorizeCall(const CallInst &CI) const {
+  // A block descriptor is a compile-time specialization argument even though
+  // the handle itself has scalar Ripple shape. Native vector arguments remain
+  // native.
+  if (canBeSpecialized(CI.getCalledFunction()) && hasBlockShapeArgument(CI))
+    return true;
   return none_of(CI.args(),
                  [](auto &Use) { return Use->getType()->isVectorTy(); }) &&
          any_of(CI.args(),

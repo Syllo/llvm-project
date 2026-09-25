@@ -2211,7 +2211,20 @@ private:
   getRippleSpecializationFor(const CallInst &Call) const;
 
   /// @brief Initiate the process of specializing the given call
-  bool requestSpecializationFor(const CallInst &Call);
+  Expected<bool> requestSpecializationFor(const CallInst &Call);
+
+  /// Whether a call carries a statically known block descriptor.
+  bool hasBlockShapeArgument(const CallInst &Call) const;
+
+  /// Build a string key from each block argument's position, PE identifier and
+  /// extents, ignoring integer widths. To reuse a candidate, its key, original
+  /// callee and argument Ripple shapes must all match.
+  Expected<std::string> getCallBlockShapeAttribute(const CallInst &Call) const;
+
+  /// Decode the block shapes stored in a specialization's block-shape
+  /// attribute.
+  Expected<SmallVector<TensorShape, 4>>
+  parseBlockShapeAttribute(StringRef Serialized) const;
 
   /// @brief Called when ripple is done processing a specialization, to fix the
   /// function prototype now that all the types have settled.
@@ -2222,13 +2235,10 @@ private:
   /// pending specialization.
   void finishSpecializationMask();
 
-  /// @brief Populate the shapes of the pending specialization's Ripple
-  /// arguments and return their broadcast mask shape.
-  TensorShape getPendingSpecializationMaskShape(
-      SmallVectorImpl<const TensorShape *> &ArgumentShapes) const;
-
-  /// @brief Return the broadcast mask shape of the pending specialization.
-  TensorShape getPendingSpecializationMaskShape() const;
+  /// @brief Return the shapes of the pending specialization's Ripple
+  /// arguments.
+  SmallVector<const TensorShape *, 8>
+  getPendingSpecializationArgumentShapes() const;
 
   /// @brief Request the masked specialization of a given non-masked
   /// specialization
@@ -2245,8 +2255,12 @@ private:
 
   /// @brief Given a function's operand value range, returns the shape of the
   /// specialization's mask
-  /// This function queries the shape of the operands to infer the shape of the
-  /// mask.
+  /// When all arguments have scalar Ripple shape, supplied block shapes define
+  /// the mask context.
+  Expected<TensorShape>
+  getSpecializationMaskShape(ArrayRef<const TensorShape *> ArgShapes,
+                             ArrayRef<TensorShape> BlockShapes) const;
+
   template <typename IteratorT>
   Expected<TensorShape>
   getSpecializationMaskShape(llvm::iterator_range<IteratorT> Args) const;

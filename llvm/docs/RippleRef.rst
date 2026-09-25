@@ -914,7 +914,30 @@ Specialization Pipeline
 =======================
 
 When shape information indicates that a scalar callee can be specialized to a
-vector signature, Ripple can synthesize *specializations* of that function:
+vector signature, Ripple can synthesize *specializations* of that function.
+Passing a statically known block descriptor also requests specialization, even
+when every data argument has scalar Ripple shape. The descriptor is copied into
+the clone so block queries and operations can be resolved there. Passing a
+block shape as a function argument is intended only for this purpose. The
+callee's definition must be available in the same LLVM module as the call so
+Ripple can specialize it using the concrete block shape. Native-vector
+arguments with scalar Ripple shape retain their native LLVM types.
+
+Calls carrying a statically known block descriptor request specialization even
+when the caller has no active Ripple dimensions and the descriptor has only one
+lane. This ensures that conversions in the callee are checked against the exact
+block shape. An original helper whose block descriptor remains an unresolved
+argument uses single-lane cleanup after its concrete specializations have been
+created. Specializations requested by a caller with active dimensions inherit
+at least that caller's rank, even when the supplied block itself has only one
+lane.
+
+Specializations are matched by both the argument tensor shapes and the block
+descriptors (argument position, processing element, and dimension extents).
+Trailing unit extents are omitted from serialized block descriptors; omitted
+dimensions implicitly have extent one.
+
+The pipeline proceeds as follows:
 
 * **Pending specialization** clones the original function and duplicates its
   parameter list: the first half are the original arguments, the second half
@@ -938,7 +961,9 @@ Return and Argument Types
   (e.g., ``zext``/``sext``/``inreg``/``noundef``). If the return shape is scalar,
   the original return type is kept.
 * The **mask** type for whole-function masking uses the element type ``i1`` and a
-  vector width equal to the broadcast of the argument shapes.
+  vector width equal to the broadcast of the argument shapes. When all data
+  arguments have scalar Ripple shape, the supplied block shapes provide this
+  mask context and must be broadcast-compatible.
 
 Function Call Resolution Strategy
 ---------------------------------
