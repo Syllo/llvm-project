@@ -65,6 +65,11 @@ llvm::cl::opt<bool> OnlyRipple(
     llvm::cl::desc("Run ripple passes only, no post-processing (testing)"));
 
 PreservedAnalyses RippleModulePass::run(Module &M, ModuleAnalysisManager &MAM) {
+  // Strip stale specialization state so that specialization attributes
+  // consumed below are well formed and were created by this pass invocation.
+  for (Function &F : M)
+    Ripple::eraseFunctionSpecializationRelatedAttributes(F);
+
   FunctionAnalysisManager &FAM =
       MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
 

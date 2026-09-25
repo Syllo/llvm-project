@@ -8,6 +8,7 @@
 
 #include "RippleTestBase.h"
 #include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/IntrinsicsRipple.h"
@@ -576,6 +577,120 @@ TEST_F(TensorShapeAttributeTest, FunctionShapeAttributes) {
 
   RippleExpander.reset();
   SpecializationsPending.clear();
+}
+
+TEST_F(TensorShapeAttributeTest, BlockShapeSpecializationAttributes) {
+  IRBuilder<> IRB(C);
+  Module M("TestModule", C);
+  Type *I64Ty = IRB.getInt64Ty();
+  Type *PtrTy = IRB.getPtrTy();
+
+  FunctionType *CalleeTy = FunctionType::get(I64Ty, {PtrTy, I64Ty}, false);
+  Function *Callee =
+      Function::Create(CalleeTy, GlobalValue::InternalLinkage, "callee", M);
+  BasicBlock *CalleeBB = BasicBlock::Create(C, "entry", Callee);
+  IRB.SetInsertPoint(CalleeBB);
+  IRB.CreateRet(Callee->getArg(1));
+
+  auto CreateCaller = [&](StringRef Name, Type *IntTy, uint64_t Dim0,
+                          uint64_t Dim1) {
+    FunctionType *CallerTy = FunctionType::get(I64Ty, false);
+    Function *Caller =
+        Function::Create(CallerTy, GlobalValue::ExternalLinkage, Name, M);
+    BasicBlock *CallerBB = BasicBlock::Create(C, "entry", Caller);
+    IRB.SetInsertPoint(CallerBB);
+    Function *SetShapeFn = Intrinsic::getOrInsertDeclaration(
+        &M, Intrinsic::ripple_block_setshape, {IntTy});
+    SmallVector<Value *, Ripple::RippleIntrinsicsMaxDims + 1> Args;
+    Args.push_back(ConstantInt::get(IntTy, 0));
+    for (unsigned I = 0; I != Ripple::RippleIntrinsicsMaxDims; ++I) {
+      uint64_t Dim = I == 0 ? Dim0 : I == 1 ? Dim1 : 1;
+      Args.push_back(ConstantInt::get(IntTy, Dim));
+    }
+    Value *BlockShape = IRB.CreateCall(SetShapeFn, Args);
+    Value *Result = IRB.CreateCall(Callee, {BlockShape, IRB.getInt64(1)});
+    IRB.CreateRet(Result);
+    return Caller;
+  };
+
+  Function *Block2x3I64 = CreateCaller("block_2x3_i64", I64Ty, 2, 3);
+  Function *Block2x3I32 = CreateCaller("block_2x3_i32", IRB.getInt32Ty(), 2, 3);
+  Function *Block4x3I64 = CreateCaller("block_4x3_i64", I64Ty, 4, 3);
+  Function *BlockScalarI64 = CreateCaller("block_scalar_i64", I64Ty, 1, 1);
+
+  scope_exit ClearSpecializations([&] { SpecializationsPending.clear(); });
+  auto Propagate = [&](Function *Caller) {
+    auto RippleExpander = createRipple(*Caller);
+    if (!RippleExpander)
+      return false;
+    bool WaitingForSpecialization = false;
+    if (Error E = RippleExpander->propagateShapes(WaitingForSpecialization)) {
+      ADD_FAILURE() << toString(std::move(E));
+      return false;
+    }
+    return WaitingForSpecialization;
+  };
+
+  ASSERT_TRUE(Propagate(Block2x3I64));
+  ASSERT_EQ(SpecializationsPending.size(), 1u);
+  Function *Specialization = *SpecializationsPending.begin();
+  EXPECT_TRUE(Ripple::hasRippleShapeAttributes(*Specialization));
+  EXPECT_EQ(Specialization->getFnAttribute("ripple.function.shape")
+                .getValueAsString(),
+            ";;;;");
+  EXPECT_EQ(Specialization->getFnAttribute("ripple.function.block-shape")
+                .getValueAsString(),
+            "0,0,2,3");
+
+  // Equivalent descriptors with different integer widths share the pending
+  // specialization, while different extents request a new one.
+  ASSERT_TRUE(Propagate(Block2x3I32));
+  EXPECT_EQ(SpecializationsPending.size(), 1u);
+  ASSERT_TRUE(Propagate(Block4x3I64));
+  ASSERT_EQ(SpecializationsPending.size(), 2u);
+  ASSERT_TRUE(Propagate(BlockScalarI64));
+  ASSERT_EQ(SpecializationsPending.size(), 3u);
+
+  SmallVector<std::string, 3> BlockShapeAttributes;
+  for (Function *Pending : SpecializationsPending)
+    BlockShapeAttributes.push_back(
+        Pending->getFnAttribute("ripple.function.block-shape")
+            .getValueAsString()
+            .str());
+  llvm::sort(BlockShapeAttributes);
+  EXPECT_EQ(BlockShapeAttributes[0], "0,0");
+  EXPECT_EQ(BlockShapeAttributes[1], "0,0,2,3");
+  EXPECT_EQ(BlockShapeAttributes[2], "0,0,4,3");
+}
+
+TEST_F(TensorShapeAttributeTest, NonConstantBlockShapeRejected) {
+  IRBuilder<> IRB(C);
+  Module M("TestModule", C);
+  Type *I64Ty = IRB.getInt64Ty();
+  FunctionType *FTy = FunctionType::get(IRB.getVoidTy(), {I64Ty}, false);
+  Function *F = Function::Create(FTy, GlobalValue::ExternalLinkage,
+                                 "nonconstant_block_shape", M);
+  BasicBlock *BB = BasicBlock::Create(C, "entry", F);
+  IRB.SetInsertPoint(BB);
+
+  Function *SetShapeFn = Intrinsic::getOrInsertDeclaration(
+      &M, Intrinsic::ripple_block_setshape, {I64Ty});
+  SmallVector<Value *, Ripple::RippleIntrinsicsMaxDims + 1> Args;
+  Args.push_back(IRB.getInt64(0));
+  Args.push_back(F->getArg(0));
+  Args.push_back(IRB.getInt64(2));
+  while (Args.size() != Ripple::RippleIntrinsicsMaxDims + 1)
+    Args.push_back(IRB.getInt64(1));
+  IRB.CreateCall(SetShapeFn, Args);
+  IRB.CreateRetVoid();
+
+  auto RippleExpander = createRipple(*F);
+  ASSERT_TRUE(RippleExpander);
+  Error E = RippleExpander->validate();
+  ASSERT_TRUE(static_cast<bool>(E));
+  EXPECT_NE(toString(std::move(E))
+                .find("block shape operand 1 must be a constant integer"),
+            std::string::npos);
 }
 
 TEST_F(TensorShapeTest, Indexing) {
