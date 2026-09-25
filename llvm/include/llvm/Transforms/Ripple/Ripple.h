@@ -1548,8 +1548,8 @@ private:
   /// @brief A convenience scalar shape
   const TensorShape ScalarShape;
 
-  /// @brief A shape for values that should't be modified by Ripple, also has
-  /// the nice property to be the neutral shape for broadcasting!
+  /// Shape marker for values that retain their native LLVM types and are not
+  /// tensor-promoted. It is neutral for broadcasting.
   const TensorShape &ShapeIgnoredByRipple = ScalarShape;
 
   /// @brief A cache of constructed linear series

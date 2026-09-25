@@ -5672,6 +5672,26 @@ void Ripple::applyMaskToOps(iterator_range<IteratorT> BBs, Value *VectorMask,
     return ReshapedMask;
   };
 
+  // Combine a Ripple mask with an instruction's existing mask. Native vector
+  // operations retain scalar Ripple shape, so their scalar Ripple mask must be
+  // splatted before it can be combined with the operation's native predicate.
+  auto combineWithRippleMask = [&](Value *OldMask, Value *MaskToApply,
+                                   const Twine &Name) -> Value * {
+    if (OldMask->getType() != MaskToApply->getType()) {
+      assert(MaskToApply->getType()->isIntegerTy(1) &&
+             "Only scalar i1 Ripple masks can require splatting");
+      auto *OldMaskTy = dyn_cast<VectorType>(OldMask->getType());
+      assert(OldMaskTy && OldMaskTy->getScalarType()->isIntegerTy(1) &&
+             "Expected a native vector predicate");
+      MaskToApply = irBuilder.CreateVectorSplat(
+          OldMaskTy->getElementCount(), MaskToApply,
+          Twine(OldMask->getName()) + ".ripple.branch.mask.splat");
+    }
+    assert(OldMask->getType() == MaskToApply->getType() &&
+           "Mask types must match before combining");
+    return irBuilder.CreateAnd(OldMask, MaskToApply, Name);
+  };
+
   // Apply the mask to the maskable operators
   LLVM_DEBUG(dbgs() << "Mask to apply: " << *VectorMask << " with shape "
                     << MaskShape << " insert at " << *MaskInsertionPoint
@@ -5703,9 +5723,9 @@ void Ripple::applyMaskToOps(iterator_range<IteratorT> BBs, Value *VectorMask,
         // Transform into a masked load
 
         AllocaInst *AllocaPtr = dyn_cast<AllocaInst>(Load->getPointerOperand());
-        if (!Load->getType()->isVectorTy()) {
-          // For scalars we have to introduce a branch to load only when the
-          // mask is true.
+        if (InstructionShape.isScalar()) {
+          // Scalar Ripple shape includes native vectors: guard the whole load
+          // without interpreting the vector's elements as Ripple lanes.
           //
           // Interpret the following as: BasicBlock | Instructions
           //
@@ -5787,32 +5807,32 @@ void Ripple::applyMaskToOps(iterator_range<IteratorT> BBs, Value *VectorMask,
                      intrinsicWithId(&I, {Intrinsic::masked_load})) {
         // Add the branch mask to the existing one
         Value *OldMask = MaskedLoad->getArgOperand(1);
-        Value *NewMask = irBuilder.CreateAnd(OldMask, MaskToApply,
-                                             Twine(OldMask->getName()) +
-                                                 ".ripple.branch.mask.apply");
+        Value *NewMask = combineWithRippleMask(OldMask, MaskToApply,
+                                               Twine(OldMask->getName()) +
+                                                   ".ripple.branch.mask.apply");
         setRippleShape(NewMask, InstructionShape);
         MaskedLoad->setArgOperand(1, NewMask);
       } else if (IntrinsicInst *MaskedGather =
                      intrinsicWithId(&I, {Intrinsic::masked_gather})) {
         // Add the branch mask to the existing one
         Value *OldMask = MaskedGather->getArgOperand(1);
-        Value *NewMask = irBuilder.CreateAnd(OldMask, MaskToApply,
-                                             Twine(OldMask->getName()) +
-                                                 ".ripple.branch.mask.apply");
+        Value *NewMask = combineWithRippleMask(OldMask, MaskToApply,
+                                               Twine(OldMask->getName()) +
+                                                   ".ripple.branch.mask.apply");
         setRippleShape(NewMask, InstructionShape);
         MaskedGather->setArgOperand(1, NewMask);
       } else if (IntrinsicInst *ExpandLoad =
                      intrinsicWithId(&I, {Intrinsic::masked_expandload})) {
         Value *OldMask = ExpandLoad->getArgOperand(1);
-        Value *NewMask = irBuilder.CreateAnd(OldMask, MaskToApply,
-                                             "ripple.branch.mask.apply");
+        Value *NewMask = combineWithRippleMask(OldMask, MaskToApply,
+                                               "ripple.branch.mask.apply");
         setRippleShape(NewMask, InstructionShape);
         ExpandLoad->setArgOperand(1, NewMask);
       } else if (StoreInst *Store = dyn_cast<StoreInst>(&I)) {
         // Transform into a masked store
-        if (!Store->getValueOperand()->getType()->isVectorTy()) {
-          // For scalar store, we move it to its own basic block and branch if
-          // the mask is true.
+        if (InstructionShape.isScalar()) {
+          // For scalar Ripple shape (including a whole native vector), move
+          // the store to its own basic block and branch if the mask is true.
           //
           // Interpret the following as: BasicBlock | Instructions
           //
@@ -5879,41 +5899,41 @@ void Ripple::applyMaskToOps(iterator_range<IteratorT> BBs, Value *VectorMask,
                      intrinsicWithId(&I, {Intrinsic::masked_store})) {
         // Add the branch mask to the existing one
         Value *OldMask = MaskedStore->getArgOperand(2);
-        Value *NewMask = irBuilder.CreateAnd(OldMask, MaskToApply,
-                                             Twine(OldMask->getName()) +
-                                                 ".ripple.branch.mask.apply");
+        Value *NewMask = combineWithRippleMask(OldMask, MaskToApply,
+                                               Twine(OldMask->getName()) +
+                                                   ".ripple.branch.mask.apply");
         setRippleShape(NewMask, InstructionShape);
         MaskedStore->setArgOperand(2, NewMask);
       } else if (IntrinsicInst *MaskedScatter =
                      intrinsicWithId(&I, {Intrinsic::masked_scatter})) {
         // Add the branch mask to the existing one
         Value *OldMask = MaskedScatter->getArgOperand(2);
-        Value *NewMask = irBuilder.CreateAnd(OldMask, MaskToApply,
-                                             Twine(OldMask->getName()) +
-                                                 ".ripple.branch.mask.apply");
+        Value *NewMask = combineWithRippleMask(OldMask, MaskToApply,
+                                               Twine(OldMask->getName()) +
+                                                   ".ripple.branch.mask.apply");
         setRippleShape(NewMask, InstructionShape);
         MaskedScatter->setArgOperand(2, NewMask);
       } else if (IntrinsicInst *CompressStore =
                      intrinsicWithId(&I, {Intrinsic::masked_compressstore})) {
         Value *OldMask = CompressStore->getArgOperand(2);
-        Value *NewMask = irBuilder.CreateAnd(OldMask, MaskToApply,
-                                             "ripple.branch.mask.apply");
+        Value *NewMask = combineWithRippleMask(OldMask, MaskToApply,
+                                               "ripple.branch.mask.apply");
         setRippleShape(NewMask, InstructionShape);
         CompressStore->setArgOperand(2, NewMask);
       } else if (SelectInst *Select = dyn_cast<SelectInst>(&I)) {
         if (SelectToMaskWhenIfConvert.contains(Select)) {
           LLVM_DEBUG(dbgs() << "Masking a special select: " << *Select << "\n");
           Value *OldMask = Select->getCondition();
-          Value *NewMask = irBuilder.CreateAnd(OldMask, MaskToApply,
-                                               ".ripple.branch.mask.apply");
+          Value *NewMask = combineWithRippleMask(OldMask, MaskToApply,
+                                                 ".ripple.branch.mask.apply");
           setRippleShape(NewMask, InstructionShape);
           Select->setCondition(NewMask);
         }
       } else if (VPIntrinsic *VPIntr = dyn_cast<VPIntrinsic>(&I)) {
         // Some VP intrinsics have no mask
         if (Value *OldMask = VPIntr->getMaskParam()) {
-          Value *NewMask = irBuilder.CreateAnd(OldMask, MaskToApply,
-                                               ".ripple.branch.mask.apply");
+          Value *NewMask = combineWithRippleMask(OldMask, MaskToApply,
+                                                 ".ripple.branch.mask.apply");
           setRippleShape(NewMask, InstructionShape);
           VPIntr->setMaskParam(NewMask);
         }
