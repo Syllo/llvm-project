@@ -9,7 +9,9 @@
 #include "RippleTestBase.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Metadata.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/IntrinsicsRipple.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Transforms/Ripple/Ripple.h"
 #include "gtest/gtest.h"
 
@@ -17,6 +19,7 @@ namespace llvm {
 namespace {
 
 using TensorShapeTest = RippleTestBase;
+using TensorShapeAttributeTest = RippleFunctionTest;
 
 TEST_F(TensorShapeTest, Accessors) {
   // Test default constructor (scalar)
@@ -531,50 +534,48 @@ TEST_F(TensorShapeTest, Reductions) {
   EXPECT_FALSE(testResult[2]); // 3 != 1
 }
 
-TEST_F(TensorShapeTest, Metadata) {
-  // Test round-trip: fromConstMetadata(toConstMetadata(X)) == X
-  std::vector<uint64_t> dims1 = {2, 3, 4};
-  ArrayRef<uint64_t> dims1Ref(dims1);
-  TensorShape shape1(dims1Ref);
+TEST_F(TensorShapeAttributeTest, FunctionShapeAttributes) {
+  IRBuilder<> IRB(C);
+  Module M("TestModule", C);
+  Type *I64Ty = IRB.getInt64Ty();
+  FunctionType *FTy = FunctionType::get(I64Ty, {I64Ty, I64Ty}, false);
+  Function *F = Function::Create(
+      FTy, GlobalValue::LinkageTypes::ExternalLinkage, "TestF", M);
+  BasicBlock *BB = BasicBlock::Create(C, "entry", F);
+  IRB.SetInsertPoint(BB);
 
-  IntegerType *I64Ty = IntegerType::get(C, 64);
-  MDNode *metadata = shape1.toConstMetadata(I64Ty);
-  ASSERT_NE(metadata, nullptr);
+  // Give Ripple a five-dimensional tensor space.
+  Function *SetShapeFn = Intrinsic::getOrInsertDeclaration(
+      &M, Intrinsic::ripple_block_setshape, {I64Ty});
+  SmallVector<Value *, Ripple::RippleIntrinsicsMaxDims + 1> SetShapeArgs;
+  SetShapeArgs.push_back(IRB.getInt64(0));
+  for (unsigned I = 0; I != Ripple::RippleIntrinsicsMaxDims; ++I)
+    SetShapeArgs.push_back(IRB.getInt64(I < 5 ? 2 : 1));
+  IRB.CreateCall(SetShapeFn, SetShapeArgs);
+  IRB.CreateRet(IRB.getInt64(0));
 
-  auto recovered = TensorShape::fromConstMetadata(3, metadata);
-  ASSERT_NE(recovered, nullptr);
-  EXPECT_EQ(recovered->rank(), 3u);
-  EXPECT_EQ((*recovered)[0], 2u);
-  EXPECT_EQ((*recovered)[1], 3u);
-  EXPECT_EQ((*recovered)[2], 4u);
-  EXPECT_TRUE(*recovered == shape1);
+  SpecializationsPending.insert(F);
+  auto RippleExpander = createRipple(*F);
+  ASSERT_TRUE(RippleExpander);
+  EXPECT_FALSE(Ripple::hasRippleShapeAttributes(*F));
 
-  // Test with scalar
-  TensorShape scalar;
-  MDNode *scalarMetadata = scalar.toConstMetadata(I64Ty);
-  ASSERT_NE(scalarMetadata, nullptr);
+  TensorShape ArgShape1({2, 3, 4, 1, 1});
+  TensorShape ArgShape2(5);
+  F->addFnAttr("ripple.function.shape", "2,3,4;;2,3,4,5,6");
+  EXPECT_TRUE(Ripple::hasRippleShapeAttributes(*F));
+  EXPECT_EQ(F->getFnAttribute("ripple.function.shape").getValueAsString(),
+            "2,3,4;;2,3,4,5,6");
 
-  auto recoveredScalar = TensorShape::fromConstMetadata(0, scalarMetadata);
-  ASSERT_NE(recoveredScalar, nullptr);
-  EXPECT_EQ(recoveredScalar->rank(), 0u);
-  EXPECT_TRUE(*recoveredScalar == scalar);
+  bool WaitingForSpecialization = false;
+  ASSERT_FALSE(RippleExpander->propagateShapes(WaitingForSpecialization));
+  EXPECT_FALSE(WaitingForSpecialization);
+  EXPECT_EQ(RippleExpander->getRippleShape(static_cast<Value *>(F->getArg(0))),
+            ArgShape1);
+  EXPECT_EQ(RippleExpander->getRippleShape(static_cast<Value *>(F->getArg(1))),
+            ArgShape2);
 
-  // Test with higher rank
-  std::vector<uint64_t> dims2 = {2, 3, 4, 5, 6};
-  ArrayRef<uint64_t> dims2Ref(dims2);
-  TensorShape shape2(dims2Ref);
-
-  MDNode *metadata2 = shape2.toConstMetadata(I64Ty);
-  ASSERT_NE(metadata2, nullptr);
-
-  auto recovered2 = TensorShape::fromConstMetadata(5, metadata2);
-  ASSERT_NE(recovered2, nullptr);
-  EXPECT_EQ(recovered2->rank(), 5u);
-  EXPECT_TRUE(*recovered2 == shape2);
-
-  // Test fromConstMetadata with rank limit
-  auto recoveredLimited = TensorShape::fromConstMetadata(2, metadata2);
-  EXPECT_EQ(recoveredLimited, nullptr); // Rank exceeds limit
+  RippleExpander.reset();
+  SpecializationsPending.clear();
 }
 
 TEST_F(TensorShapeTest, Indexing) {

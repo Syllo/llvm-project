@@ -776,38 +776,6 @@ void TensorShapeAny<SizeTy>::printAsSignature(raw_ostream &O,
 }
 
 template <typename SizeTy>
-MDNode *TensorShapeAny<SizeTy>::toConstMetadata(IntegerType *Ty) const {
-  SmallVector<Metadata *, BaseTensorSize> DimsArray;
-  for (auto Dim : *this) {
-    auto *DimAsMetadata = ConstantAsMetadata::get(
-        ConstantInt::get(Ty, APInt(Ty->getBitWidth(), Dim, false)));
-    DimsArray.push_back(DimAsMetadata);
-  }
-  return MDNode::get(Ty->getContext(), DimsArray);
-}
-
-template <typename SizeTy>
-std::unique_ptr<TensorShapeAny<SizeTy>>
-TensorShapeAny<SizeTy>::fromConstMetadata(unsigned Rank, const MDNode *Node) {
-  Shape S;
-  // Don't fail too early, when Idx >= rank and all the upper dimensions are 1
-  // (empty), we can construct the Tensor for this rank too
-  for (unsigned Idx = 0, E = Node->getNumOperands(); Idx < E; Idx++) {
-    if (auto *ConstantMeta =
-            dyn_cast<ConstantAsMetadata>(Node->getOperand(Idx).get())) {
-      if (auto *CI = dyn_cast<ConstantInt>(ConstantMeta->getValue())) {
-        uint64_t Val = CI->getZExtValue();
-        if (Val > 1 && Idx >= Rank)
-          return nullptr;
-        S.push_back(Val);
-      }
-    }
-  }
-  S.resize(Rank, DimSize(1));
-  return std::make_unique<TensorShapeAny<SizeTy>>(std::move(S));
-}
-
-template <typename SizeTy>
 Expected<TensorShapeAny<SizeTy>> TensorShapeAny<SizeTy>::broadcastShapeFromAll(
     ArrayRef<const TensorShapeAny<SizeTy> *> AllToBcast) {
   auto ptrToRef = [](const TensorShapeAny<SizeTy> *ShapePtr)
@@ -1738,10 +1706,10 @@ Error Ripple::propagateShapes(bool &WaitingForSpecialization) {
   // Arguments have ripple shapes during specialization
   if (isPendingRippleSpecialization(F)) {
     bool DefaultToScalar = true;
-    if (hasRippleShapeMetadata(F)) {
+    if (hasRippleShapeAttributes(F)) {
       SmallVector<std::unique_ptr<TensorShape>, 8> ArgShapes;
       std::unique_ptr<TensorShape> ReturnShape;
-      if (getFunctionShapeMetadata(F, ArgShapes, ReturnShape)) {
+      if (getFunctionShapeAttributes(F, ArgShapes, ReturnShape)) {
         DefaultToScalar = false;
         assert(ArgShapes.size() == F.arg_size());
         llvm::transform(ArgShapes, std::back_inserter(ArgumentShapes),
@@ -10674,62 +10642,101 @@ StringRef Ripple::intrinsicToLibName(const IntrinsicInst *II) const {
   return intrinsicToLibName(II, targetLibraryInfo);
 }
 
-static constexpr StringRef RippleFunShapeMetaKey("RippleFunctionShapeMetadata");
+namespace {
 
-void Ripple::setFunctionShapeMetadata(Function &F,
-                                      ArrayRef<const TensorShape *> ArgShapes,
-                                      const TensorShape &ReturnShape) {
-  assert(ArgShapes.size() == F.arg_size());
-  SmallVector<Metadata *, 8> OperandsAndReturnShapesMeta;
-  for (auto *Shape : ArgShapes)
-    OperandsAndReturnShapesMeta.push_back(
-        Shape->toConstMetadata(irBuilder.getInt64Ty()));
-  OperandsAndReturnShapesMeta.push_back(
-      ReturnShape.toConstMetadata(irBuilder.getInt64Ty()));
-  MDNode *FunctionShapeMetadata =
-      MDNode::get(F.getContext(), OperandsAndReturnShapesMeta);
-  F.setMetadata(RippleFunShapeMetaKey, FunctionShapeMetadata);
+// This specialization state is stored in function attributes rather than debug
+// info: later RippleModulePass specialization steps need it after function
+// cloning, while debug info is optional source provenance.
+constexpr StringRef RippleFunShapeAttrKey("ripple.function.shape");
+
+template <typename T> T exchange(T &Value, T NewValue) {
+  T OldValue = Value;
+  Value = NewValue;
+  return OldValue;
 }
 
-bool Ripple::getFunctionShapeMetadata(
+std::string serializeTensorShape(const TensorShape &Shape) {
+  std::string Result;
+  {
+    raw_string_ostream OS(Result);
+    bool First = true;
+    ArrayRef<uint64_t> Dims = Shape.getShape();
+    while (!Dims.empty() && Dims.back() == 1)
+      Dims = Dims.drop_back();
+    for (uint64_t Dim : Dims)
+      OS << (exchange(First, false) ? "" : ",") << Dim;
+  }
+  return Result;
+}
+
+std::unique_ptr<TensorShape> parseTensorShape(StringRef Serialized,
+                                              unsigned Rank) {
+  SmallVector<uint64_t, 8> Dims;
+  if (Serialized.empty()) {
+    Dims.resize(Rank, 1);
+    TensorShape::Shape Shape(Dims.begin(), Dims.end());
+    return std::make_unique<TensorShape>(std::move(Shape));
+  }
+  SmallVector<StringRef, 8> Parts;
+  Serialized.split(Parts, ',', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
+  for (auto [Idx, Part] : enumerate(Parts)) {
+    uint64_t Dim;
+    if (Part.getAsInteger(10, Dim) || (Dim > 1 && Idx >= Rank))
+      return nullptr;
+    Dims.push_back(Dim);
+  }
+  Dims.resize(Rank, 1);
+  TensorShape::Shape Shape(Dims.begin(), Dims.end());
+  return std::make_unique<TensorShape>(std::move(Shape));
+}
+
+} // namespace
+
+void Ripple::setFunctionShapeAttributes(Function &F,
+                                        ArrayRef<const TensorShape *> ArgShapes,
+                                        const TensorShape &ReturnShape) {
+  assert(ArgShapes.size() == F.arg_size());
+  std::string Serialized;
+  {
+    raw_string_ostream OS(Serialized);
+    bool First = true;
+    for (auto *Shape : ArgShapes)
+      OS << (exchange(First, false) ? "" : ";") << serializeTensorShape(*Shape);
+    OS << (exchange(First, false) ? "" : ";")
+       << serializeTensorShape(ReturnShape);
+  }
+  F.addFnAttr(RippleFunShapeAttrKey, Serialized);
+}
+
+bool Ripple::getFunctionShapeAttributes(
     const Function &F, SmallVectorImpl<std::unique_ptr<TensorShape>> &ArgShapes,
     std::unique_ptr<TensorShape> &ReturnShape) const {
 
-  auto metaToUniquePtr = [this](const Metadata *Meta,
-                                std::unique_ptr<TensorShape> &TShape) -> bool {
-    if (auto *MDN = dyn_cast<MDNode>(Meta)) {
-      if (auto TS = TensorShape::fromConstMetadata(tensorRank(), MDN)) {
-        std::swap(TShape, TS);
-        return true;
-      }
-    }
-    return false;
-  };
-
-  if (!hasRippleShapeMetadata(F))
+  if (!hasRippleShapeAttributes(F))
     return false;
 
-  auto *RippleShapeMeta = F.getMetadata(RippleFunShapeMetaKey);
-
-  assert(F.arg_size() <= RippleShapeMeta->getNumOperands());
-  for (auto &Operand : make_range(RippleShapeMeta->op_begin(),
-                                  RippleShapeMeta->op_begin() + F.arg_size())) {
-    ArgShapes.push_back(nullptr);
-    if (!metaToUniquePtr(Operand.get(), ArgShapes.back()))
+  SmallVector<StringRef, 8> Shapes;
+  F.getFnAttribute(RippleFunShapeAttrKey)
+      .getValueAsString()
+      .split(Shapes, ';', /*MaxSplit=*/-1, /*KeepEmpty=*/true);
+  if (Shapes.size() != F.arg_size() + 1)
+    return false;
+  for (StringRef Shape : ArrayRef(Shapes).drop_back()) {
+    auto Parsed = parseTensorShape(Shape, tensorRank());
+    if (!Parsed)
       return false;
+    ArgShapes.push_back(std::move(Parsed));
   }
-  assert(F.arg_size() + 1 == RippleShapeMeta->getNumOperands() &&
-         "Malformed ripple function shape metadata: should have 1 shape for "
-         "each argument and 1 for the return");
-  if (!metaToUniquePtr(RippleShapeMeta->getOperand(F.arg_size()), ReturnShape))
+  ReturnShape = parseTensorShape(Shapes.back(), tensorRank());
+  if (!ReturnShape)
     return false;
   if (F.getReturnType()->isVoidTy())
     assert(ReturnShape->isScalar());
   return true;
 }
 
-bool Ripple::hasRippleShapeMetadata(const Function &F) {
-  return F.getMetadata(RippleFunShapeMetaKey) != nullptr;
+bool Ripple::hasRippleShapeAttributes(const Function &F) {
+  return F.hasFnAttribute(RippleFunShapeAttrKey);
 }
 
 bool Ripple::canBeSpecialized(const Function *F) {
@@ -10771,7 +10778,7 @@ Ripple::getRippleSpecializationFor(const CallInst &Call) const {
       std::unique_ptr<TensorShape> ReturnShape;
       LLVM_DEBUG(dbgs() << "Reading metadata from " << Candidate.getName()
                         << "\n");
-      if (getFunctionShapeMetadata(Candidate, ArgShapes, ReturnShape)) {
+      if (getFunctionShapeAttributes(Candidate, ArgShapes, ReturnShape)) {
         LLVM_DEBUG(dbgs() << "Got shape for function!\n");
         // When waiting for specialization, the function has twice the number of
         // arguments
@@ -10942,7 +10949,7 @@ bool Ripple::requestSpecializationFor(const CallInst &Call) {
 
   // Copy the shapes for the ripple arguments
   llvm::copy(ArgShapes, std::back_inserter(ArgShapes));
-  setFunctionShapeMetadata(*FClone, ArgShapes, ScalarShape);
+  setFunctionShapeAttributes(*FClone, ArgShapes, ScalarShape);
   LLVM_DEBUG(dbgs() << "Requesting specialization for call " << Call << ":";
              FClone->print(dbgs()));
 
@@ -10981,9 +10988,10 @@ bool Ripple::requestSpecializationFor(const CallInst &Call) {
         CalledFunction->getParent());
     ProcessedSpecialization->copyAttributesFrom(FClone);
     // Mark this declaration as the destination of the final specialization
-    registerFinalFunctionNameMetadata(FClone, ProcessedSpecialization);
+    registerFinalFunctionNameAttribute(FClone, ProcessedSpecialization);
     ArgShapes.resize(ArgShapes.size() / 2);
-    setFunctionShapeMetadata(*ProcessedSpecialization, ArgShapes, ScalarShape);
+    setFunctionShapeAttributes(*ProcessedSpecialization, ArgShapes,
+                               ScalarShape);
     // Make this final declaration as an available specialization, we don't need
     // to wait for the specialization to be processed for it to be used
     SpecializationsAvailable.insert(ProcessedSpecialization);
@@ -11001,8 +11009,8 @@ bool Ripple::requestSpecializationFor(const CallInst &Call) {
                          getMaskedSpecializationName(*ProcessedSpecialization),
                          CalledFunction->getParent());
     ArgShapes.push_back(&*SpecMaskShape);
-    setFunctionShapeMetadata(*MaskedSpecializationFinal, ArgShapes,
-                             ScalarShape);
+    setFunctionShapeAttributes(*MaskedSpecializationFinal, ArgShapes,
+                               ScalarShape);
   }
   return true;
 }
@@ -11138,9 +11146,9 @@ void Ripple::finishSpecialization() {
                       nullptr);
   }
 
-  eraseFunctionSpecializationRelatedMetadata(*ProcessedSpecialization);
-  setFunctionShapeMetadata(*ProcessedSpecialization, ArgumentShapes,
-                           *ReturnShape);
+  eraseFunctionSpecializationRelatedAttributes(*ProcessedSpecialization);
+  setFunctionShapeAttributes(*ProcessedSpecialization, ArgumentShapes,
+                             *ReturnShape);
   LLVM_DEBUG(dbgs() << "\nFinal specialization of " << F.getName() << ":\n";
              ProcessedSpecialization->print(dbgs()));
 
@@ -11169,7 +11177,8 @@ void Ripple::finishSpecialization() {
   }
 
   ArgumentShapes.push_back(&MaskShape);
-  setFunctionShapeMetadata(*MaskedSpecialization, ArgumentShapes, *ReturnShape);
+  setFunctionShapeAttributes(*MaskedSpecialization, ArgumentShapes,
+                             *ReturnShape);
   LLVM_DEBUG(dbgs() << "\nMasked specialization of " << F.getName() << ":\n";
              MaskedSpecialization->print(dbgs()));
 }
@@ -11183,17 +11192,14 @@ Ripple::specializationOriginalFunction(const Function &Specialization) {
 }
 
 static constexpr StringRef
-    RippleSpecializationFinalName("ripple.specialization.final.fname");
+    RippleSpecializationFinalNameAttrKey("ripple.specialization.final.name");
 
-void Ripple::registerFinalFunctionNameMetadata(
+void Ripple::registerFinalFunctionNameAttribute(
     Function *PendingSpecialization, const Function *FinalSpecialization) {
   assert(isPendingRippleSpecialization(*PendingSpecialization) &&
          PendingSpecialization->getReturnType()->isVoidTy());
-  PendingSpecialization->setMetadata(
-      RippleSpecializationFinalName,
-      MDNode::get(PendingSpecialization->getContext(),
-                  MDString::get(PendingSpecialization->getContext(),
-                                FinalSpecialization->getName())));
+  PendingSpecialization->addFnAttr(RippleSpecializationFinalNameAttrKey,
+                                   FinalSpecialization->getName());
 }
 
 Function *Ripple::retrieveFinalSpecializationDecl(
@@ -11202,23 +11208,19 @@ Function *Ripple::retrieveFinalSpecializationDecl(
     return nullptr;
   assert(isPendingRippleSpecialization(*PendingSpecialization) &&
          PendingSpecialization->getReturnType()->isVoidTy());
-  if (MDNode *MDN =
-          PendingSpecialization->getMetadata(RippleSpecializationFinalName)) {
-    if (MDString *MDS = dyn_cast<MDString>(MDN->getOperand(0))) {
-      Function *FinalSpec =
-          PendingSpecialization->getParent()->getFunction(MDS->getString());
-      assert(FinalSpec->isDeclaration());
-      return FinalSpec;
-    }
-  }
-  return nullptr;
+  Attribute FinalName = PendingSpecialization->getFnAttribute(
+      RippleSpecializationFinalNameAttrKey);
+  if (!FinalName.isValid())
+    return nullptr;
+  Function *FinalSpec = PendingSpecialization->getParent()->getFunction(
+      FinalName.getValueAsString());
+  assert(FinalSpec && FinalSpec->isDeclaration());
+  return FinalSpec;
 }
 
-void Ripple::eraseFunctionSpecializationRelatedMetadata(Function &F) {
-  unsigned KindID = F.getContext().getMDKindID(RippleFunShapeMetaKey);
-  F.eraseMetadata(KindID);
-  KindID = F.getContext().getMDKindID(RippleSpecializationFinalName);
-  F.eraseMetadata(KindID);
+void Ripple::eraseFunctionSpecializationRelatedAttributes(Function &F) {
+  F.removeFnAttr(RippleFunShapeAttrKey);
+  F.removeFnAttr(RippleSpecializationFinalNameAttrKey);
 }
 
 std::string
