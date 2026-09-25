@@ -385,7 +385,7 @@ PreservedAnalyses RippleModulePass::run(Module &M, ModuleAnalysisManager &MAM) {
     PostProcessPasses.addPass(InstCombinePass());
   }
   for (auto &F : M) {
-    Ripple::eraseFunctionSpecializationRelatedMetadata(F);
+    Ripple::eraseFunctionSpecializationRelatedAttributes(F);
     if (!F.isDeclaration()) {
       // PassInstrumentation callbacks are driven by PostProcessPasses for each
       // contained pass.

@@ -314,14 +314,6 @@ public:
   ///        to match up those of \p other
   BitVector requiredSplat(const TensorShapeAny<SizeTy> &other) const;
 
-  /// Create a metadata node to store this tensor shape
-  MDNode *toConstMetadata(IntegerType *Ty) const;
-
-  /// Retrieve a tensor shape if it's rank is lower or equal to Rank, nullptr
-  /// otherwise or if the metadata is not present
-  static std::unique_ptr<TensorShapeAny<SizeTy>>
-  fromConstMetadata(unsigned Rank, const MDNode *Node);
-
   /// @brief Returns the result of broadcasting all the references to
   /// TensorShapes in the provided iterator. Returns an Error if the shapes are
   /// incompatible
@@ -1343,9 +1335,12 @@ public:
   bool analyzeTensorShape(const TensorShape &TS, Instruction *I,
                           Value *Data = nullptr, Value *Address = nullptr);
 
-  /// @brief Erase ripple function-specialization related metadata that has been
-  /// attached to the given function
-  static void eraseFunctionSpecializationRelatedMetadata(Function &F);
+  /// @brief Erase Ripple function-specialization attributes attached to a
+  /// function.
+  static void eraseFunctionSpecializationRelatedAttributes(Function &F);
+
+  /// @brief Returns true if the function has shape information embedded
+  static bool hasRippleShapeAttributes(const Function &F);
 
   /// @brief Returns true if a function is marked for Ripple Specialization
   bool isPendingRippleSpecialization(const Function &F) const;
@@ -1370,8 +1365,8 @@ public:
   /// Store the name of the final specialization for void returning functions.
   /// That way we can call the final function w/o having to wait for the
   /// specialization to be processed by ripple.
-  void registerFinalFunctionNameMetadata(Function *PendingSpecialization,
-                                         const Function *FinalSpecialization);
+  void registerFinalFunctionNameAttribute(Function *PendingSpecialization,
+                                          const Function *FinalSpecialization);
 
   /// Retrieve the declaration of the processed specialization or nullptr if it
   /// has not been created yet
@@ -2193,17 +2188,14 @@ private:
     FuncRPOT = nullptr;
   }
 
-  /// @brief Returns true if the function has shape information embedded
-  static bool hasRippleShapeMetadata(const Function &F);
-
-  /// @brief Set the function shape metadata
-  void setFunctionShapeMetadata(Function &F,
-                                ArrayRef<const TensorShape *> ArgShapes,
-                                const TensorShape &ReturnShape);
+  /// @brief Set the function shape attributes.
+  void setFunctionShapeAttributes(Function &F,
+                                  ArrayRef<const TensorShape *> ArgShapes,
+                                  const TensorShape &ReturnShape);
 
   /// @brief Retrieve the tensor shapes of the function's argument and return
   /// when it's a specialization.
-  bool getFunctionShapeMetadata(
+  bool getFunctionShapeAttributes(
       const Function &F,
       SmallVectorImpl<std::unique_ptr<TensorShape>> &ArgShapes,
       std::unique_ptr<TensorShape> &ReturnShape) const;
