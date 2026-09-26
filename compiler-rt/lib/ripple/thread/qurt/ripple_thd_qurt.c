@@ -27,6 +27,10 @@ typedef qurt_barrier_t ripple_thd_barrier_t;
 #include "ripple/ripple_thd_qurt_pool.h"
 #include <ripple/thread.h>
 
+#define RIPPLE_THD_QURT_STACK_ALIGN 8
+#define ALIGN_TO(addr, align)                                                  \
+  (((((size_t)(addr)) + (align)-1) / (align)) * (align))
+
 /// @brief Encodes an integer @p id into a string pointed at @p nm_ptr
 /// @p 0 <= id < 100.
 #define _qurt_ripple_thd_write_id(nm_ptr, id)                                  \
@@ -135,6 +139,7 @@ qthd_runtime_t *qthd_runtime_init(unsigned n_thd_) {
   rt->attrs = (qurt_thread_attr_t *)malloc(n_thd_ * sizeof(qurt_thread_attr_t));
   rt->ctxs = (context_f_args_t *)malloc(n_thd_ * sizeof(context_f_args_t));
   rt->sw_ids = (size_t *)malloc(n_thd_ * sizeof(size_t));
+  rt->stack_allocations = (char **)malloc(n_thd_ * sizeof(char *));
   rt->stack = (char **)malloc(n_thd_ * sizeof(char *));
   rt->pool = (qthd_worker_pool_t)malloc(sizeof(struct qthd_worker_pool));
 
@@ -143,8 +148,11 @@ qthd_runtime_t *qthd_runtime_init(unsigned n_thd_) {
     // to use as thread ids.
     _qurt_ripple_thd_write_id(rt->names + QURT_RIPPLE_MAX_THD_NAME_SIZE * t, t);
     rt->sw_ids[t] = t;
-    // stacks must be 8-byte aligned
-    rt->stack[t] = (char *)memalign(8, RIPPLE_THD_QURT_STACK_SIZE);
+    // Overallocate so the usable stack can be aligned without memalign.
+    rt->stack_allocations[t] =
+        (char *)malloc(RIPPLE_THD_QURT_STACK_SIZE + RIPPLE_THD_QURT_STACK_ALIGN);
+    rt->stack[t] =
+        (char *)ALIGN_TO(rt->stack_allocations[t], RIPPLE_THD_QURT_STACK_ALIGN);
   }
   rt->return_status = (int *)malloc(n_thd_ * sizeof(int));
   for (unsigned i = 0; i < RIPPLE_THD_QURT_MAX_BLOCKS; ++i) {
@@ -161,8 +169,9 @@ extern void qthd_runtime_exit(qthd_runtime_t *rt) {
   free(rt->ctxs);
   free(rt->sw_ids);
   for (unsigned t = 0; t < n_thd; ++t) {
-    free(rt->stack[t]);
+    free(rt->stack_allocations[t]);
   }
+  free(rt->stack_allocations);
   free(rt->stack);
   free(rt->return_status);
   free(rt->pool);
@@ -242,3 +251,6 @@ inline __attribute__((always_inline)) void
 _ripple_thd_barrier(ripple_thd_barrier_t *base, unsigned idx) {
   qurt_barrier_wait(&(base[idx]));
 }
+
+#undef ALIGN_TO
+#undef RIPPLE_THD_QURT_STACK_ALIGN
