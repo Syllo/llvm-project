@@ -55,6 +55,8 @@ typedef struct qthd_runtime {
   char names[QURT_RIPPLE_MAX_THD_NAME_SIZE * QURT_MAX_HTHREAD_LIMIT];
   /// Software IDs assigned to the worker threads for the current dispatch.
   size_t *sw_ids;
+  /// Original stack allocations, retained so aligned stack pointers can be freed.
+  char **stack_allocations;
   /// @brief thread stacks (one per thread)
   char **stack;
   // A place to put the return status returned by all threads.
