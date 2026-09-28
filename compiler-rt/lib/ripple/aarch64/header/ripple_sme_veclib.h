@@ -1,5 +1,4 @@
-//===-- ripple_sme_veclib.h - Ripple SME runtime helpers
-//-------------------===//
+//===--------- ripple_sme_veclib.h - Ripple SME runtime helpers -----------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -20,408 +19,227 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef RIPPLE_VECTOR_CANDIDATE
-#define RIPPLE_VECTOR_CANDIDATE __attribute__((ripple_vector_candidate))
-#endif
-
 // Internal linkage permits inclusion in multiple C and C++ translation units.
 // Do not force inlining across incompatible SME streaming interfaces.
 #define RIPPLE_SME_CANDIDATE_INLINE                                            \
-  static inline __attribute__((unused)) RIPPLE_VECTOR_CANDIDATE
+  static inline __attribute__((ripple_vector_candidate, unused))
+
+// Our vscale assumption.
+#define RIPPLE_API_FIXED_VSCALE_STREAMING 4
+// There is no macro for streaming SVE bits, unlike __ARM_FEATURE_SVE_BITS for
+// non-streaming.
+#define SSVE_BYTES (512 /* bits */ / 8)
+#define VEC_ELEMS_I8 (SSVE_BYTES / sizeof(int8_t))
+#define VEC_ELEMS_I32 (SSVE_BYTES / sizeof(int32_t))
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// WLANES represents number of 32-bit lanes (4 * vscale).
-#define RIPPLE_API_FIXED_WLANES 16
-
 // Verify if Ripple operation fixed vscale is same as runtime vscale.
 static inline bool verify_ripple_sme_api_fixed_vscale(void) {
-  return svcntw() == RIPPLE_API_FIXED_WLANES;
+  const uint64_t NeonBytes = 16;
+  return svcntsb() == (NeonBytes * RIPPLE_API_FIXED_VSCALE_STREAMING);
 }
 
-// Clear ZA and set up bias value.
+///////////////  Scalar function declarations  //////////////
+
+/// Zero all SME tiles. Dummy return value.
+int32_t zeroAccumulator_i32(ripple_block_t) __arm_streaming __arm_out("za");
+/// Zero all SME tiles. Dummy return value.
+float zeroAccumulator_f32(ripple_block_t) __arm_streaming __arm_out("za");
+
+/// Add a vector to all rows in the SME tiles.
+void addHorizToAccumulator_i32(int32_t Data) __arm_streaming __arm_inout("za");
+
+/// Get horizontal slice (2 vectors) from the SME tile.
+/// +-----+-----+
+/// | za0 | za1 |
+/// +-----+-----+
+/// | za2 | za3 |
+/// +-----+-----+
+/// getAccumHorizSlice(slice=x) returns {za0.s[x], za1.s[x]}
+/// or if x >= VEC_ELEMS_I32 {za2.s[x], za3.s[x]}
+/// Slice should be <= VEC_ELEMS_I32.
+int32_t getAccumHorizSlice_i32(ripple_block_t,
+                               uint32_t Slice) __arm_streaming __arm_in("za");
+
+/// Get horizontal slice (2 vectors) from the SME tile.
+/// +-----+-----+
+/// | za0 | za1 |
+/// +-----+-----+
+/// | za2 | za3 |
+/// +-----+-----+
+/// getAccumHorizSlice(slice=x) returns {za0.s[x], za1.s[x]}
+/// or if x >= VEC_ELEMS_I32 {za2.s[x], za3.s[x]}
+/// Slice should be <= VEC_ELEMS_I32.
+float getAccumHorizSlice_f32(ripple_block_t,
+                             uint32_t Slice) __arm_streaming __arm_in("za");
+
+/// Outer Product Accumulate. 4-way I8->I32 signed.
+void outerProductAccumulate_i8(int8_t LHS,
+                               int8_t RHS) __arm_streaming __arm_inout("za");
+/// Outer Product Accumulate. F32->F32.
+void outerProductAccumulate_f32(float LHS,
+                                float RHS) __arm_streaming __arm_inout("za");
+
+///////////////  Types for internal use  //////////////
+// Vector types.
+typedef int8_t NEON_SSVL_I8_VT __attribute__((__vector_size__(SSVE_BYTES)));
+typedef int8_t NEON_SSVL_I8_VT_x2
+    __attribute__((__vector_size__(SSVE_BYTES * 2)));
+typedef int32_t NEON_SSVL_I32_VT __attribute__((__vector_size__(SSVE_BYTES)));
+typedef int32_t NEON_SSVL_I32_VT_x2
+    __attribute__((__vector_size__(SSVE_BYTES * 2)));
+typedef float NEON_SSVL_F32_VT __attribute__((__vector_size__(SSVE_BYTES)));
+typedef float NEON_SSVL_F32_VT_x2
+    __attribute__((__vector_size__(SSVE_BYTES * 2)));
+
+// Matrix/2d vector types.
+typedef int32_t NEON_SSVL_MT_I32
+    __attribute__((__vector_size__(SSVE_BYTES * VEC_ELEMS_I32)));
+typedef int32_t NEON_SSVL_MT_I32_x4
+    __attribute__((__vector_size__(SSVE_BYTES * 2 * VEC_ELEMS_I32 * 2)));
+typedef float NEON_SSVL_MT_F32
+    __attribute__((__vector_size__(SSVE_BYTES * VEC_ELEMS_I32)));
+typedef float NEON_SSVL_MT_F32_x4
+    __attribute__((__vector_size__(SSVE_BYTES * 2 * VEC_ELEMS_I32 * 2)));
+
+union DoubleVector {
+  NEON_SSVL_I8_VT_x2 I8Vector;
+  NEON_SSVL_I32_VT_x2 I32Vector;
+  NEON_SSVL_F32_VT_x2 F32Vector;
+  NEON_SSVL_I8_VT I8Vectors[2];
+  NEON_SSVL_I32_VT I32Vectors[2];
+  NEON_SSVL_F32_VT F32Vectors[2];
+};
+typedef union DoubleVector DoubleVector;
+
+///////////////  SME library functions. Vector Implementation.  //////////////
+
+/// Zero the tiles. Dummy return value.
+RIPPLE_SME_CANDIDATE_INLINE NEON_SSVL_MT_I32_x4
+ripple_ret_t32x32i32_zeroAccumulator_i32(void) __arm_streaming __arm_out("za") {
+  svzero_za();
+  return (NEON_SSVL_MT_I32_x4){0};
+}
+
+/// Zero the tiles. Dummy return value.
+RIPPLE_SME_CANDIDATE_INLINE NEON_SSVL_MT_F32_x4
+ripple_ret_t32x32f32_zeroAccumulator_f32(void) __arm_streaming __arm_out("za") {
+  svzero_za();
+  return (NEON_SSVL_MT_F32_x4){0.0f};
+}
+
+/// Add two I32 vectors to horizontally to all rows in the SME tiles.
+RIPPLE_SME_CANDIDATE_INLINE void ripple_arg0_t32i32_addHorizToAccumulator_i32(
+    NEON_SSVL_I32_VT_x2 X) __arm_streaming __arm_inout("za") {
+  svbool_t PTrue = svptrue_b8();
+  NEON_SSVL_I32_VT X_lo = (DoubleVector){X}.I32Vectors[0];
+  NEON_SSVL_I32_VT X_hi = (DoubleVector){X}.I32Vectors[1];
+  svaddha_za32_s32_m(0, PTrue, PTrue, X_lo);
+  svaddha_za32_s32_m(1, PTrue, PTrue, X_hi);
+  svaddha_za32_s32_m(2, PTrue, PTrue, X_lo);
+  svaddha_za32_s32_m(3, PTrue, PTrue, X_hi);
+}
+
+/// Outer Product Accumulate. 4-way I8->I32 signed.
 RIPPLE_SME_CANDIDATE_INLINE void
-ripple_fx_t32x32_sme_clearacc(void) __arm_streaming __arm_out("za") {
-  svzero_za();
+ripple_ew_arg0_t128i8_arg1_t128i8_outerProductAccumulate_i8(
+    NEON_SSVL_I8_VT_x2 X,
+    NEON_SSVL_I8_VT_x2 Y) __arm_streaming __arm_inout("za") {
+  svbool_t PTrue = svptrue_b8();
+  NEON_SSVL_I8_VT LHS_lo = (DoubleVector){X}.I8Vectors[0];
+  NEON_SSVL_I8_VT LHS_hi = (DoubleVector){X}.I8Vectors[1];
+
+  NEON_SSVL_I8_VT RHS_lo = (DoubleVector){Y}.I8Vectors[0];
+  NEON_SSVL_I8_VT RHS_hi = (DoubleVector){Y}.I8Vectors[1];
+
+  svmopa_za32_m(0, PTrue, PTrue, LHS_lo, RHS_lo);
+  svmopa_za32_m(1, PTrue, PTrue, LHS_lo, RHS_hi);
+  svmopa_za32_m(2, PTrue, PTrue, LHS_hi, RHS_lo);
+  svmopa_za32_m(3, PTrue, PTrue, LHS_hi, RHS_hi);
 }
 
-RIPPLE_SME_CANDIDATE_INLINE void ripple_fx_t32x32_sme_clearacc_set_bias_i32(
-    const int32_t *bias) __arm_streaming __arm_out("za") {
-  svzero_za();
+/// Outer Product Accumulate. F32.
+RIPPLE_SME_CANDIDATE_INLINE void
+ripple_ew_arg0_t32f32_arg1_t32f32_outerProductAccumulate_f32(
+    NEON_SSVL_F32_VT_x2 X,
+    NEON_SSVL_F32_VT_x2 Y) __arm_streaming __arm_inout("za") {
+  svbool_t PTrue = svptrue_b32();
+  NEON_SSVL_F32_VT LHS_lo = (DoubleVector){X}.F32Vectors[0];
+  NEON_SSVL_F32_VT LHS_hi = (DoubleVector){X}.F32Vectors[1];
 
-  svint32_t Bias0 = svld1_s32(svptrue_b32(), bias);
-  svint32_t Bias1 = svld1_s32(svptrue_b32(), bias + svcntw());
+  NEON_SSVL_F32_VT RHS_lo = (DoubleVector){Y}.F32Vectors[0];
+  NEON_SSVL_F32_VT RHS_hi = (DoubleVector){Y}.F32Vectors[1];
 
-  // Per-column bias, add to each horizontal tile slices of ZA tiles 0..3.
-  svaddha_za32_s32_m(0, svptrue_b32(), svptrue_b32(), Bias0);
-  svaddha_za32_s32_m(1, svptrue_b32(), svptrue_b32(), Bias1);
-  svaddha_za32_s32_m(2, svptrue_b32(), svptrue_b32(), Bias0);
-  svaddha_za32_s32_m(3, svptrue_b32(), svptrue_b32(), Bias1);
+  svmopa_za32_m(0, PTrue, PTrue, LHS_lo, RHS_lo);
+  svmopa_za32_m(1, PTrue, PTrue, LHS_lo, RHS_hi);
+  svmopa_za32_m(2, PTrue, PTrue, LHS_hi, RHS_lo);
+  svmopa_za32_m(3, PTrue, PTrue, LHS_hi, RHS_hi);
 }
 
-RIPPLE_SME_CANDIDATE_INLINE void ripple_fx_t32x32_sme_clearacc_set_bias_f32(
-    const float *bias) __arm_streaming __arm_out("za") {
-  svzero_za();
+/// Get horizontal slice (2 vectors) from the SME tile.
+/// There are 4 tiles for 32-bit data type, and just one for 8bit.
+/// Tile has to be accessed using a constant integer name (za0, za1...) and a
+/// variable slice number. The tiles are visually abstracted to something like
+/// this: For 8bit:
+/// +-----+-----+
+/// |           |
+/// +    za0    +
+/// |           |
+/// +-----+-----+
+/// For 32bit:
+/// +-----+-----+
+/// | za0 | za1 |
+/// +-----+-----+
+/// | za2 | za3 |
+/// +-----+-----+
+/// We want the function(slice=x) to return {za0.s[x], za1.s[x]}
+/// or if x >= VEC_ELEMS_I32 {za2.s[x], za3.s[x]}
+/// Slice should be <= VEC_ELEMS_I32 or it'll an out of bounds access.
+///
+/// In reality data is interleaved, and we can just read from za0.b and
+/// reinterpret to 32bit, for 32bit data (.s) the layout is:
+/// za0.s[0]  ==  za0.b[0]
+/// za1.s[0]  ==  za0.b[1]
+/// za2.s[0]  ==  za0.b[2]
+/// za3.s[0]  ==  za0.b[3]
+/// za0.s[1]  ==  za0.b[4]
+/// za1.s[1]  ==  za0.b[5]
+/// za2.s[1]  ==  za0.b[6]
+/// za3.s[1]  ==  za0.b[7]
+RIPPLE_SME_CANDIDATE_INLINE NEON_SSVL_I32_VT_x2
+ripple_pure_ret_t32i32_getAccumHorizSlice_i32(
+    uint32_t Slice) __arm_streaming __arm_in("za") {
+  uint32_t ByteTileIdx = (Slice % VEC_ELEMS_I32) * 4;
+  // For za2 and za3 slice is >= VEC_ELEMS_I32, so effectively add 2.
+  ByteTileIdx += (Slice / VEC_ELEMS_I32) * 2;
 
-  svfloat32_t bias0 = svld1_f32(svptrue_b32(), bias);
-  svfloat32_t bias1 = svld1_f32(svptrue_b32(), bias + svcntw());
-
-  // Broadcast 1.0f.
-  svfloat32_t one = svdup_f32(1.0f);
-
-  // Apply outer product to ZA tiles 0..3.
-  svmopa_za32_m(0, svptrue_b32(), svptrue_b32(), one, bias0);
-  svmopa_za32_m(1, svptrue_b32(), svptrue_b32(), one, bias1);
-  svmopa_za32_m(2, svptrue_b32(), svptrue_b32(), one, bias0);
-  svmopa_za32_m(3, svptrue_b32(), svptrue_b32(), one, bias1);
+  svbool_t PTrue = svptrue_b8();
+  DoubleVector DoubleVec;
+  DoubleVec.I32Vectors[0] = svreinterpret_s32_s8(
+      svread_hor_za8_m(svdup_s8(0), PTrue, 0, ByteTileIdx));
+  DoubleVec.I32Vectors[1] = svreinterpret_s32_s8(
+      svread_hor_za8_m(svdup_s8(0), PTrue, 0, ByteTileIdx + 1));
+  return (NEON_SSVL_I32_VT_x2)DoubleVec.I32Vector;
 }
 
-// Outer product for int8 path, K = 4.
-RIPPLE_SME_CANDIDATE_INLINE void ripple_fx_t32x32_sme_outeracc_k4_i32(
-    const int8_t *A, const int8_t *B) __arm_streaming __arm_inout("za") {
-  svint8_t A0 = svld1_s8(svptrue_b8(), A);
-  svint8_t A1 = svld1_s8(svptrue_b8(), A + svcntb());
-  svint8_t B0 = svld1_s8(svptrue_b8(), B);
-  svint8_t B1 = svld1_s8(svptrue_b8(), B + svcntb());
+/// Get horizontal slice (2 vectors) from the SME tile.
+RIPPLE_SME_CANDIDATE_INLINE NEON_SSVL_F32_VT_x2
+ripple_pure_ret_t32f32_getAccumHorizSlice_f32(
+    uint32_t Slice) __arm_streaming __arm_in("za") {
+  uint32_t ByteTileIdx = (Slice % VEC_ELEMS_I32) * 4;
+  // For za2 and za3 slice is >= VEC_ELEMS_I32, so effectively add 2.
+  ByteTileIdx += (Slice / VEC_ELEMS_I32) * 2;
 
-  // Multiply and accumulate int8_t into ZA tiles (32-bit accumulators).
-  svmopa_za32_m(0, svptrue_b8(), svptrue_b8(), A0, B0);
-  svmopa_za32_m(1, svptrue_b8(), svptrue_b8(), A0, B1);
-  svmopa_za32_m(2, svptrue_b8(), svptrue_b8(), A1, B0);
-  svmopa_za32_m(3, svptrue_b8(), svptrue_b8(), A1, B1);
-}
-
-// Outer product for int8 path, K = 16 unrolled.
-RIPPLE_SME_CANDIDATE_INLINE void ripple_fx_t32x32_sme_outeracc_k16_unr_i32(
-    const int8_t *A, const int8_t *B) __arm_streaming __arm_inout("za") {
-  svint8_t A0 = svld1_s8(svptrue_b8(), A);
-  svint8_t A1 = svld1_s8(svptrue_b8(), A + svcntb());
-  svint8_t A2 = svld1_s8(svptrue_b8(), A + 2 * svcntb());
-  svint8_t A3 = svld1_s8(svptrue_b8(), A + 3 * svcntb());
-  svint8_t A4 = svld1_s8(svptrue_b8(), A + 4 * svcntb());
-  svint8_t A5 = svld1_s8(svptrue_b8(), A + 5 * svcntb());
-  svint8_t A6 = svld1_s8(svptrue_b8(), A + 6 * svcntb());
-  svint8_t A7 = svld1_s8(svptrue_b8(), A + 7 * svcntb());
-  svint8_t B0 = svld1_s8(svptrue_b8(), B);
-  svint8_t B1 = svld1_s8(svptrue_b8(), B + svcntb());
-  svint8_t B2 = svld1_s8(svptrue_b8(), B + 2 * svcntb());
-  svint8_t B3 = svld1_s8(svptrue_b8(), B + 3 * svcntb());
-  svint8_t B4 = svld1_s8(svptrue_b8(), B + 4 * svcntb());
-  svint8_t B5 = svld1_s8(svptrue_b8(), B + 5 * svcntb());
-  svint8_t B6 = svld1_s8(svptrue_b8(), B + 6 * svcntb());
-  svint8_t B7 = svld1_s8(svptrue_b8(), B + 7 * svcntb());
-
-  // Multiply and accumulate int8_t into ZA tile slices (32-bit accumulators).
-  svmopa_za32_m(0, svptrue_b8(), svptrue_b8(), A0, B0);
-  svmopa_za32_m(1, svptrue_b8(), svptrue_b8(), A0, B1);
-  svmopa_za32_m(2, svptrue_b8(), svptrue_b8(), A1, B0);
-  svmopa_za32_m(3, svptrue_b8(), svptrue_b8(), A1, B1);
-  svmopa_za32_m(0, svptrue_b8(), svptrue_b8(), A2, B2);
-  svmopa_za32_m(1, svptrue_b8(), svptrue_b8(), A2, B3);
-  svmopa_za32_m(2, svptrue_b8(), svptrue_b8(), A3, B2);
-  svmopa_za32_m(3, svptrue_b8(), svptrue_b8(), A3, B3);
-  svmopa_za32_m(0, svptrue_b8(), svptrue_b8(), A4, B4);
-  svmopa_za32_m(1, svptrue_b8(), svptrue_b8(), A4, B5);
-  svmopa_za32_m(2, svptrue_b8(), svptrue_b8(), A5, B4);
-  svmopa_za32_m(3, svptrue_b8(), svptrue_b8(), A5, B5);
-  svmopa_za32_m(0, svptrue_b8(), svptrue_b8(), A6, B6);
-  svmopa_za32_m(1, svptrue_b8(), svptrue_b8(), A6, B7);
-  svmopa_za32_m(2, svptrue_b8(), svptrue_b8(), A7, B6);
-  svmopa_za32_m(3, svptrue_b8(), svptrue_b8(), A7, B7);
-}
-
-// Outer product for fp32 path.
-RIPPLE_SME_CANDIDATE_INLINE void ripple_fx_t32x32_sme_outeracc_f32(
-    const float *A, const float *B) __arm_streaming __arm_inout("za") {
-  svfloat32_t A0 = svld1_f32(svptrue_b32(), A);
-  svfloat32_t A1 = svld1_f32(svptrue_b32(), A + svcntw());
-  svfloat32_t B0 = svld1_f32(svptrue_b32(), B);
-  svfloat32_t B1 = svld1_f32(svptrue_b32(), B + svcntw());
-
-  // Multiply and accumulate float into ZA tile slices (32-bit accumulators).
-  svmopa_za32_m(0, svptrue_b32(), svptrue_b32(), A0, B0);
-  svmopa_za32_m(1, svptrue_b32(), svptrue_b32(), A0, B1);
-  svmopa_za32_m(2, svptrue_b32(), svptrue_b32(), A1, B0);
-  svmopa_za32_m(3, svptrue_b32(), svptrue_b32(), A1, B1);
-}
-
-// Read int8 data(clamped, re-quantized) from ZA accumulator to memory.
-RIPPLE_SME_CANDIDATE_INLINE void ripple_fx_t32x32_sme_readacc_w_clamp_i8(
-    int8_t *tile_base, const float *scale, size_t row_stride, int clamp_min,
-    int clamp_max, int zero_point) __arm_streaming __arm_in("za") {
-  // Loading scale into two scalable vectors.
-  svfloat32_t scale0 = svld1_f32(svptrue_b32(), scale);
-  svfloat32_t scale1 = svld1_f32(svptrue_b32(), scale + svcntw());
-  svint32_t min = svdup_s32(clamp_min);
-  svint32_t max = svdup_s32(clamp_max);
-  svint32_t zp = svdup_s32(zero_point);
-  enum { UnrollFactor = 4 };
-
-  for (uint64_t slice = 0; slice < svcntw(); slice += UnrollFactor) {
-    svint32_t t00 = svread_hor_za32_m(svundef_s32(), svptrue_b32(), 0, slice);
-    svint32_t t10 = svread_hor_za32_m(svundef_s32(), svptrue_b32(), 1, slice);
-    svint32_t t01 =
-        svread_hor_za32_m(svundef_s32(), svptrue_b32(), 0, slice + 1);
-    svint32_t t11 =
-        svread_hor_za32_m(svundef_s32(), svptrue_b32(), 1, slice + 1);
-    svint32_t t02 =
-        svread_hor_za32_m(svundef_s32(), svptrue_b32(), 0, slice + 2);
-    svint32_t t12 =
-        svread_hor_za32_m(svundef_s32(), svptrue_b32(), 1, slice + 2);
-    svint32_t t03 =
-        svread_hor_za32_m(svundef_s32(), svptrue_b32(), 0, slice + 3);
-    svint32_t t13 =
-        svread_hor_za32_m(svundef_s32(), svptrue_b32(), 1, slice + 3);
-
-    // scvtf (int32 -> fp32).
-    svfloat32_t f00 = svcvt_f32_s32_x(svptrue_b32(), t00);
-    svfloat32_t f10 = svcvt_f32_s32_x(svptrue_b32(), t10);
-    svfloat32_t f01 = svcvt_f32_s32_x(svptrue_b32(), t01);
-    svfloat32_t f11 = svcvt_f32_s32_x(svptrue_b32(), t11);
-    svfloat32_t f02 = svcvt_f32_s32_x(svptrue_b32(), t02);
-    svfloat32_t f12 = svcvt_f32_s32_x(svptrue_b32(), t12);
-    svfloat32_t f03 = svcvt_f32_s32_x(svptrue_b32(), t03);
-    svfloat32_t f13 = svcvt_f32_s32_x(svptrue_b32(), t13);
-
-    // Apply per-column scale.
-    svfloat32_t fmul00 = svmul_f32_x(svptrue_b32(), f00, scale0);
-    svfloat32_t fmul10 = svmul_f32_x(svptrue_b32(), f10, scale1);
-    svfloat32_t fmul01 = svmul_f32_x(svptrue_b32(), f01, scale0);
-    svfloat32_t fmul11 = svmul_f32_x(svptrue_b32(), f11, scale1);
-    svfloat32_t fmul02 = svmul_f32_x(svptrue_b32(), f02, scale0);
-    svfloat32_t fmul12 = svmul_f32_x(svptrue_b32(), f12, scale1);
-    svfloat32_t fmul03 = svmul_f32_x(svptrue_b32(), f03, scale0);
-    svfloat32_t fmul13 = svmul_f32_x(svptrue_b32(), f13, scale1);
-
-    // frintn (round to nearest int, ties to even), then fcvtzs (fp32->s32).
-    svint32_t s00 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul00));
-    svint32_t s10 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul10));
-    svint32_t s01 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul01));
-    svint32_t s11 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul11));
-    svint32_t s02 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul02));
-    svint32_t s12 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul12));
-    svint32_t s03 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul03));
-    svint32_t s13 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul13));
-
-    // Add zero point.
-    svint32_t zp00 = svadd_s32_x(svptrue_b32(), s00, zp);
-    svint32_t zp10 = svadd_s32_x(svptrue_b32(), s10, zp);
-    svint32_t zp01 = svadd_s32_x(svptrue_b32(), s01, zp);
-    svint32_t zp11 = svadd_s32_x(svptrue_b32(), s11, zp);
-    svint32_t zp02 = svadd_s32_x(svptrue_b32(), s02, zp);
-    svint32_t zp12 = svadd_s32_x(svptrue_b32(), s12, zp);
-    svint32_t zp03 = svadd_s32_x(svptrue_b32(), s03, zp);
-    svint32_t zp13 = svadd_s32_x(svptrue_b32(), s13, zp);
-
-    // Clamp.
-    svint32_t v00 = svmin_s32_x(svptrue_b32(), zp00, max);
-    v00 = svmax_s32_x(svptrue_b32(), v00, min);
-    svint32_t v10 = svmin_s32_x(svptrue_b32(), zp10, max);
-    v10 = svmax_s32_x(svptrue_b32(), v10, min);
-    svint32_t v01 = svmin_s32_x(svptrue_b32(), zp01, max);
-    v01 = svmax_s32_x(svptrue_b32(), v01, min);
-    svint32_t v11 = svmin_s32_x(svptrue_b32(), zp11, max);
-    v11 = svmax_s32_x(svptrue_b32(), v11, min);
-    svint32_t v02 = svmin_s32_x(svptrue_b32(), zp02, max);
-    v02 = svmax_s32_x(svptrue_b32(), v02, min);
-    svint32_t v12 = svmin_s32_x(svptrue_b32(), zp12, max);
-    v12 = svmax_s32_x(svptrue_b32(), v12, min);
-    svint32_t v03 = svmin_s32_x(svptrue_b32(), zp03, max);
-    v03 = svmax_s32_x(svptrue_b32(), v03, min);
-    svint32_t v13 = svmin_s32_x(svptrue_b32(), zp13, max);
-    v13 = svmax_s32_x(svptrue_b32(), v13, min);
-
-    // Reinterpret s32 -> s16, then uzp1 to interleave low halfwords.
-    svint16_t h0 =
-        svuzp1_s16(svreinterpret_s16_s32(v00), svreinterpret_s16_s32(v10));
-    svint16_t h1 =
-        svuzp1_s16(svreinterpret_s16_s32(v01), svreinterpret_s16_s32(v11));
-    svint16_t h2 =
-        svuzp1_s16(svreinterpret_s16_s32(v02), svreinterpret_s16_s32(v12));
-    svint16_t h3 =
-        svuzp1_s16(svreinterpret_s16_s32(v03), svreinterpret_s16_s32(v13));
-
-    int8_t *addr0 = tile_base + slice * row_stride;
-    // Truncating stores of low 8 bits.
-    svst1b_s16(svptrue_b8(), addr0, h0);
-    svst1b_s16(svptrue_b8(), addr0 + row_stride, h1);
-    svst1b_s16(svptrue_b8(), addr0 + 2 * row_stride, h2);
-    svst1b_s16(svptrue_b8(), addr0 + 3 * row_stride, h3);
-  }
-
-  uint64_t tile2_offset = svcntw() * row_stride;
-  for (uint64_t slice = 0; slice < svcntw(); slice += UnrollFactor) {
-    svint32_t r20 = svread_hor_za32_m(svundef_s32(), svptrue_b32(), 2, slice);
-    svint32_t r30 = svread_hor_za32_m(svundef_s32(), svptrue_b32(), 3, slice);
-    svint32_t r21 =
-        svread_hor_za32_m(svundef_s32(), svptrue_b32(), 2, slice + 1);
-    svint32_t r31 =
-        svread_hor_za32_m(svundef_s32(), svptrue_b32(), 3, slice + 1);
-    svint32_t r22 =
-        svread_hor_za32_m(svundef_s32(), svptrue_b32(), 2, slice + 2);
-    svint32_t r32 =
-        svread_hor_za32_m(svundef_s32(), svptrue_b32(), 3, slice + 2);
-    svint32_t r23 =
-        svread_hor_za32_m(svundef_s32(), svptrue_b32(), 2, slice + 3);
-    svint32_t r33 =
-        svread_hor_za32_m(svundef_s32(), svptrue_b32(), 3, slice + 3);
-
-    // scvtf (int32 -> fp32).
-    svfloat32_t f20 = svcvt_f32_s32_x(svptrue_b32(), r20);
-    svfloat32_t f30 = svcvt_f32_s32_x(svptrue_b32(), r30);
-    svfloat32_t f21 = svcvt_f32_s32_x(svptrue_b32(), r21);
-    svfloat32_t f31 = svcvt_f32_s32_x(svptrue_b32(), r31);
-    svfloat32_t f22 = svcvt_f32_s32_x(svptrue_b32(), r22);
-    svfloat32_t f32 = svcvt_f32_s32_x(svptrue_b32(), r32);
-    svfloat32_t f23 = svcvt_f32_s32_x(svptrue_b32(), r23);
-    svfloat32_t f33 = svcvt_f32_s32_x(svptrue_b32(), r33);
-
-    // Apply per-column scale.
-    svfloat32_t fmul20 = svmul_f32_x(svptrue_b32(), f20, scale0);
-    svfloat32_t fmul30 = svmul_f32_x(svptrue_b32(), f30, scale1);
-    svfloat32_t fmul21 = svmul_f32_x(svptrue_b32(), f21, scale0);
-    svfloat32_t fmul31 = svmul_f32_x(svptrue_b32(), f31, scale1);
-    svfloat32_t fmul22 = svmul_f32_x(svptrue_b32(), f22, scale0);
-    svfloat32_t fmul32 = svmul_f32_x(svptrue_b32(), f32, scale1);
-    svfloat32_t fmul23 = svmul_f32_x(svptrue_b32(), f23, scale0);
-    svfloat32_t fmul33 = svmul_f32_x(svptrue_b32(), f33, scale1);
-
-    // frintn (round to nearest int, ties to even), then fcvtzs (fp32->s32).
-    svint32_t s20 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul20));
-    svint32_t s30 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul30));
-    svint32_t s21 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul21));
-    svint32_t s31 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul31));
-    svint32_t s22 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul22));
-    svint32_t s32 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul32));
-    svint32_t s23 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul23));
-    svint32_t s33 =
-        svcvt_s32_x(svptrue_b32(), svrintn_f32_x(svptrue_b32(), fmul33));
-
-    // Add zero point.
-    svint32_t zp20 = svadd_s32_x(svptrue_b32(), s20, zp);
-    svint32_t zp30 = svadd_s32_x(svptrue_b32(), s30, zp);
-    svint32_t zp21 = svadd_s32_x(svptrue_b32(), s21, zp);
-    svint32_t zp31 = svadd_s32_x(svptrue_b32(), s31, zp);
-    svint32_t zp22 = svadd_s32_x(svptrue_b32(), s22, zp);
-    svint32_t zp32 = svadd_s32_x(svptrue_b32(), s32, zp);
-    svint32_t zp23 = svadd_s32_x(svptrue_b32(), s23, zp);
-    svint32_t zp33 = svadd_s32_x(svptrue_b32(), s33, zp);
-
-    // Clamp.
-    svint32_t v20 = svmin_s32_x(svptrue_b32(), zp20, max);
-    v20 = svmax_s32_x(svptrue_b32(), v20, min);
-    svint32_t v30 = svmin_s32_x(svptrue_b32(), zp30, max);
-    v30 = svmax_s32_x(svptrue_b32(), v30, min);
-    svint32_t v21 = svmin_s32_x(svptrue_b32(), zp21, max);
-    v21 = svmax_s32_x(svptrue_b32(), v21, min);
-    svint32_t v31 = svmin_s32_x(svptrue_b32(), zp31, max);
-    v31 = svmax_s32_x(svptrue_b32(), v31, min);
-    svint32_t v22 = svmin_s32_x(svptrue_b32(), zp22, max);
-    v22 = svmax_s32_x(svptrue_b32(), v22, min);
-    svint32_t v32 = svmin_s32_x(svptrue_b32(), zp32, max);
-    v32 = svmax_s32_x(svptrue_b32(), v32, min);
-    svint32_t v23 = svmin_s32_x(svptrue_b32(), zp23, max);
-    v23 = svmax_s32_x(svptrue_b32(), v23, min);
-    svint32_t v33 = svmin_s32_x(svptrue_b32(), zp33, max);
-    v33 = svmax_s32_x(svptrue_b32(), v33, min);
-
-    // Reinterpret s32 -> s16, then uzp1 to interleave low halfwords.
-    svint16_t h0 =
-        svuzp1_s16(svreinterpret_s16_s32(v20), svreinterpret_s16_s32(v30));
-    svint16_t h1 =
-        svuzp1_s16(svreinterpret_s16_s32(v21), svreinterpret_s16_s32(v31));
-    svint16_t h2 =
-        svuzp1_s16(svreinterpret_s16_s32(v22), svreinterpret_s16_s32(v32));
-    svint16_t h3 =
-        svuzp1_s16(svreinterpret_s16_s32(v23), svreinterpret_s16_s32(v33));
-
-    int8_t *addr2 = tile_base + slice * row_stride + tile2_offset;
-    // Truncating stores of low 8 bits.
-    svst1b_s16(svptrue_b8(), addr2, h0);
-    svst1b_s16(svptrue_b8(), addr2 + row_stride, h1);
-    svst1b_s16(svptrue_b8(), addr2 + 2 * row_stride, h2);
-    svst1b_s16(svptrue_b8(), addr2 + 3 * row_stride, h3);
-  }
-}
-
-// Read fp32 data from ZA accumulator to memory.
-RIPPLE_SME_CANDIDATE_INLINE void ripple_fx_t32x32_sme_readacc_f32(
-    float *tile_base, size_t row_stride) __arm_streaming __arm_in("za") {
-  uint64_t tile2_offset = svcntw() * row_stride;
-
-  for (uint64_t slice = 0; slice < svcntw(); ++slice) {
-    // Read horizontal slices from ZA tiles.
-    svfloat32_t r0 = svread_hor_za32_m(svundef_f32(), svptrue_b32(), 0, slice);
-    svfloat32_t r1 = svread_hor_za32_m(svundef_f32(), svptrue_b32(), 1, slice);
-    svfloat32_t r2 = svread_hor_za32_m(svundef_f32(), svptrue_b32(), 2, slice);
-    svfloat32_t r3 = svread_hor_za32_m(svundef_f32(), svptrue_b32(), 3, slice);
-
-    // Compute memory addresses.
-    uint64_t slice_offset = slice * row_stride;
-    float *addr0 = tile_base + slice_offset;
-    float *addr1 = addr0 + svcntw();
-    float *addr2 = addr0 + tile2_offset;
-    float *addr3 = addr2 + svcntw();
-
-    // Store vector slices.
-    svst1_f32(svptrue_b32(), addr0, r0);
-    svst1_f32(svptrue_b32(), addr1, r1);
-    svst1_f32(svptrue_b32(), addr2, r2);
-    svst1_f32(svptrue_b32(), addr3, r3);
-  }
-}
-
-// Read fp32 data(clamped) from ZA accumulator to memory.
-RIPPLE_SME_CANDIDATE_INLINE void ripple_fx_t32x32_sme_readacc_w_clamp_f32(
-    float *tile_base, size_t row_stride, float clamp_min,
-    float clamp_max) __arm_streaming __arm_in("za") {
-  svfloat32_t vmin = svdup_f32(clamp_min);
-  svfloat32_t vmax = svdup_f32(clamp_max);
-  uint64_t tile2_offset = svcntw() * row_stride;
-
-  for (uint64_t slice = 0; slice < svcntw(); ++slice) {
-    // Read horizontal slices from ZA tiles.
-    svfloat32_t r0 = svread_hor_za32_m(svundef_f32(), svptrue_b32(), 0, slice);
-    svfloat32_t r1 = svread_hor_za32_m(svundef_f32(), svptrue_b32(), 1, slice);
-    svfloat32_t r2 = svread_hor_za32_m(svundef_f32(), svptrue_b32(), 2, slice);
-    svfloat32_t r3 = svread_hor_za32_m(svundef_f32(), svptrue_b32(), 3, slice);
-
-    // Clamp each slice.
-    r0 = svmax_f32_z(svptrue_b32(), svmin_f32_z(svptrue_b32(), r0, vmax), vmin);
-    r1 = svmax_f32_z(svptrue_b32(), svmin_f32_z(svptrue_b32(), r1, vmax), vmin);
-    r2 = svmax_f32_z(svptrue_b32(), svmin_f32_z(svptrue_b32(), r2, vmax), vmin);
-    r3 = svmax_f32_z(svptrue_b32(), svmin_f32_z(svptrue_b32(), r3, vmax), vmin);
-
-    // Compute memory addresses.
-    uint64_t slice_offset = slice * row_stride;
-    float *addr0 = tile_base + slice_offset;
-    float *addr1 = addr0 + svcntw();
-    float *addr2 = addr0 + tile2_offset;
-    float *addr3 = addr2 + svcntw();
-
-    // Store clamped vector slices.
-    svst1_f32(svptrue_b32(), addr0, r0);
-    svst1_f32(svptrue_b32(), addr1, r1);
-    svst1_f32(svptrue_b32(), addr2, r2);
-    svst1_f32(svptrue_b32(), addr3, r3);
-  }
+  svbool_t PTrue = svptrue_b8();
+  DoubleVector DoubleVec;
+  DoubleVec.F32Vectors[0] = svreinterpret_f32_s8(
+      svread_hor_za8_m(svdup_s8(0), PTrue, 0, ByteTileIdx));
+  DoubleVec.F32Vectors[1] = svreinterpret_f32_s8(
+      svread_hor_za8_m(svdup_s8(0), PTrue, 0, ByteTileIdx + 1));
+  return (NEON_SSVL_F32_VT_x2)DoubleVec.F32Vector;
 }
 
 #ifdef __cplusplus
@@ -429,4 +247,8 @@ RIPPLE_SME_CANDIDATE_INLINE void ripple_fx_t32x32_sme_readacc_w_clamp_f32(
 #endif
 
 #undef RIPPLE_SME_CANDIDATE_INLINE
-#undef RIPPLE_API_FIXED_WLANES
+#undef UTIL_FUNC_ATTR
+#undef RIPPLE_API_FIXED_VSCALE_STREAMING
+#undef SSVE_BYTES
+#undef VEC_ELEMS_I8
+#undef VEC_ELEMS_I32
