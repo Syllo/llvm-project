@@ -1,9 +1,9 @@
 ; RUN: split-file %s %t
-; RUN: not opt -passes=ripple -pass-remarks=ripple -pass-remarks-missed=ripple -disable-output %t/native.ll 2>&1 | FileCheck %s --check-prefix=NATIVE --implicit-check-not='LLVM ERROR'
+; RUN: opt -passes=ripple -pass-remarks=ripple -pass-remarks-missed=ripple -disable-output %t/native.ll 2>&1 | FileCheck %s --check-prefix=NATIVE --implicit-check-not='LLVM ERROR'
 ; RUN: opt -passes=ripple -pass-remarks=ripple -verify-each -S %t/noreturn.ll 2>&1 | FileCheck %s --check-prefix=NORETURN
 
-; Remarks must handle native operands even when promotion of the call fails.
-; NATIVE: error: {{.*}}Ripple cannot create a vector type
+; Generic-call lowering retains native vector operands and emits its fallback
+; remark when no vector implementation is available.
 ; NATIVE: call not vectorized: no suitable vector implementation found for 'consume'
 ; NATIVE-SAME: (unchanged, Tensor[4]) -> Tensor[4]
 

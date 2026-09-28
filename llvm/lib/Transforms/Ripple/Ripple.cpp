@@ -4765,7 +4765,7 @@ void Ripple::genVectorInstructions() {
     // Store broadcasted arguments into the buffer
     SmallVector<std::pair<Value *, bool>, 4> ScalarArgOrBuffers;
     for (auto &Arg : Call->args()) {
-      if (getRippleShape(Arg).isScalar()) {
+      if (getTensorUse(Arg).second->isScalar()) {
         // We don't need to broadcast
         ScalarArgOrBuffers.push_back({Arg, /*IsBufferized*/ false});
       } else {
@@ -4934,7 +4934,9 @@ void Ripple::genVectorInstructions() {
     irBuilder.SetInsertPoint(CallBlock->getFirstNonPHIIt());
 
     SmallVector<Value *, 4> ScalarArgs;
-    for (auto &[Arg, IsBufferized] : ScalarArgOrBuffers) {
+    for (auto [CallArg, ScalarArgOrBuffer] :
+         zip_equal(Call->args(), ScalarArgOrBuffers)) {
+      auto &[Arg, IsBufferized] = ScalarArgOrBuffer;
       if (IsBufferized) {
         AllocaInst *Alloca = cast<AllocaInst>(Arg);
         Type *BufferTy = Alloca->getAllocatedType();
@@ -4947,8 +4949,9 @@ void Ripple::genVectorInstructions() {
         setRippleShape(LdPtr, ScalarShape);
         ScalarArgs.push_back(LdPtr);
       } else {
-        if (Arg->getType()->isVectorTy()) {
+        if (getTensorUse(CallArg).second->isVector()) {
           assert(!UseBuffers);
+          assert(Arg->getType()->isVectorTy());
           Value *Extracted = irBuilder.CreateExtractElement(Arg, InductionVar);
           setRippleShape(Extracted, ScalarShape);
           ScalarArgs.push_back(Extracted);
@@ -9200,8 +9203,14 @@ Error Ripple::checkTypeCanBeVectorized(const Instruction *I) {
     Valid = Valid && checkVectorPromotionTypeValidity(I);
 
   // And that the instruction operands can be vectorized (broadcasted)
-  for (auto &U : vectorizableOperands(I))
+  for (auto &U : vectorizableOperands(I)) {
+    // A native vector with scalar Ripple shape is passed unchanged to a call,
+    // even if the call result is a tensor.
+    if (isa<CallInst>(I) && U->getType()->isVectorTy() &&
+        getRippleShape(U.get(), /*ShapePropagation=*/true).isScalar())
+      continue;
     Valid = Valid && checkVectorPromotionTypeValidity(U);
+  }
 
   if (!Valid)
     return createStringError(inconvertibleErrorCode(),
