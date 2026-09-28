@@ -41,15 +41,37 @@ else()
 endif()
 
 set(RIPPLE_RT_HEADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/header)
+set(HEADER_FILE_SRC "${RIPPLE_RT_HEADER_DIR}/ripple_sme_veclib.h")
 
 # Keep standalone configuration of this directory working too.
 if(NOT DEFINED COMPILER_RT_INSTALL_INCLUDE_DIR)
   set(COMPILER_RT_INSTALL_INCLUDE_DIR ${CMAKE_INSTALL_PREFIX}/include)
 endif()
 
+# Copy header to the build tree as well.
+execute_process(
+  COMMAND ${CMAKE_C_COMPILER} -print-resource-dir
+  OUTPUT_VARIABLE BUILD_TREE_RESOURCE_DIR
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(BUILD_TREE_RESOURCE_DIR AND TARGET compiler-rt-headers)
+  set(BUILD_TREE_INCLUDE_DIR "${BUILD_TREE_RESOURCE_DIR}/include")
+  set(HEADER_BUILD_TREE_DEST "${BUILD_TREE_INCLUDE_DIR}/ripple_sme_veclib.h")
+  add_custom_command(
+    OUTPUT ${HEADER_BUILD_TREE_DEST}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${BUILD_TREE_INCLUDE_DIR}
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${HEADER_FILE_SRC} ${HEADER_BUILD_TREE_DEST}
+    DEPENDS ${HEADER_FILE_SRC}
+    COMMENT "Copying Ripple SME header to build-tree"
+    VERBATIM
+  )
+  add_custom_target(RippleLibAArch64 ALL DEPENDS ${HEADER_BUILD_TREE_DEST})
+  add_dependencies(compiler-rt-headers RippleLibAArch64)
+endif()
+
 # Preserve the public <ripple_sme_veclib.h> include spelling.
 install(
-  FILES ${RIPPLE_RT_HEADER_DIR}/ripple_sme_veclib.h
+  FILES ${HEADER_FILE_SRC}
   COMPONENT compiler-rt-headers
   PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
   DESTINATION ${COMPILER_RT_INSTALL_INCLUDE_DIR}
