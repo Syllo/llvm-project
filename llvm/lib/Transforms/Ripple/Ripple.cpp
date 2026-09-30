@@ -2922,7 +2922,12 @@ void Ripple::padToTargetSIMDWidth() {
       if (MustBePadded.find(I) != MustBePadded.end())
         continue; // already marked as padded.
 
-      if (ShapeI.isScalar()) {
+      // Calls may have a scalar Ripple result while consuming vector-shaped
+      // operands, for example a specialization that returns through
+      // ripple.to.fixed.vector. If a padded operand placed such a call on the
+      // worklist, let the call-boundary handling below narrow its arguments.
+      bool IsNonIntrinsicCall = isa<CallInst>(I) && !isa<IntrinsicInst>(I);
+      if (ShapeI.isScalar() && !IsNonIntrinsicCall) {
         if (auto *ExtractElementI = dyn_cast<ExtractElementInst>(I)) {
           auto *VecOperand = ExtractElementI->getVectorOperand();
           auto PaddedLength = GetPaddedLength(VecOperand);
@@ -3885,6 +3890,14 @@ void Ripple::padToTargetSIMDWidth() {
       // Re-expand a non-legal vector result for uses in this padded function.
       // The call itself retains its fixed-width ABI result.
       if (auto *RetVType = dyn_cast<FixedVectorType>(CallI->getType())) {
+        // A scalar-shaped vector result is native and therefore remains at the
+        // call's fixed-width ABI. Only tensor-shaped results are widened for
+        // padded users.
+        if (getRippleShape(CallI).isScalar()) {
+          CallI->replaceAllUsesWith(NewCallI);
+          InstructionsToRemove.push_back(CallI);
+          continue;
+        }
         unsigned OriginalLength = RetVType->getNumElements();
         unsigned PaddedLength = GetPaddedLength(CallI);
         if (OriginalLength == PaddedLength) {
