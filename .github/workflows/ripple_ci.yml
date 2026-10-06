@@ -115,6 +115,8 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: qualcomm/eld
+          # Track ELD fixes on the branch compatible with this LLVM release.
+          ref: release/23.x
           path: eld
 
       - name: Configure
