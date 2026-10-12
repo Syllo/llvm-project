@@ -30,7 +30,7 @@ jobs:
   build_and_test:
     if: github.repository_owner == 'qualcomm'
     name: Build and Test ripple
-    runs-on: [self-hosted, ubuntu-24.04]
+    runs-on: [self-hosted, ripple-ci]
     strategy:
       fail-fast: false
       matrix:
@@ -47,6 +47,9 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Remove stale build directory
+        run: rm -rf build
 
       - name: Configure
         run: |
@@ -81,6 +84,9 @@ jobs:
           repository: qualcomm/ripple-test-suite
           path: ripple-test-suite
 
+      - name: Remove stale Ripple test-suite build directory
+        run: rm -rf build-ripple-test-suite
+
       - name: Configure Ripple Test Suite
         run: |
           cmake -G Ninja -S ripple-test-suite -B build-ripple-test-suite \
@@ -97,7 +103,7 @@ jobs:
   hexagon_build_and_test:
     if: github.repository_owner == 'qualcomm'
     name: Build and Test ripple
-    runs-on: [self-hosted, ubuntu-24.04]
+    runs-on: [self-hosted, ripple-ci]
     strategy:
       fail-fast: true
       matrix:
@@ -110,6 +116,9 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Remove stale build directory
+        run: rm -rf build
 
       - name: Clone eld
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -175,6 +184,9 @@ jobs:
       - name: Install Ripple Compiler
         run: cmake --install build --prefix ${{ github.workspace }}/install
 
+      - name: Remove stale compiler-rt build directory
+        run: rm -rf build-compiler-rt
+
       - name: Configure compiler-rt
         run: |
           cmake -G Ninja -S compiler-rt -B build-compiler-rt \
@@ -230,6 +242,9 @@ jobs:
         with:
           repository: qualcomm/ripple-test-suite
           path: ripple-test-suite
+
+      - name: Remove stale Ripple test-suite build directory
+        run: rm -rf build-ripple-test-suite
 
       - name: Configure Ripple Test Suite
         run: |
