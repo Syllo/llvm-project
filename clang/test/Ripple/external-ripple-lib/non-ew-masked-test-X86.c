@@ -4,6 +4,9 @@
 #include "external_library.h"
 #include "../ripple_test.h"
 
+extern RIPPLE_VECTOR_CANDIDATE f16t64
+ripple_mask_add_and_half_ptr(f16t64 A, _Float16 *B, i1t64 Mask);
+
 #define VEC 0
 
 // CHECK-LABEL: call_masked_fn
