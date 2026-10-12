@@ -24,22 +24,24 @@ ripple_ret_t1x4f32_t1x4f32_t4f32_externf3(v4f32 A, v4f32 B);
 extern __attribute__((ripple_vector_candidate)) v16f32
 ripple_ret_t4x4f32_t1x4f32_t4f32_externf4(v4f32 A, v4f32 B);
 extern __attribute__((ripple_vector_candidate)) v16f32
-ripple_pure_ew_uniform_t4x4f32_externf5(v16f32 A, v16f32 B);
+ripple_pure_ew_ret_t4x4f32_arg0_t4x4f32_arg1_t4x4f32_externf5(v16f32 A,
+                                                               v16f32 B);
 extern __attribute__((ripple_vector_candidate, const)) v16f32
-ripple_ew_uniform_t4x4f32_externf5_autopure(v16f32 A, v16f32 B);
+ripple_pure_ew_ret_t4x4f32_arg0_t4x4f32_arg1_t4x4f32_externf5_autopure(
+    v16f32 A, v16f32 B);
 
 // CHECK-LABEL: define dso_local void @test_valid_candidates
 // CHECK: call{{.*}}@ripple_uniform_t1x4f32_externf1
 // CHECK: call{{.*}}@ripple_uniform_t1x4f32_externf2
 // CHECK: call{{.*}}@ripple_ret_t1x4f32_t1x4f32_t4f32_externf3
 // CHECK: call{{.*}}@ripple_ret_t4x4f32_t1x4f32_t4f32_externf4
-// CHECK: call{{.*}}@ripple_pure_ew_uniform_t4x4f32_externf5
-// CHECK: call{{.*}}@ripple_ew_uniform_t4x4f32_externf5_autopure
-// CHECK: call{{.*}}@ripple_pure_ew_uniform_t4x4f32_externf5
-// CHECK: call{{.*}}@ripple_pure_ew_uniform_t4x4f32_externf5
-// CHECK: call{{.*}}@ripple_pure_ew_uniform_t4x4f32_externf5
-// CHECK: call{{.*}}@ripple_pure_ew_uniform_t4x4f32_externf5
-// CHECK: call{{.*}}@ripple_ew_uniform_t4x4f32_externf5_autopure
+// CHECK: call{{.*}}@ripple_pure_ew_ret_t4x4f32_arg0_t4x4f32_arg1_t4x4f32_externf5
+// CHECK: call{{.*}}@ripple_pure_ew_ret_t4x4f32_arg0_t4x4f32_arg1_t4x4f32_externf5_autopure
+// CHECK: call{{.*}}@ripple_pure_ew_ret_t4x4f32_arg0_t4x4f32_arg1_t4x4f32_externf5
+// CHECK: call{{.*}}@ripple_pure_ew_ret_t4x4f32_arg0_t4x4f32_arg1_t4x4f32_externf5
+// CHECK: call{{.*}}@ripple_pure_ew_ret_t4x4f32_arg0_t4x4f32_arg1_t4x4f32_externf5
+// CHECK: call{{.*}}@ripple_pure_ew_ret_t4x4f32_arg0_t4x4f32_arg1_t4x4f32_externf5
+// CHECK: call{{.*}}@ripple_pure_ew_ret_t4x4f32_arg0_t4x4f32_arg1_t4x4f32_externf5_autopure
 void test_valid_candidates(float *restrict f, float *restrict f2, float *restrict f3) {
   ripple_block_t BS = ripple_set_block_shape(0, 4, 4);
   size_t RID = ripple_id(BS, 0);

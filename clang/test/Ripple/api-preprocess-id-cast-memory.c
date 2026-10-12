@@ -11,25 +11,25 @@ void ripple_i16_index_load_store(int *__restrict dst,
 
 // CHECK-LABEL: ; *** IR Dump Before RippleAPIPreprocessPass on ripple_i16_index_load_store ***
 // CHECK-LABEL: define{{.*}}void @ripple_i16_index_load_store(
-// CHECK: [[ID:%.*]] = call i32 @llvm.ripple.block.index.i32(
-// CHECK-NEXT: [[TRUNC:%.*]] = trunc i32 [[ID]] to i16
-// CHECK: [[SEXT:%.*]] = sext i16 {{.*}} to i32
-// CHECK: getelementptr inbounds i32, ptr {{.*}}, i32 [[SEXT]]
-// CHECK: [[SEXT2:%.*]] = sext i16 {{.*}} to i32
-// CHECK: getelementptr inbounds i32, ptr {{.*}}, i32 [[SEXT2]]
+// CHECK: [[ID:%.*]] = call [[SIZE:i(32|64)]] @llvm.ripple.block.index.[[SIZE]](
+// CHECK-NEXT: [[TRUNC:%.*]] = trunc [[SIZE]] [[ID]] to i16
+// CHECK: [[SEXT:%.*]] = sext i16 {{.*}} to [[SIZE]]
+// CHECK: getelementptr inbounds i32, ptr {{.*}}, [[SIZE]] [[SEXT]]
+// CHECK: [[SEXT2:%.*]] = sext i16 {{.*}} to [[SIZE]]
+// CHECK: getelementptr inbounds i32, ptr {{.*}}, [[SIZE]] [[SEXT2]]
 
 // CHECK-LABEL: ; *** IR Dump Before RippleModulePass on [module] ***
 // CHECK-LABEL: define{{.*}}void @ripple_i16_index_load_store(
-// CHECK: [[BS:%.*]] = {{.*}}call ptr @llvm.ripple.block.setshape.i32
-// CHECK-NEXT: [[ID:%.*]] = {{.*}}call range(i32 0, 128) i32 @llvm.ripple.block.index.i32(ptr [[BS]], i32 0), !range
+// CHECK: [[BS:%.*]] = {{.*}}call ptr @llvm.ripple.block.setshape.[[SIZE]]
+// CHECK-NEXT: [[ID:%.*]] = {{.*}}call range([[SIZE]] 0, 128) [[SIZE]] @llvm.ripple.block.index.[[SIZE]](ptr [[BS]], [[SIZE]] 0), !range
 // CHECK-NOT: trunc
 // CHECK-NOT: sext
 // CHECK-NOT: = and
-// CHECK: getelementptr{{.*}}, ptr %src, i32 [[ID]]
+// CHECK: getelementptr{{.*}}, ptr %src, [[SIZE]] [[ID]]
 // CHECK-NOT: trunc
 // CHECK-NOT: sext
 // CHECK-NOT: = and
-// CHECK: getelementptr{{.*}}, ptr %dst, i32 [[ID]]
+// CHECK: getelementptr{{.*}}, ptr %dst, [[SIZE]] [[ID]]
 // CHECK-NOT: trunc
 // CHECK-NOT: sext
 // CHECK-NOT: = and

@@ -1,4 +1,4 @@
-// REQUIRES: target=hexagon{{.*}} || target-aarch64 || target-x86_64
+// REQUIRES: target=hexagon{{.*}} || target-x86_64
 // RUN: %clang -S -O2 -emit-llvm -fenable-ripple %s &> %t.warnings; FileCheck %s --input-file=%t.warnings
 
 #include "../ripple_test.h"
