@@ -73,8 +73,14 @@ extern inline f16t64 ripple_mysinf16(f16t64 A) { return A; }
   extern inline f16t64 ripple_ew_pure_##name##f16(f16t64 Vals) {               \
     return Vals;                                                               \
   }                                                                            \
-  extern inline f32t32 ripple_ew_pure_##name##f(f32t32 Vals) { return Vals; }  \
-  extern inline f64t16 ripple_ew_pure_##name(f64t16 Vals) { return Vals; }     \
+  extern inline f32t32                                                         \
+      ripple_ew_pure_ret_t32f32_arg0_t32f32_##name##f(f32t32 Vals) {           \
+    return Vals;                                                               \
+  }                                                                            \
+  extern inline f64t16                                                         \
+      ripple_ew_pure_ret_t16f64_arg0_t16f64_##name(f64t16 Vals) {              \
+    return Vals;                                                               \
+  }                                                                            \
   extern inline f128t8 ripple_ew_pure_##name##l(f128t8 Vals) { return Vals; }
 
 CREATE_UNARY_MATH_TEST_FUN(sqrt)
@@ -109,11 +115,15 @@ CREATE_UNARY_MATH_TEST_FUN(roundeven)
     (void)Vals2;                                                               \
     return Vals;                                                               \
   }                                                                            \
-  extern inline f32t32 ripple_ew_pure_##name##f(f32t32 Vals, f32t32 Vals2) {   \
+  extern inline f32t32                                                         \
+      ripple_ew_pure_ret_t32f32_arg0_t32f32_arg1_t32f32_##name##f(             \
+          f32t32 Vals, f32t32 Vals2) {                                         \
     (void)Vals2;                                                               \
     return Vals;                                                               \
   }                                                                            \
-  extern inline f64t16 ripple_ew_pure_##name(f64t16 Vals, f64t16 Vals2) {      \
+  extern inline f64t16                                                         \
+      ripple_ew_pure_ret_t16f64_arg0_t16f64_arg1_t16f64_##name(                \
+          f64t16 Vals, f64t16 Vals2) {                                         \
     (void)Vals2;                                                               \
     return Vals;                                                               \
   }                                                                            \
@@ -171,11 +181,15 @@ extern inline f16t64 ripple_ew_pure_ldexpf16(f16t64 Vals, i32t64 Exp) {
   (void)Exp;
   return Vals;
 }
-extern inline f32t32 ripple_ew_pure_ldexpf(f32t32 Vals, i32t32 Exp) {
+extern inline f32t32
+ripple_ew_pure_ret_t32f32_arg0_t32f32_arg1_t32i32_ldexpf(f32t32 Vals,
+                                                          i32t32 Exp) {
   (void)Exp;
   return Vals;
 }
-extern inline f64t16 ripple_ew_pure_ldexp(f64t16 Vals, i32t16 Exp) {
+extern inline f64t16
+ripple_ew_pure_ret_t16f64_arg0_t16f64_arg1_t16i32_ldexp(f64t16 Vals,
+                                                         i32t16 Exp) {
   (void)Exp;
   return Vals;
 }

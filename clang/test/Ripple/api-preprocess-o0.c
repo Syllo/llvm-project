@@ -10,6 +10,6 @@ void check(size_t *out) {
 
 // CHECK: IR Dump After RippleAPIPreprocessPass on check
 // CHECK-LABEL: define{{.*}}void @check(
-// CHECK: call range(i32 0, 4) {{.*}}@llvm.ripple.block.index{{.*}}, !range [[RANGE:![0-9]+]]
-// CHECK: store i32 32
+// CHECK: call range([[SIZE:i(32|64)]] 0, 4) [[SIZE]] @llvm.ripple.block.index{{.*}}, !range [[RANGE:![0-9]+]]
+// CHECK: store [[SIZE]] 32
 // CHECK: ret void

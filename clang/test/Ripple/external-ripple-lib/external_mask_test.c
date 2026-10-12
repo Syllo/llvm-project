@@ -4,6 +4,9 @@
 #include "external_library.h"
 #include "../ripple_test.h"
 
+extern RIPPLE_VECTOR_CANDIDATE f16t64
+ripple_ew_mask_non_pure_ew_separate_mask(f16t64 A, i1t64 Mask);
+
 #define VEC 0
 
 // CHECK: masked_and_non_masked
