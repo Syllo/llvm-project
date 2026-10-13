@@ -1004,13 +1004,15 @@ Value *NDLoadStoreFactory::genUnstructuredLoad(LoadInst *Load, Value *Address,
       IrBuilder.CreateMaskedGather(VecTy, Address,
                                    // Aligned on element boundaries
                                    Load->getAlign());
+  if (MDNode *NT = Load->getMetadata(LLVMContext::MD_nontemporal))
+    cast<Instruction>(GatheredVal)
+        ->setMetadata(LLVMContext::MD_nontemporal, NT);
   MyRipple.setRippleShape(GatheredVal, ToShape);
   return GatheredVal;
 }
 
-Value *
-NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
-                                              const TensorShape &ToShape) {
+Value *NDLoadStoreFactory::genWindowLoadShuffle(LoadInst *Load, Value *Address,
+                                                const TensorShape &ToShape) {
   IrBuilder.SetInsertPoint(Load);
   auto *GEP = dyn_cast<GetElementPtrInst>(Address);
   if (!GEP || GEP->getNumIndices() != 1) {
@@ -1044,15 +1046,21 @@ NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
   // Get GEP Source Element Type
   auto *SourceElementType = GEP->getSourceElementType();
   const DataLayout &DL = GEP->getModule()->getDataLayout();
-  auto GEPSourceTypeBytes =
+  uint64_t GEPSourceTypeBytes =
       DL.getTypeAllocSize(SourceElementType).getFixedValue();
+  if (GEPSourceTypeBytes > std::numeric_limits<int64_t>::max())
+    return nullptr;
 
   // Normalize GEP indices to byte offsets so all address comparisons use the
   // same unit. GEP indices are scaled by the GEP source element type, while
   // load adjacency is determined by the loaded element size.
   SmallVector<int64_t> OriginalByteOffsets;
   for (int64_t Idx : OriginalIndices) {
-    OriginalByteOffsets.push_back(Idx * GEPSourceTypeBytes);
+    int64_t ByteOffset;
+    if (llvm::MulOverflow(Idx, static_cast<int64_t>(GEPSourceTypeBytes),
+                          ByteOffset))
+      return nullptr;
+    OriginalByteOffsets.push_back(ByteOffset);
   }
   SmallVector<int64_t> SortedByteOffsets = OriginalByteOffsets;
   // Sort, and retain only unique indices to load
@@ -1062,17 +1070,33 @@ NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
       SortedByteOffsets.end());
 
   auto *ElementTy = Load->getType();
-  int64_t LoadElementSizeBytes = DL.getTypeStoreSize(ElementTy).getFixedValue();
+  uint64_t LoadElementSize = DL.getTypeAllocSize(ElementTy).getFixedValue();
+  uint64_t LoadElementStoreSize =
+      DL.getTypeStoreSize(ElementTy).getFixedValue();
+  uint64_t LoadElementSizeBits =
+      DL.getTypeSizeInBits(ElementTy).getFixedValue();
+  // A vector load packs its elements without the per-object padding used by
+  // scalar GEPs. Fall back to gather when those layouts differ.
+  if (LoadElementSizeBits % 8 != 0 || LoadElementStoreSize != LoadElementSize ||
+      LoadElementSize == 0 ||
+      LoadElementSize > std::numeric_limits<int64_t>::max())
+    return nullptr;
+  int64_t LoadElementSizeBytes = static_cast<int64_t>(LoadElementSize);
 
   // Build Load Windows
   SmallVector<LoadWindow> Windows;
-  int64_t VectorByteSize = NumElementsToLoad * LoadElementSizeBytes;
+  int64_t VectorByteSize;
+  if (llvm::MulOverflow(static_cast<int64_t>(NumElementsToLoad),
+                        LoadElementSizeBytes, VectorByteSize))
+    return nullptr;
   int64_t WindowLastByteOffset = 0;
   for (int64_t CurrentByteOffset : SortedByteOffsets) {
     bool StartNewWindow = Windows.empty();
     if (!StartNewWindow) {
-      int64_t RelativeByteOffset =
-          CurrentByteOffset - Windows.back().BaseOffset;
+      int64_t RelativeByteOffset;
+      if (llvm::SubOverflow(CurrentByteOffset, Windows.back().BaseOffset,
+                            RelativeByteOffset))
+        return nullptr;
       // A masked vector load can only address whole elements. Keep offsets
       // that do not land on an element boundary in separate windows so that
       // they fall back to the byte-accurate gather implementation.
@@ -1083,8 +1107,10 @@ NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
     if (StartNewWindow) {
       // CurrentByteOffset is the window's first byte offset.
       Windows.push_back(LoadWindow({CurrentByteOffset, {}}));
-      WindowLastByteOffset =
-          CurrentByteOffset + VectorByteSize - LoadElementSizeBytes;
+      int64_t WindowByteSpan = VectorByteSize - LoadElementSizeBytes;
+      if (llvm::AddOverflow(CurrentByteOffset, WindowByteSpan,
+                            WindowLastByteOffset))
+        return nullptr;
     }
 
     Windows.back().LoadOffsets.push_back(CurrentByteOffset);
@@ -1118,6 +1144,13 @@ NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
     return nullptr;
 
   auto *FullVecTy = VectorType::get(ElementTy, NumElementsToLoad, false);
+  auto *LogicalMask = IrBuilder.Insert(
+      createMaskSelectToTrueFalse(IrBuilder.getInt1Ty(),
+                                  ElementCount::getFixed(NumElementsToLoad)),
+      "ripple.multiwindow.logical.mask");
+  MyRipple.setRippleShape(static_cast<Value *>(LogicalMask), ToShape);
+  MyRipple.maskSelectWhenIfConverted(LogicalMask);
+
   Value *Result = PoisonValue::get(FullVecTy);
   // Emit the Masked Load instruction per every Window
   for (const LoadWindow &Window : Windows) {
@@ -1140,18 +1173,69 @@ NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
     SmallVector<Constant *> WindowLoadMask(NumElementsToLoad,
                                            IrBuilder.getFalse());
     for (auto Offset : Window.LoadOffsets) {
-      auto RelativeByteOffset = Offset - Window.BaseOffset;
+      // This subtraction was checked while assigning the offset to a window.
+      int64_t RelativeByteOffset = Offset - Window.BaseOffset;
       unsigned LocalLane =
           static_cast<unsigned>(RelativeByteOffset / LoadElementSizeBytes);
       WindowLoadMask[LocalLane] = IrBuilder.getTrue();
       OriginalOffsetToLocalWindowLane[Offset] = LocalLane;
     }
-    auto WindowAlign = commonAlignment(Load->getAlign(), Window.BaseOffset);
+
+    // Remap the logical if-conversion mask into this window's physical lane
+    // order. Multiple logical lanes can share an address, so OR their masks
+    // before deciding whether the physical lane must be loaded.
+    SmallVector<SmallVector<unsigned>> LocalLaneToOriginalLanes(
+        NumElementsToLoad);
+    for (unsigned OriginalLane = 0; OriginalLane < OriginalByteOffsets.size();
+         ++OriginalLane) {
+      auto It = OriginalOffsetToLocalWindowLane.find(
+          OriginalByteOffsets[OriginalLane]);
+      if (It != OriginalOffsetToLocalWindowLane.end())
+        LocalLaneToOriginalLanes[It->second].push_back(OriginalLane);
+    }
+
+    Value *PhysicalMask = nullptr;
+    auto *FalseMask = Constant::getNullValue(LogicalMask->getType());
+    for (unsigned Duplicate = 0;; ++Duplicate) {
+      SmallVector<int> LogicalToPhysicalMask(NumElementsToLoad,
+                                             NumElementsToLoad);
+      bool HasLogicalLane = false;
+      for (unsigned LocalLane = 0; LocalLane < NumElementsToLoad; ++LocalLane) {
+        if (Duplicate >= LocalLaneToOriginalLanes[LocalLane].size())
+          continue;
+        LogicalToPhysicalMask[LocalLane] =
+            LocalLaneToOriginalLanes[LocalLane][Duplicate];
+        HasLogicalLane = true;
+      }
+      if (!HasLogicalLane)
+        break;
+
+      Value *RemappedMask = IrBuilder.CreateShuffleVector(
+          LogicalMask, FalseMask, LogicalToPhysicalMask,
+          "ripple.multiwindow.mask.remap");
+      MyRipple.setRippleShape(RemappedMask, ToShape);
+      if (!PhysicalMask) {
+        PhysicalMask = RemappedMask;
+      } else {
+        PhysicalMask = IrBuilder.CreateOr(PhysicalMask, RemappedMask,
+                                          "ripple.multiwindow.mask.merge");
+        MyRipple.setRippleShape(PhysicalMask, ToShape);
+      }
+    }
+    assert(PhysicalMask && "Expected at least one lane in a load window");
+
+    Value *CombinedMask =
+        IrBuilder.CreateAnd(ConstantVector::get(WindowLoadMask), PhysicalMask,
+                            "ripple.multiwindow.load.mask");
+    MyRipple.setRippleShape(CombinedMask, ToShape);
     Value *WindowFullLoad = IrBuilder.CreateMaskedLoad(
-        FullVecTy, WindowBasePtr, WindowAlign,
-        ConstantVector::get(WindowLoadMask), PoisonValue::get(FullVecTy),
-        "ripple.multiwindow.load");
+        FullVecTy, WindowBasePtr, Load->getAlign(), CombinedMask,
+        PoisonValue::get(FullVecTy), "ripple.multiwindow.load");
+    if (MDNode *NT = Load->getMetadata(LLVMContext::MD_nontemporal))
+      cast<Instruction>(WindowFullLoad)
+          ->setMetadata(LLVMContext::MD_nontemporal, NT);
     MyRipple.setRippleShape(WindowFullLoad, ToShape);
+    MyRipple.skipMaskingWhenIfConverted(cast<Instruction>(WindowFullLoad));
 
     SmallVector<int> ShuffleMask(NumElementsToLoad, llvm::PoisonMaskElem);
     SmallVector<Constant *> SelectionMask(NumElementsToLoad,
@@ -1188,130 +1272,6 @@ NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
   return Result;
 }
 
-Value *NDLoadStoreFactory::genWindowLoadShuffle(LoadInst *Load, Value *Address,
-                                                const TensorShape &ToShape) {
-  IrBuilder.SetInsertPoint(Load);
-  auto *GEP = dyn_cast<GetElementPtrInst>(Address);
-  if (!GEP || GEP->getNumIndices() != 1) {
-    return nullptr;
-  }
-
-  Value *Index = GEP->idx_begin()->get();
-  unsigned NumElementsToLoad = ToShape.flatShape();
-  SmallVector<int64_t> Indices;
-  if (auto *CDV = dyn_cast<ConstantDataVector>(Index)) {
-    for (unsigned Idx = 0; Idx < CDV->getNumElements(); ++Idx) {
-      Indices.push_back(CDV->getElementAsAPInt(Idx).getSExtValue());
-    }
-  } else if (auto *CV = dyn_cast<ConstantVector>(Index)) {
-    for (unsigned Idx = 0; Idx < CV->getNumOperands(); ++Idx) {
-      auto *C = dyn_cast<ConstantInt>(CV->getOperand(Idx));
-      if (!C) {
-        return nullptr;
-      }
-      Indices.push_back(C->getSExtValue());
-    }
-  } else {
-    return nullptr;
-  }
-
-  if (Indices.empty() || Indices.size() != NumElementsToLoad) {
-    return nullptr;
-  }
-
-  // The address GEP's index operand may be expressed in two different unit
-  // systems: byte offsets, when the address was materialized as a byte-stride
-  // (i8) GEP, or source-element offsets, when the original element-typed GEP
-  // was preserved. Everything downstream (window size, mask width, shuffle
-  // indices) operates in load-element units, so normalize via bytes:
-  //   element_idx = (raw_idx * SrcSize) / EltSize
-  // SrcSize is 1 for an i8-stride GEP and equals EltSize for an element-typed
-  // GEP. Bail when a per-lane byte offset isn't a whole multiple of EltSize.
-  const DataLayout &DL = Mod.getDataLayout();
-  Type *ElementTy = Load->getType();
-  uint64_t EltSize = DL.getTypeAllocSize(ElementTy);
-  uint64_t SrcSize = DL.getTypeAllocSize(GEP->getSourceElementType());
-  if (EltSize == 0 || SrcSize == 0)
-    return nullptr;
-  for (int64_t &Idx : Indices) {
-    int64_t Bytes;
-    if (llvm::MulOverflow(Idx, static_cast<int64_t>(SrcSize), Bytes))
-      return nullptr;
-    if (Bytes % static_cast<int64_t>(EltSize) != 0)
-      return nullptr;
-    Idx = Bytes / static_cast<int64_t>(EltSize);
-  }
-
-  // Calculate the min and max value in the vector of indices
-  int64_t Min = *llvm::min_element(Indices);
-  int64_t Max = *llvm::max_element(Indices);
-
-  if (static_cast<uint64_t>(Max - Min) >= NumElementsToLoad)
-    return nullptr;
-  unsigned WindowSize = static_cast<unsigned>(Max - Min) + 1;
-
-  // Reconstruct a scalar window base pointer at the minimum index.
-  // The vector load needs a scalar `ptr` base, so use the GEP's pointer
-  // operand directly when it is already scalar in IR (e.g. a loop GEP
-  // like `getelementptr T, ptr %input, i64 %iv`). When the operand is a
-  // splatted `<N x ptr>` (Ripple's broadcast of a scalar pointer), peel
-  // the splat back off via llvm::getSplatValue.
-  Value *BasePtr = GEP->getPointerOperand();
-  if (!BasePtr->getType()->isPointerTy()) {
-    BasePtr = llvm::getSplatValue(BasePtr);
-    if (!BasePtr) {
-      return nullptr;
-    }
-  }
-
-  // Rebuild a byte-strided GEP at the minimum offset to form the contiguous
-  // window base, matching the i8-stride invariant used elsewhere in Ripple.
-  // GEP offsets are computed in the pointer's index type. The byte offset can
-  // exceed the range of the original GEP index type. It is negative when the
-  // original GEP indexes before BasePtr (e.g. A[-2]).
-  auto *OffsetTy = cast<IntegerType>(DL.getIndexType(BasePtr->getType()));
-  int64_t MinBytes = Min * static_cast<int64_t>(EltSize);
-  if (!isIntN(OffsetTy->getBitWidth(), MinBytes))
-    return nullptr;
-  Value *MinByteOffset = ConstantInt::getSigned(OffsetTy, MinBytes);
-  Value *WindowBase =
-      IrBuilder.CreateGEP(IrBuilder.getInt8Ty(), BasePtr, MinByteOffset);
-  MyRipple.setRippleShape(WindowBase, MyRipple.getRippleShape(BasePtr));
-
-  // Load the contiguous window as a vector starting from the minimum address.
-  Type *VecTy =
-      VectorType::get(ElementTy, NumElementsToLoad, /*scalable=*/false);
-  Value *WindowLoad;
-  if (WindowSize == NumElementsToLoad) {
-    LoadInst *FullLoad = IrBuilder.CreateLoad(VecTy, WindowBase);
-    FullLoad->setAlignment(Load->getAlign());
-    WindowLoad = FullLoad;
-  } else {
-    SmallVector<Constant *> MaskBits;
-    Type *I1Ty = Type::getInt1Ty(IrBuilder.getContext());
-    for (uint64_t Lane = 0; Lane < NumElementsToLoad; ++Lane) {
-      MaskBits.push_back(ConstantInt::get(I1Ty, Lane < WindowSize));
-    }
-    Value *Mask = ConstantVector::get(MaskBits);
-    WindowLoad = IrBuilder.CreateMaskedLoad(VecTy, WindowBase, Load->getAlign(),
-                                            Mask, PoisonValue::get(VecTy));
-  }
-  MyRipple.setRippleShape(WindowLoad, ToShape);
-
-  // Shuffle the contiguous window back into the original irregular access
-  // order. Lanes beyond `WindowSize` are masked-off / out-of-bounds and the
-  // shuffle mask never references them.
-  SmallVector<int> ShuffleMask;
-  for (int64_t Idx : Indices) {
-    ShuffleMask.push_back(static_cast<int>(Idx - Min));
-  }
-  Value *Poison = PoisonValue::get(VecTy);
-  Value *Shuffled =
-      IrBuilder.CreateShuffleVector(WindowLoad, Poison, ShuffleMask);
-  MyRipple.setRippleShape(Shuffled, ToShape);
-  return Shuffled;
-}
-
 Value *NDLoadStoreFactory::genLoadNoSplat(LoadInst *Load,
                                           LinearSeries &AddressSeries,
                                           Value *DefaultAddress,
@@ -1342,10 +1302,6 @@ Value *NDLoadStoreFactory::genLoadNoSplat(LoadInst *Load,
                  genWindowLoadShuffle(Load, DefaultAddress, ToShape)) {
     shuffleLoad->takeName(Load);
     return shuffleLoad;
-  } else if (Value *multiWindowshuffleLoad =
-                 genMultiWindowLoadShuffle(Load, DefaultAddress, ToShape)) {
-    multiWindowshuffleLoad->takeName(Load);
-    return multiWindowshuffleLoad;
   } else {
     return genUnstructuredLoad(Load, DefaultAddress, ToShape);
   }
@@ -4830,7 +4786,7 @@ void Ripple::genVectorInstructions() {
         "zeroinit.select");
     setRippleShape(MaskSelect, ToShape);
     // Enable masking for this select
-    SelectToMaskWhenIfConvert.insert(MaskSelect);
+    maskSelectWhenIfConverted(MaskSelect);
 
     Value *MaskVal;
     irBuilder.SetInsertPoint(LoopBody->getTerminator());
@@ -5004,7 +4960,7 @@ void Ripple::genVectorInstructions() {
                 "ripple.specialization.mask");
             setRippleShape(MaskArgument, MaskShape.get());
             // Enable masking for this select
-            SelectToMaskWhenIfConvert.insert(MaskArgument);
+            maskSelectWhenIfConverted(MaskArgument);
 
             // Call the masked specialization with the extra argument instead!
             SpecializedFunction = MaskedSpecialization;
@@ -5112,7 +5068,7 @@ void Ripple::genVectorInstructions() {
             setRippleShape(MaskArgument, *ExternFunMaskShape);
 
             // Enable masking for this select
-            SelectToMaskWhenIfConvert.insert(MaskArgument);
+            maskSelectWhenIfConverted(MaskArgument);
           }
         }
         if (!ExternFun->isElementWiseFunction()) {
@@ -6039,7 +5995,8 @@ void Ripple::ifConvert() {
       if (SelectInst *SelectClone =
               cast_if_present<SelectInst>(VMap.lookup(SelectToMask)))
         ToMaskAsWell.insert(SelectClone);
-    SelectToMaskWhenIfConvert.insert(ToMaskAsWell.begin(), ToMaskAsWell.end());
+    for (SelectInst *SelectToMask : ToMaskAsWell)
+      maskSelectWhenIfConverted(SelectToMask);
   };
 
   auto updateStoreInstMaskSet = [&](ValueToValueMapTy &VMap) -> void {
@@ -6049,8 +6006,8 @@ void Ripple::ifConvert() {
       if (Instruction *ClonedI =
               cast_if_present<Instruction>(VMap.lookup(ToSkipMasking)))
         ToSkipMaskAsWell.insert(ClonedI);
-    ToSkipMaskingWhenIfConvert.insert(ToSkipMaskAsWell.begin(),
-                                      ToSkipMaskAsWell.end());
+    for (Instruction *ToSkipMasking : ToSkipMaskAsWell)
+      skipMaskingWhenIfConverted(ToSkipMasking);
   };
 
   SmallVector<BasicBlock *, 0> BBsWithVectorBranchOrSwitch;
@@ -6667,7 +6624,7 @@ Value *Ripple::genMultiDimReduction(Intrinsic::ID reductionId, Value *vector,
       TrueMask, vector, NeutralVector,
       Twine(vector->getName()) + ".ripple.reduction.partial.masking"));
   setRippleShape(SelectedValue, CurrentVectorShape);
-  SelectToMaskWhenIfConvert.insert(SelectedValue);
+  maskSelectWhenIfConverted(SelectedValue);
 
   // Full reduction, use well supported llvm reductions instead
   if (vectorShape.reducedToScalarBy(reductionDimensions)) {
@@ -10259,7 +10216,7 @@ Value *Ripple::genFunctionCallHandleArgAttributes(
         auto *StoreInst = irBuilder.CreateStore(ProcessingArg, ArgStorage);
         setRippleShape(StoreInst, Calling.getArgOperandShape(
                                       ToIdx, /*IgnoreStructRet*/ false));
-        ToSkipMaskingWhenIfConvert.insert(StoreInst);
+        skipMaskingWhenIfConverted(StoreInst);
         ToCallArgs.push_back(ArgStorage);
       }
     } else {
@@ -10270,7 +10227,7 @@ Value *Ripple::genFunctionCallHandleArgAttributes(
             irBuilder.CreateLoad(ToArg->getType(), ProcessingArg);
         setRippleShape(RegisterVal, Calling.getArgOperandShape(
                                         ToIdx, /*IgnoreStructRet*/ false));
-        ToSkipMaskingWhenIfConvert.insert(RegisterVal);
+        skipMaskingWhenIfConverted(RegisterVal);
         ToCallArgs.push_back(RegisterVal);
       } else {
         ToCallArgs.push_back(ProcessingArg);
@@ -10286,7 +10243,7 @@ Value *Ripple::genFunctionCallHandleArgAttributes(
     auto *LoadedRet = irBuilder.CreateLoad(ToRetArg->getParamStructRetType(),
                                            ToCallArgs[ToRetArg->getArgNo()]);
     setRippleShape(LoadedRet, Calling.getReturnShape());
-    ToSkipMaskingWhenIfConvert.insert(LoadedRet);
+    skipMaskingWhenIfConverted(LoadedRet);
     return LoadedRet;
   }
   return Call;
