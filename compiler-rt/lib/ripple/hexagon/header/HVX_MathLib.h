@@ -603,8 +603,22 @@ RIPPLE_INTRIN_INLINE HVX_Vector log_vf_fast(HVX_Vector vin) {
   return ripple_fast_log_f32(vin);
 }
 
+RIPPLE_INTRIN_INLINE HVX_Vector _ripple_log_vhf_corrected(HVX_Vector vin) {
+  HVX_Vector vlog = qhmath_hvx_log_vhf(vin);
+#if __HEXAGON_ARCH__ < 79
+  const HVX_Vector const1 = Q6_Vh_vsplat_R(0x3c00);
+  const HVX_Vector const0 = Q6_V_vzero();
+  const HVX_Vector neg_inf = Q6_Vh_vsplat_R(0xfc00);
+  HVX_VectorPred is_one = Q6_Q_vcmp_eq_VhVh(vin, const1);
+  HVX_VectorPred is_zero = ripple_is_zero_vhf(vin);
+  vlog = Q6_V_vmux_QVV(is_one, const0, vlog);
+  vlog = Q6_V_vmux_QVV(is_zero, neg_inf, vlog);
+#endif
+  return vlog;
+}
+
 RIPPLE_INTRIN_INLINE HVX_Vector log_vf16(HVX_Vector vin) {
-  return qhmath_hvx_log_vhf(vin);
+  return _ripple_log_vhf_corrected(vin);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector log_vf16_fast(HVX_Vector vin) {
@@ -623,7 +637,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector log2_vf_fast(HVX_Vector vin) {
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector log2_vf16(HVX_Vector vin) {
-  return _ripple_internal_Vhf_vmpy_VhfVhf(qhmath_hvx_log_vhf(vin),
+  return _ripple_internal_Vhf_vmpy_VhfVhf(_ripple_log_vhf_corrected(vin),
                                           Q6_Vh_vsplat_R(0x3dc5));
 }
 
@@ -643,7 +657,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector log10_vf_fast(HVX_Vector vin) {
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector log10_vf16(HVX_Vector vin) {
-  return _ripple_internal_Vhf_vmpy_VhfVhf(qhmath_hvx_log_vhf(vin),
+  return _ripple_internal_Vhf_vmpy_VhfVhf(_ripple_log_vhf_corrected(vin),
                                           Q6_Vh_vsplat_R(0x36f3));
 }
 
