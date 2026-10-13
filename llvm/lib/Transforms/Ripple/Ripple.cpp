@@ -2826,8 +2826,11 @@ void Ripple::padToTargetSIMDWidth() {
         SmallVector<Value *> Operands(GEPI->operand_values().begin(),
                                       GEPI->operand_values().end());
 
-        unsigned PaddedLength =
-            std::max(GetPaddedLength(GEPI), GetMaxPaddedLength(Operands));
+        unsigned PaddedLength = GetPaddedLength(GEPI);
+        if (any_of(Operands,
+                   [](Value *V) { return V->getType()->isVectorTy(); })) {
+          PaddedLength = std::max(PaddedLength, GetMaxPaddedLength(Operands));
+        }
 
         if (AnyValuesKnownToBeMustPadded(Operands, PaddedLength) ||
             AnyValuesKnownToBeMustPadded({GEPI}, PaddedLength)) {
