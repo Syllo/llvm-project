@@ -14,6 +14,7 @@
 #include "__ripple_func_attribs.h"
 #include "ripple_internal_utils_hvx.h"
 #include "ripple_qhmath_hvx.h"
+#include "ripple_sqrt_f32_f16_hvx.h"
 #include "ripple_trunc_round_f32_f16.h"
 #include <hexagon_types.h>
 
@@ -25,6 +26,27 @@ RIPPLE_INTRIN_INLINE HVX_Vector uint16_to_qf32_hvx(const HVX_Vector vin,
                                                    const HVX_Vector offset) {
   return Q6_Vqf32_vadd_VsfVsf(
       _ripple_internal_sf_from_w(Q6_Vw_vsub_VwVw(vin, offset)), Q6_V_vzero());
+}
+
+// Use fp32-promoted subtraction so 1-x stays accurate near x=1.
+// asin/acos range transforms are sensitive to this term.
+static __attribute__((always_inline)) HVX_Vector
+_ripple_internal_Vhf_vsub_VhfVhf_f32_promote(HVX_Vector inp1, HVX_Vector inp2) {
+  const HVX_Vector const1_hf = Q6_Vh_vsplat_R(0x3c00); // 1.0 in fp16
+  HVX_VectorPair qf1 = Q6_Wqf32_vmpy_VhfVhf(inp1, const1_hf);
+  HVX_VectorPair qf2 = Q6_Wqf32_vmpy_VhfVhf(inp2, const1_hf);
+  HVX_Vector hiRes = Q6_Vqf32_vsub_Vqf32Vqf32(Q6_V_hi_W(qf1), Q6_V_hi_W(qf2));
+  HVX_Vector loRes = Q6_Vqf32_vsub_Vqf32Vqf32(Q6_V_lo_W(qf1), Q6_V_lo_W(qf2));
+  HVX_VectorPair qfres = Q6_W_vdeal_VVR(hiRes, loRes, 0);
+  return Q6_Vhf_equals_Wqf32(qfres);
+}
+
+// Use fp32-promoted multiply where asin/acos need tighter boundary accuracy.
+static __attribute__((always_inline)) HVX_Vector
+_ripple_internal_Vhf_vmpy_VhfVhf_f32_promote(HVX_Vector inp1, HVX_Vector inp2) {
+  HVX_VectorPair qfres = Q6_Wqf32_vmpy_VhfVhf(inp1, inp2);
+  HVX_VectorPair dealt = Q6_W_vdeal_VVR(Q6_V_hi_W(qfres), Q6_V_lo_W(qfres), 0);
+  return Q6_Vhf_equals_Wqf32(dealt);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector dequant_uint16_fp16_hvx(
@@ -82,6 +104,14 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_asinf16_hvx(HVX_Vector invec) {
   HVX_VectorPred out_of_bounds =
       Q6_Q_vcmp_gt_VhVh(invec, Q6_Vh_vsplat_R(0x3c00));
 
+  // For high-|x| lanes, use asin(x)=pi/2-asin(sqrt(1-x^2)) before LUT.
+  const HVX_Vector const1_hf = Q6_Vh_vsplat_R(0x3c00); // 1.0 in fp16
+  HVX_Vector one_minus_x2 = _ripple_internal_Vhf_vsub_VhfVhf_f32_promote(
+      const1_hf, Q6_Vhf_equals_Vqf16(Q6_Vqf16_vmpy_VhfVhf(invec, invec)));
+  HVX_Vector flip = ripple_sqrt_f16_promote(one_minus_x2);
+  HVX_VectorPred bignum = Q6_Q_vcmp_gt_VhVh(invec, flip);
+  invec = Q6_Vhf_vmin_VhfVhf(invec, flip);
+
   HVX_Vector which_bin_frac = Q6_Vqf16_vmpy_VhfVhf(invec, thirtytwo_hf);
   HVX_Vector which_bin_int =
       _ripple_internal_h_from_hf(Q6_Vhf_equals_Vqf16(which_bin_frac));
@@ -101,13 +131,35 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_asinf16_hvx(HVX_Vector invec) {
       Q6_Vqf16_vmpy_Vqf16Vhf(remaining_frac, Q6_V_lo_W(slope_vec));
   HVX_Vector est = Q6_Vhf_equals_Vqf16(
       Q6_Vqf16_vadd_Vqf16Vhf(est_mul, Q6_V_lo_W(interval_start)));
+  // Undo the range reduction for the lanes that used it.
+  const HVX_Vector half_pi_hf = Q6_Vh_vsplat_R(0x3E48); // pi/2 in fp16
+  HVX_Vector alt_est = _ripple_internal_Vhf_vsub_VhfVhf(half_pi_hf, est);
+  est = Q6_V_vmux_QVV(bignum, alt_est, est);
   est = Q6_V_vor_VV(est, sign_bit);
   return Q6_V_vmux_QVV(out_of_bounds, Q6_Vh_vsplat_R(0x7e00), est);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector ripple_acosf16_hvx(HVX_Vector invec) {
-  const HVX_Vector half_pi = Q6_Vh_vsplat_R(0x3E48);
-  return _ripple_internal_Vhf_vsub_VhfVhf(half_pi, ripple_asinf16_hvx(invec));
+  // Half-angle form keeps fp16 accuracy near x=+1.
+  const HVX_Vector one_hf = Q6_Vh_vsplat_R(0x3c00);     // 1.0 in fp16
+  const HVX_Vector neg_one_hf = Q6_Vh_vsplat_R(0xbc00); // -1.0 in fp16
+  const HVX_Vector half_hf = Q6_Vh_vsplat_R(0x3800);    // 0.5 in fp16
+  const HVX_Vector two_hf = Q6_Vh_vsplat_R(0x4000);     // 2.0 in fp16
+  const HVX_Vector zero_hf = Q6_V_vzero();
+  const HVX_Vector pi_hf = Q6_Vh_vsplat_R(0x4248); // pi in fp16
+  HVX_Vector one_minus_x =
+      _ripple_internal_Vhf_vsub_VhfVhf_f32_promote(one_hf, invec);
+  HVX_Vector arg = ripple_sqrt_f16_promote(
+      _ripple_internal_Vhf_vmpy_VhfVhf_f32_promote(one_minus_x, half_hf));
+  HVX_Vector out = _ripple_internal_Vhf_vmpy_VhfVhf_f32_promote(
+      two_hf, ripple_asinf16_hvx(arg));
+
+  // Exact endpoints: acos(+1)=0 and acos(-1)=pi.
+  HVX_VectorPred is_pos_one = Q6_Q_vcmp_eq_VhVh(invec, one_hf);
+  HVX_VectorPred is_neg_one = Q6_Q_vcmp_eq_VhVh(invec, neg_one_hf);
+  out = Q6_V_vmux_QVV(is_pos_one, zero_hf, out);
+  out = Q6_V_vmux_QVV(is_neg_one, pi_hf, out);
+  return out;
 }
 
 #endif

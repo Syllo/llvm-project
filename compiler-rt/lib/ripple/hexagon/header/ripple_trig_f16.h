@@ -157,8 +157,92 @@ RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_trig_func(HVX_Vector input) {
   return Q6_V_vor_VV(retval, sign_bit);
 }
 
+// FP32 sin path for f16: Cody-Waite reduction + Taylor sin/cos.
+// Avoids fixed-point loss near sin zero crossings.
+static __attribute__((always_inline)) HVX_Vector
+_ripple_sinf32_taylor(HVX_Vector xval) {
+  const HVX_Vector zero = Q6_V_vzero();
+  const HVX_Vector sign_mask = Q6_V_vsplat_R(0x80000000);
+  const HVX_Vector sign_bit = Q6_V_vand_VV(xval, sign_mask);
+  xval = Q6_V_vand_VV(xval, Q6_V_vsplat_R(0x7fffffff));
+
+  // Split pi/2 for Cody-Waite reduction.
+  const HVX_Vector inv_pio2 = Q6_V_vsplat_R(0x3f22f983); // 2/pi
+  const HVX_Vector pio2_hi = Q6_V_vsplat_R(0x3fc90800);
+  const HVX_Vector pio2_lo = Q6_V_vsplat_R(0x397b5444);
+  const HVX_Vector one = Q6_V_vsplat_R(0x3f800000);
+
+  // n = round(x * 2/pi).
+  HVX_Vector n_f = ripple_round_f32(
+      Q6_Vsf_equals_Vqf32(Q6_Vqf32_vmpy_VsfVsf(xval, inv_pio2)));
+
+  // r = x - n*pi/2.
+  HVX_Vector r_qf = Q6_Vqf32_vsub_VsfVsf(xval, zero);
+  r_qf = Q6_Vqf32_vsub_Vqf32Vqf32(r_qf, Q6_Vqf32_vmpy_VsfVsf(n_f, pio2_hi));
+  r_qf = Q6_Vqf32_vsub_Vqf32Vqf32(r_qf, Q6_Vqf32_vmpy_VsfVsf(n_f, pio2_lo));
+  HVX_Vector r_sf = Q6_Vsf_equals_Vqf32(r_qf);
+  r_qf = Q6_Vqf32_vadd_VsfVsf(r_sf, zero);
+  HVX_Vector r2_qf = Q6_Vqf32_vmpy_Vqf32Vqf32(r_qf, r_qf);
+  HVX_Vector one_qf = Q6_Vqf32_vadd_VsfVsf(one, zero);
+
+  // sin(r) = r*(1 - r^2/6 + r^4/120 - r^6/5040), Horner in qf32.
+  HVX_Vector sp =
+      Q6_Vqf32_vadd_VsfVsf(Q6_V_vsplat_R(0xb9500d01), zero); // -1/5040
+  sp = Q6_Vqf32_vmpy_Vqf32Vqf32(sp, r2_qf);
+  sp = Q6_Vqf32_vadd_Vqf32Vsf(sp, Q6_V_vsplat_R(0x3c088889)); // 1/120
+  sp = Q6_Vqf32_vmpy_Vqf32Vqf32(sp, r2_qf);
+  sp = Q6_Vqf32_vadd_Vqf32Vsf(sp, Q6_V_vsplat_R(0xbe2aaaab)); // -1/6
+  sp = Q6_Vqf32_vmpy_Vqf32Vqf32(sp, r2_qf);
+  sp = Q6_Vqf32_vadd_Vqf32Vqf32(sp, one_qf);
+  HVX_Vector sin_r = Q6_Vsf_equals_Vqf32(Q6_Vqf32_vmpy_Vqf32Vqf32(sp, r_qf));
+
+  // cos(r) = 1 - r^2/2 + r^4/24 - r^6/720, Horner in qf32.
+  HVX_Vector cp =
+      Q6_Vqf32_vadd_VsfVsf(Q6_V_vsplat_R(0xbab60b61), zero); // -1/720
+  cp = Q6_Vqf32_vmpy_Vqf32Vqf32(cp, r2_qf);
+  cp = Q6_Vqf32_vadd_Vqf32Vsf(cp, Q6_V_vsplat_R(0x3d2aaaab)); // 1/24
+  cp = Q6_Vqf32_vmpy_Vqf32Vqf32(cp, r2_qf);
+  cp = Q6_Vqf32_vadd_Vqf32Vsf(cp, Q6_V_vsplat_R(0xbf000000)); // -1/2
+  cp = Q6_Vqf32_vmpy_Vqf32Vqf32(cp, r2_qf);
+  cp = Q6_Vqf32_vadd_Vqf32Vqf32(cp, one_qf);
+  HVX_Vector cos_r = Q6_Vsf_equals_Vqf32(cp);
+
+  // k = n mod 4 for sin/cos selection and sign.
+  const HVX_Vector quarter = Q6_V_vsplat_R(0x3e800000); // 0.25
+  const HVX_Vector four = Q6_V_vsplat_R(0x40800000);    // 4.0
+  HVX_Vector fl =
+      ripple_floor_f32(Q6_Vsf_equals_Vqf32(Q6_Vqf32_vmpy_VsfVsf(n_f, quarter)));
+  HVX_Vector kq = Q6_Vqf32_vsub_VsfVsf(n_f, zero);
+  kq = Q6_Vqf32_vsub_Vqf32Vqf32(kq, Q6_Vqf32_vmpy_VsfVsf(four, fl));
+  HVX_Vector k = Q6_Vsf_equals_Vqf32(kq);
+
+  const HVX_Vector half = Q6_V_vsplat_R(0x3f000000);    // 0.5
+  const HVX_Vector onehalf = Q6_V_vsplat_R(0x3fc00000); // 1.5
+  const HVX_Vector twohalf = Q6_V_vsplat_R(0x40200000); // 2.5
+  HVX_VectorPred gt_half = Q6_Q_vcmp_gt_VsfVsf(k, half);
+  HVX_VectorPred gt_1h = Q6_Q_vcmp_gt_VsfVsf(k, onehalf);
+  HVX_VectorPred gt_2h = Q6_Q_vcmp_gt_VsfVsf(k, twohalf);
+
+  // Odd k uses cos(r); k>=2 flips sign.
+  HVX_VectorPred in_q1 = Q6_Q_and_QQn(gt_half, gt_1h); // 0.5 < k < 1.5
+  HVX_VectorPred is_odd = Q6_Q_or_QQ(in_q1, gt_2h);
+  HVX_Vector result = Q6_V_vmux_QVV(is_odd, cos_r, sin_r);
+
+  HVX_Vector neg_flip = Q6_V_vmux_QVV(gt_1h, sign_mask, zero);
+  result = Q6_V_vxor_VV(result, neg_flip);
+  return Q6_V_vxor_VV(result, sign_bit);
+}
+
 RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinf16_hvx(HVX_Vector input) {
-  return _ripple_internal_trig_func<false>(input);
+  // Widen fp16->fp32, evaluate _ripple_sinf32_taylor, narrow to fp16.
+  const HVX_Vector const1_hf = Q6_Vh_vsplat_R(0x3c00); // 1.0 in fp16
+  HVX_VectorPair qfx = Q6_Wqf32_vmpy_VhfVhf(input, const1_hf);
+  HVX_Vector hiRes = Q6_Vqf32_vadd_VsfVsf(
+      _ripple_sinf32_taylor(Q6_Vsf_equals_Vqf32(Q6_V_hi_W(qfx))), Q6_V_vzero());
+  HVX_Vector loRes = Q6_Vqf32_vadd_VsfVsf(
+      _ripple_sinf32_taylor(Q6_Vsf_equals_Vqf32(Q6_V_lo_W(qfx))), Q6_V_vzero());
+  HVX_VectorPair qfres = Q6_W_vdeal_VVR(hiRes, loRes, 0);
+  return Q6_Vhf_equals_Wqf32(qfres);
 }
 
 RIPPLE_INTRIN_INLINE HVX_Vector ripple_cosf16_hvx(HVX_Vector input) {
