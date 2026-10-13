@@ -1109,8 +1109,14 @@ NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
     }
   }
 
-  auto *IndexVecTy = cast<VectorType>(Index->getType());
-  Type *IndexElementTy = IndexVecTy->getElementType();
+  // GEP offsets are computed in the pointer's index type. The byte offsets
+  // can exceed the range of the original GEP index type.
+  auto *OffsetTy = cast<IntegerType>(DL.getIndexType(BasePtr->getType()));
+  if (any_of(Windows, [&](const LoadWindow &Window) {
+        return !isIntN(OffsetTy->getBitWidth(), Window.BaseOffset);
+      }))
+    return nullptr;
+
   auto *FullVecTy = VectorType::get(ElementTy, NumElementsToLoad, false);
   Value *Result = PoisonValue::get(FullVecTy);
   // Emit the Masked Load instruction per every Window
@@ -1120,8 +1126,10 @@ NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
     // Hence, BaseOffset is now in bytes, rebuild gep with i8.
     // Note we could also re-build with GEP's original source element type
     // by dividing. i.e  Window.BaseOffset / GEPSourceTypeBytes
+    // Each window starts at its smallest byte offset, which is negative when
+    // the original GEP indexes before BasePtr (e.g. A[-2]).
     Value *WindowBaseOffset =
-        ConstantInt::get(IndexElementTy, Window.BaseOffset);
+        ConstantInt::getSigned(OffsetTy, Window.BaseOffset);
     Value *WindowBasePtr =
         IrBuilder.CreateGEP(IrBuilder.getInt8Ty(), BasePtr, WindowBaseOffset);
     MyRipple.setRippleShape(WindowBasePtr, MyRipple.getRippleShape(BasePtr));
@@ -1258,10 +1266,14 @@ Value *NDLoadStoreFactory::genWindowLoadShuffle(LoadInst *Load, Value *Address,
 
   // Rebuild a byte-strided GEP at the minimum offset to form the contiguous
   // window base, matching the i8-stride invariant used elsewhere in Ripple.
-  auto *IndexVecTy = cast<VectorType>(Index->getType());
-  Type *IndexElementTy = IndexVecTy->getElementType();
+  // GEP offsets are computed in the pointer's index type. The byte offset can
+  // exceed the range of the original GEP index type. It is negative when the
+  // original GEP indexes before BasePtr (e.g. A[-2]).
+  auto *OffsetTy = cast<IntegerType>(DL.getIndexType(BasePtr->getType()));
   int64_t MinBytes = Min * static_cast<int64_t>(EltSize);
-  Value *MinByteOffset = ConstantInt::get(IndexElementTy, MinBytes);
+  if (!isIntN(OffsetTy->getBitWidth(), MinBytes))
+    return nullptr;
+  Value *MinByteOffset = ConstantInt::getSigned(OffsetTy, MinBytes);
   Value *WindowBase =
       IrBuilder.CreateGEP(IrBuilder.getInt8Ty(), BasePtr, MinByteOffset);
   MyRipple.setRippleShape(WindowBase, MyRipple.getRippleShape(BasePtr));
