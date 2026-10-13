@@ -696,27 +696,14 @@ private:
   Value *genUnstructuredLoad(LoadInst *Load, Value *Address,
                              const TensorShape &ToShape);
 
-  /// @brief Emit a contiguous vector load followed by a shuffle when the
-  /// accessed addresses fit within a bounded window. Returns the shuffled
-  /// result (with its Ripple shape already set), or nullptr if the
-  /// optimization does not apply.
+  /// @brief Attempts to replace an irregular gather load with one or more
+  /// coalesced window loads followed by shuffles. Returns the reconstructed
+  /// result, or nullptr if the optimization does not apply.
   /// @param Load the original load instruction whose alignment is used as
   ///        a template
   /// @param ToShape the expected shape of the output tensor type.
   Value *genWindowLoadShuffle(LoadInst *Load, Value *Address,
                               const TensorShape &ToShape);
-
-  /// @brief Attempts to replace an irregular gather load with multiple
-  /// coalesced window loads.
-  /// Similar to genWindowLoadShuffle(), which handles the case where all
-  /// gather indices fit within a single contiguous window, this routine
-  /// handles the more general case where the indices can be partitioned
-  /// into multiple contiguous windows.
-  /// @param Load the original load instruction whose alignment is used as
-  ///        a template
-  /// @param ToShape the expected shape of the output tensor type.
-  Value *genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
-                                   const TensorShape &ToShape);
 
   /// @brief Applies mask @p mask to @p NdLoadStore, a n-d load or store.
   /// If \pNdLoadStore is already masked, use the and-combination of its
@@ -1300,6 +1287,17 @@ public:
   /// @brief Sets a tensor shape to a value
   /// @return true if the shape of v was modified
   bool setRippleShape(const Value *V, const TensorShape &Shape);
+
+  /// Register \p Select to receive the logical lane mask during
+  /// if-conversion.
+  void maskSelectWhenIfConverted(SelectInst *Select) {
+    SelectToMaskWhenIfConvert.insert(Select);
+  }
+
+  /// Prevent if-conversion from adding another mask to \p I.
+  void skipMaskingWhenIfConverted(Instruction *I) {
+    ToSkipMaskingWhenIfConvert.insert(I);
+  }
 
   /// @brief Returns a copy of \ref Ripple::InstructionRippleShapes.
   /// \note The caller is expected to call \ref Ripple::propagateShapes before

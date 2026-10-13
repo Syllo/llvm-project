@@ -7,7 +7,10 @@ define void @window_load_shuffle(ptr readonly %A, ptr writeonly %B) {
 ; CHECK-LABEL: define void @window_load_shuffle
 ; CHECK-NOT: llvm.masked.gather
 ; CHECK: [[BASE:%.*]] = getelementptr i8, ptr {{%.*}}, i64 80
-; CHECK: [[LD:%.*]] = load <8 x float>, ptr [[BASE]]
+; CHECK: [[LD:%.*]] = call <8 x float> @llvm.masked.load.v8f32.p0(
+; CHECK-SAME: ptr align 4 [[BASE]],
+; CHECK-SAME: <8 x i1> <i1 true, i1 true, i1 false, i1 true,
+; CHECK-SAME: i1 true, i1 true, i1 false, i1 true>, <8 x float> poison)
 ; CHECK: [[SHUF:%.*]] = shufflevector <8 x float> [[LD]], <8 x float> poison, <8 x i32> <i32 3, i32 5, i32 0, i32 1, i32 1, i32 7, i32 5, i32 4>
 ; CHECK: store <8 x float> [[SHUF]]
 entry:
