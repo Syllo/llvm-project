@@ -1062,21 +1062,29 @@ NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
       SortedByteOffsets.end());
 
   auto *ElementTy = Load->getType();
-  int64_t LoadElementSizeByte = DL.getTypeStoreSize(ElementTy).getFixedValue();
+  int64_t LoadElementSizeBytes = DL.getTypeStoreSize(ElementTy).getFixedValue();
 
   // Build Load Windows
   SmallVector<LoadWindow> Windows;
-  int64_t VectorByteSize = NumElementsToLoad * LoadElementSizeByte;
+  int64_t VectorByteSize = NumElementsToLoad * LoadElementSizeBytes;
   int64_t WindowLastByteOffset = 0;
   for (int64_t CurrentByteOffset : SortedByteOffsets) {
-    bool StartNewWindow =
-        Windows.empty() || (CurrentByteOffset > WindowLastByteOffset);
+    bool StartNewWindow = Windows.empty();
+    if (!StartNewWindow) {
+      int64_t RelativeByteOffset =
+          CurrentByteOffset - Windows.back().BaseOffset;
+      // A masked vector load can only address whole elements. Keep offsets
+      // that do not land on an element boundary in separate windows so that
+      // they fall back to the byte-accurate gather implementation.
+      StartNewWindow = CurrentByteOffset > WindowLastByteOffset ||
+                       RelativeByteOffset % LoadElementSizeBytes != 0;
+    }
 
     if (StartNewWindow) {
-      // CurrentByteOffset if the Window First Byte Offset
+      // CurrentByteOffset is the window's first byte offset.
       Windows.push_back(LoadWindow({CurrentByteOffset, {}}));
       WindowLastByteOffset =
-          CurrentByteOffset + VectorByteSize - LoadElementSizeByte;
+          CurrentByteOffset + VectorByteSize - LoadElementSizeBytes;
     }
 
     Windows.back().LoadOffsets.push_back(CurrentByteOffset);
@@ -1126,7 +1134,7 @@ NDLoadStoreFactory::genMultiWindowLoadShuffle(LoadInst *Load, Value *Address,
     for (auto Offset : Window.LoadOffsets) {
       auto RelativeByteOffset = Offset - Window.BaseOffset;
       unsigned LocalLane =
-          static_cast<unsigned>(RelativeByteOffset / LoadElementSizeByte);
+          static_cast<unsigned>(RelativeByteOffset / LoadElementSizeBytes);
       WindowLoadMask[LocalLane] = IrBuilder.getTrue();
       OriginalOffsetToLocalWindowLane[Offset] = LocalLane;
     }
