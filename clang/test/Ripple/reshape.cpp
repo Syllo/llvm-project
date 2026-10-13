@@ -1,5 +1,5 @@
 // REQUIRES: hexagon-registered-target || aarch64-registered-target || x86-registered-target
-// RUN: %clang++ -S -fenable-ripple -O2 -Rpass-missed=ripple -emit-llvm %s -o - 2>&1 | FileCheck %s --implicit-check-not="warning:" --implicit-check-not="remark:" --implicit-check-not="error:"s
+// RUN: %clang++ -S -fenable-ripple -O2 -Rpass-missed=ripple -emit-llvm %s -o - 2>&1 | FileCheck %s --implicit-check-not="warning:" --implicit-check-not="remark:" --implicit-check-not="error:"
 
 #include "ripple_test.h"
 

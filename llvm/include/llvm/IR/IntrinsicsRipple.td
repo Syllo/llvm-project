@@ -24,6 +24,9 @@ let TargetPrefix = "ripple" in {
 //   - E.g. 2D slice to 1D is a shuffle to extract a column/line
 // - stack (shuffle like)
 //   - builds larger tensor from smaller tensors, shuffle to combine
+// - reinterp
+//   - reinterprets a tensor's bits with a possibly different element width;
+//     changing the width remaps bits between logical lanes
 
 // Ripple dim; takes as input a processing element (PE) identifier (e.g., 0 vector,
 // 1 thread, 2 core) and dimension index; returns it's multi-dimensional index.
@@ -50,33 +53,37 @@ def int_ripple_block_setshape : DefaultAttrsIntrinsic<[llvm_ptr_ty], [llvm_anyin
 def int_ripple_stack : DefaultAttrsIntrinsic<[llvm_any_ty], [llvm_ptr_ty, LLVMMatchType<0>, llvm_vararg_ty],
                               [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 
+// Reshape preserves flattened lane order, so it is element-wise and does not
+// need IntrConvergent. The block-shape operand only describes the result view.
 def int_ripple_reshape : DefaultAttrsIntrinsic<[llvm_any_ty], [llvm_ptr_ty, LLVMMatchType<0>],
                             [IntrNoMem, IntrWillReturn]>;
 
+// Keep IntrConvergent: changing the element width can remap bits between
+// logical lanes (see comment on top).
 def int_ripple_reinterp_i8  : DefaultAttrsIntrinsic<[llvm_i8_ty],  [llvm_ptr_ty, llvm_any_ty],
-                               [IntrNoMem, IntrWillReturn]>;
+                               [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 def int_ripple_reinterp_u8  : DefaultAttrsIntrinsic<[llvm_i8_ty],  [llvm_ptr_ty, llvm_any_ty],
-                               [IntrNoMem, IntrWillReturn]>;
+                               [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 def int_ripple_reinterp_i16 : DefaultAttrsIntrinsic<[llvm_i16_ty], [llvm_ptr_ty, llvm_any_ty],
-                               [IntrNoMem, IntrWillReturn]>;
+                               [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 def int_ripple_reinterp_u16 : DefaultAttrsIntrinsic<[llvm_i16_ty], [llvm_ptr_ty, llvm_any_ty],
-                               [IntrNoMem, IntrWillReturn]>;
+                               [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 def int_ripple_reinterp_i32 : DefaultAttrsIntrinsic<[llvm_i32_ty], [llvm_ptr_ty, llvm_any_ty],
-                               [IntrNoMem, IntrWillReturn]>;
+                               [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 def int_ripple_reinterp_u32 : DefaultAttrsIntrinsic<[llvm_i32_ty], [llvm_ptr_ty, llvm_any_ty],
-                               [IntrNoMem, IntrWillReturn]>;
+                               [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 def int_ripple_reinterp_i64 : DefaultAttrsIntrinsic<[llvm_i64_ty], [llvm_ptr_ty, llvm_any_ty],
-                               [IntrNoMem, IntrWillReturn]>;
+                               [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 def int_ripple_reinterp_u64 : DefaultAttrsIntrinsic<[llvm_i64_ty], [llvm_ptr_ty, llvm_any_ty],
-                               [IntrNoMem, IntrWillReturn]>;
+                               [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 def int_ripple_reinterp_f16  : DefaultAttrsIntrinsic<[llvm_half_ty],   [llvm_ptr_ty, llvm_any_ty],
-                               [IntrNoMem, IntrWillReturn]>;
+                               [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 def int_ripple_reinterp_bf16 : DefaultAttrsIntrinsic<[llvm_bfloat_ty], [llvm_ptr_ty, llvm_any_ty],
-                               [IntrNoMem, IntrWillReturn]>;
+                               [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 def int_ripple_reinterp_f32  : DefaultAttrsIntrinsic<[llvm_float_ty],  [llvm_ptr_ty, llvm_any_ty],
-                               [IntrNoMem, IntrWillReturn]>;
+                               [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 def int_ripple_reinterp_f64  : DefaultAttrsIntrinsic<[llvm_double_ty], [llvm_ptr_ty, llvm_any_ty],
-                               [IntrNoMem, IntrWillReturn]>;
+                               [IntrNoMem, IntrConvergent, IntrWillReturn]>;
 
 // RIpple tensor reduction operator;
 // The first argument is a bitset to represent which dimensions are being
