@@ -5798,6 +5798,9 @@ void Ripple::applyMaskToOps(iterator_range<IteratorT> BBs, Value *VectorMask,
           Value *MaskedLoad = irBuilder.CreateMaskedLoad(
               Load->getType(), Load->getPointerOperand(), Load->getAlign(),
               MaskToApply, nullptr, Twine(I.getName()) + ".ripple.masked.load");
+          if (MDNode *NT = Load->getMetadata(LLVMContext::MD_nontemporal))
+            cast<Instruction>(MaskedLoad)
+                ->setMetadata(LLVMContext::MD_nontemporal, NT);
           setRippleShape(MaskedLoad, InstructionShape);
           Load->replaceAllUsesWith(MaskedLoad);
           invalidateRippleDataFor(Load);
@@ -5891,6 +5894,8 @@ void Ripple::applyMaskToOps(iterator_range<IteratorT> BBs, Value *VectorMask,
           Instruction *MaskedStoreI = irBuilder.CreateMaskedStore(
               Store->getValueOperand(), Store->getPointerOperand(),
               Store->getAlign(), MaskToApply);
+          if (MDNode *NT = Store->getMetadata(LLVMContext::MD_nontemporal))
+            MaskedStoreI->setMetadata(LLVMContext::MD_nontemporal, NT);
           setRippleShape(MaskedStoreI, InstructionShape);
           invalidateRippleDataFor(Store);
           Store->eraseFromParent();
