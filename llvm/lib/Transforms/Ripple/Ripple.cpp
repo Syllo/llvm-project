@@ -2582,8 +2582,8 @@ void Ripple::padToTargetSIMDWidth() {
       // Note: the contract offered by `InstToPadded` is that an input
       // Instruction, Inst, must have been padded with its
       // "GetPaddedLength(Inst)" earlier to calling this routine.
-      auto *VWithDifferentPad =
-          dyn_cast<Instruction>(InstToPadded.at({I, NaturalPaddedLngthI}));
+      Value *VWithDifferentPad =
+          InstToPadded.at({I, NaturalPaddedLngthI});
 
       std::vector<int> MaskEls(PaddedLength, -1);
       for (unsigned IEl = 0; IEl < std::min(PaddedLength, NaturalPaddedLngthI);
@@ -2596,7 +2596,12 @@ void Ripple::padToTargetSIMDWidth() {
       // step 1. save old insertion point.
       auto OldIP = irBuilder.saveIP();
       // step 2. insert the concatenation.
-      setInsertPointAfter(irBuilder, VWithDifferentPad);
+      // Constant-folding can produce a constant padded value, which has no
+      // insertion point. In that case insert after the original instruction.
+      if (auto *MappedI = dyn_cast<Instruction>(VWithDifferentPad))
+        setInsertPointAfter(irBuilder, MappedI);
+      else
+        setInsertPointAfter(irBuilder, I);
 
       auto *PaddedV = irBuilder.CreateShuffleVector(
           VWithDifferentPad, MaskEls, VWithDifferentPad->getName() + ".pad");
