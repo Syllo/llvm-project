@@ -1172,10 +1172,20 @@ TEST_F(PropagateLinearSeriesTest, CastOp) {
 
   Value *Scalar10 = IRB.getInt64(10);
 
-  // Create a LinearSeries: index * 2 + 10
-  AssertingVH<Value> MulIndex = IRB.CreateMul(Index0, IRB.getInt64(2), "mul");
+  // Create a non-wrapping LinearSeries: index * 2 + 10.  Extensions can
+  // distribute over a series only when every varying operation is proven not
+  // to wrap in the source type.
+  AssertingVH<Value> MulIndex =
+      IRB.CreateMul(Index0, IRB.getInt64(2), "mul", /*NUW=*/true,
+                    /*NSW=*/true);
   AssertingVH<Value> AddScalar =
       IRB.CreateAdd(MulIndex, Scalar10, "add", /*NUW*/ true, /*NSW*/ true);
+
+  // This has the same lane values as MulIndex for this block shape, but raw
+  // IR provides no proof that it cannot wrap. Extensions must therefore not
+  // distribute across this series.
+  AssertingVH<Value> MulMayWrap =
+      IRB.CreateMul(Index0, IRB.getInt64(2), "mul_may_wrap");
 
   // Test 1: Cast i64 to i32 (Trunc NUW) -> LS should propagate
   AssertingVH<Value> TruncCastNUW =
@@ -1201,7 +1211,14 @@ TEST_F(PropagateLinearSeriesTest, CastOp) {
   AssertingVH<Value> SExtCast =
       IRB.CreateSExt(AddScalar, IRB.getInt128Ty(), "sext_cast");
 
-  // Test 6: BitCast -> LS should NOT propagate (using double as it has same
+  // Test 6 and 7: Extensions of a varying operation without a no-wrap proof
+  // must restart the series with a tensor base.
+  AssertingVH<Value> ExtMayWrap =
+      IRB.CreateZExt(MulMayWrap, IRB.getInt128Ty(), "ext_may_wrap");
+  AssertingVH<Value> SExtMayWrap =
+      IRB.CreateSExt(MulMayWrap, IRB.getInt128Ty(), "sext_may_wrap");
+
+  // Test 8: BitCast -> LS should NOT propagate (using double as it has same
   // size 64)
   AssertingVH<Value> BitCast =
       IRB.CreateBitCast(AddScalar, IRB.getDoubleTy(), "bit_cast");
@@ -1291,7 +1308,22 @@ TEST_F(PropagateLinearSeriesTest, CastOp) {
     FAIL() << "Slope[0] is not a ConstantInt";
   }
 
-  // Verify Test 6: BitCast DOES NOT propagate LinearSeries
+  // Verify Tests 6 and 7: unproven extensions restart the LinearSeries.
+  const LinearSeries *LS_ExtMayWrap =
+      Ripple->getLinseriesFor(cast<Instruction>(&*ExtMayWrap));
+  ASSERT_NE(LS_ExtMayWrap, nullptr);
+  EXPECT_FALSE(LS_ExtMayWrap->getBaseShape().isScalar());
+  EXPECT_TRUE(LS_ExtMayWrap->getSlopeShape().isScalar());
+  EXPECT_TRUE(LS_ExtMayWrap->hasZeroSlopes());
+
+  const LinearSeries *LS_SExtMayWrap =
+      Ripple->getLinseriesFor(cast<Instruction>(&*SExtMayWrap));
+  ASSERT_NE(LS_SExtMayWrap, nullptr);
+  EXPECT_FALSE(LS_SExtMayWrap->getBaseShape().isScalar());
+  EXPECT_TRUE(LS_SExtMayWrap->getSlopeShape().isScalar());
+  EXPECT_TRUE(LS_SExtMayWrap->hasZeroSlopes());
+
+  // Verify Test 8: BitCast DOES NOT propagate LinearSeries
   const LinearSeries *LS_BitCast =
       Ripple->getLinseriesFor(cast<Instruction>(&*BitCast));
   ASSERT_EQ(LS_BitCast, nullptr);

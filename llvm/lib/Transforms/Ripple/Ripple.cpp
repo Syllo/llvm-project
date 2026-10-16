@@ -3950,11 +3950,25 @@ void Ripple::genVectorInstructions() {
                                 const TensorShape &toShape) -> void {
     switch (rippleDim->getIntrinsicID()) {
     case Intrinsic::ripple_block_index: {
-      // The propagation is handled by Linear Series, here we replace the
-      // instruction by the value zero.
-      assert(getCachedSeries(rippleDim));
-      Constant *c = ConstantInt::get(rippleDim->getType(), 0);
-      setReplacementFor(rippleDim, c, toShape);
+      if (getCachedSeries(rippleDim)) {
+        // The propagation is handled by Linear Series, here we replace the
+        // instruction by the value zero.
+        Constant *c = ConstantInt::get(rippleDim->getType(), 0);
+        setReplacementFor(rippleDim, c, toShape);
+        break;
+      }
+
+      // The index range does not fit its scalar type, so it cannot be
+      // represented by a linear series. Materialize the narrow lane values
+      // directly and let subsequent IR operations apply their own extension
+      // semantics.
+      auto *IndexTy = cast<IntegerType>(rippleDim->getType());
+      SmallVector<Constant *, 16> LaneValues;
+      for (uint64_t Lane = 0, End = toShape.flatShape(); Lane != End; ++Lane)
+        LaneValues.push_back(ConstantInt::get(IndexTy, Lane,
+                                              /*IsSigned=*/false,
+                                              /*ImplicitTrunc=*/true));
+      setReplacementFor(rippleDim, ConstantVector::get(LaneValues), toShape);
     } break;
     case Intrinsic::ripple_block_getsize: {
       // Replace ripple.block.getsize calls by a constant
@@ -7053,8 +7067,9 @@ bool LinearSeries::canDistributeTruncAcrossSeries(Value *TruncatedVal) {
   return true;
 }
 
-bool LinearSeries::canDistributeExtAcrossSeries(Value *CastOperand,
-                                                bool UnsignedSeries) {
+bool LinearSeries::canDistributeExtAcrossSeries(
+    Value *CastOperand, bool UnsignedSeries,
+    function_ref<bool(Value *)> IsNonWrappingLeaf) {
   SmallPtrSet<Value *, 16> Visited;
   SmallVector<Value *, 16> Worklist{CastOperand};
 
@@ -7066,11 +7081,17 @@ bool LinearSeries::canDistributeExtAcrossSeries(Value *CastOperand,
     if (!Visited.insert(V).second)
       continue;
 
-    // Only allow OverflowingBinaryOperator with the no-wrap semantics
+    if (IsNonWrappingLeaf(V))
+      continue;
+
+    // Only allow OverflowingBinaryOperator with the no-wrap semantics. The
+    // no-wrap flag only holds for the operand values, so their own series
+    // must not wrap either.
     if (auto *OB = dyn_cast<OverflowingBinaryOperator>(V)) {
-      if (UnsignedSeries ? OB->hasNoUnsignedWrap() : OB->hasNoSignedWrap())
+      if (UnsignedSeries ? OB->hasNoUnsignedWrap() : OB->hasNoSignedWrap()) {
+        copy(OB->operands(), std::back_inserter(Worklist));
         continue;
-      else
+      } else
         return false;
     }
 
@@ -7162,6 +7183,10 @@ Ripple::ConstructedSeries Ripple::getLinearSeriesFor(Instruction *I) {
 
   auto processRippleBlockIndex =
       [&](IntrinsicInst *RippleIndexInst) -> ConstructedSeries {
+    unsigned BitWidth = RippleIndexInst->getType()->getScalarSizeInBits();
+    if (!isUIntN(BitWidth, ToShape.flatShape() - 1))
+      return {};
+
     // For Ripple Index, the base is zero and the shape is carried by the slope
     for (unsigned i = 0; i < ToShape.rank(); ++i)
       NewSlopes.push_back(ToShape[i] > 1 ? ConstantSlopeOf(1)
@@ -7366,8 +7391,10 @@ Ripple::ConstructedSeries Ripple::getLinearSeriesFor(Instruction *I) {
     auto Zext = dyn_cast<ZExtInst>(CastI);
     bool CanDistributeExtension =
         (Sext || Zext) &&
-        LinearSeries::canDistributeExtAcrossSeries(CastI->getOperand(0),
-                                                   /*unsigned*/ Zext);
+        LinearSeries::canDistributeExtAcrossSeries(
+            CastI->getOperand(0), /*unsigned*/ Zext, [&](Value *V) {
+              return isNonWrappingSeriesLeaf(V, /*unsigned*/ Zext);
+            });
     auto Trunc = dyn_cast<TruncInst>(CastI);
     bool CanDistributeTrunc =
         Trunc && LinearSeries::canDistributeTruncAcrossSeries(Trunc);
@@ -7425,6 +7452,35 @@ Ripple::ConstructedSeries Ripple::getLinearSeriesFor(Instruction *I) {
     TensorShape NewSlopeShape = ToShape;
     NewSlopeShape.reduceDimensions(NewBaseShape.nonEmptyDims());
 
+    // GEP sign-extends narrow indices per element. Only fold them into the
+    // pointer series when extending the series base and slopes is equivalent.
+    for (unsigned Idx = 0; Idx < GEP->getNumIndices(); ++Idx) {
+      LinearSeries *IdxSeries =
+          OperandSeries[Idx + (GEP->idx_begin() - GEP->op_begin())].LS;
+      Value *GEPIndexVal = *(GEP->idx_begin() + Idx);
+
+      // GEP only sign-extends indices narrower than the pointer index type.
+      bool NeedsSignExtension = GEPIndexVal->getType()->getScalarSizeInBits() <
+                                SlopeType->getBitWidth();
+      if (!NeedsSignExtension)
+        continue;
+
+      // A lane-invariant index remains equivalent after extending its base.
+      if (IdxSeries->hasZeroSlopes())
+        continue;
+
+      // For a varying narrow index, extending base and slopes separately is
+      // valid only when all leaves are known not to wrap.
+      // For example, for i8 127 + 1 * lane at lane 1:
+      // sext(127 + 1 * 1) is -128 after i8 wrap, while the linear-series
+      // transformation sext(127) + sext(1) * 1 is 128.
+      if (!LinearSeries::canDistributeExtAcrossSeries(
+              GEPIndexVal, /*unsigned*/ false, [&](Value *V) {
+                return isNonWrappingSeriesLeaf(V, /*unsigned*/ false);
+              }))
+        return {};
+    }
+
     // Start w/ the pointer slope
     for (unsigned i = 0; i < NewSlopeShape.rank(); ++i) {
       Value *PtrSlope = PointerSeries.LS->getSlope(i);
@@ -7460,8 +7516,9 @@ Ripple::ConstructedSeries Ripple::getLinearSeriesFor(Instruction *I) {
       for (unsigned SlopeIdx = 0; SlopeIdx < NewSlopeShape.rank(); ++SlopeIdx) {
         Value *IndexSlope = IdxSeries->getSlope(SlopeIdx);
         if (IndexSlope->getType() != SlopeType) {
+          // GEP sign-extends narrow indices to the pointer index type.
           IndexSlope = irBuilder.CreateIntCast(IndexSlope, SlopeType,
-                                               /*signed*/ false,
+                                               /*signed*/ true,
                                                "ripple.slope.gep.typefix");
           setRippleShape(IndexSlope, ScalarShape);
           SlopeInstructions.insert(dyn_cast<Instruction>(IndexSlope));
@@ -7626,7 +7683,11 @@ Ripple::ConstructedSeries Ripple::getLinearSeriesFor(Instruction *I) {
   }
 
   // We can always restart a new series with a vector base since the type is
-  // integral
+  // integral, except for a block index whose lane range does not fit its
+  // scalar type. That index must be materialized directly during lowering.
+  if (CS.isNotASeries() && intrinsicWithId(dyn_cast<Instruction>(I),
+                                           {Intrinsic::ripple_block_index}))
+    return {};
   if (CS.isNotASeries()) {
     NewSlopes.clear();
     for (unsigned i = 0; i < ToShape.rank(); ++i)
@@ -9234,9 +9295,10 @@ void Ripple::processDebugIntrinsicOrRecord(DIBuilder &DIB, T &DbgVariable) {
       const TensorShape &VecShape = getRippleShape(&*InstBeingReplaced);
 
       // We expose ripple.block.index as a vector for the debugger, but
-      // replace it by the base value 0 for linear series
+      // replace it by the base value 0 only when it has a linear series.
       if (IntrinsicInst *RippleIndexInst = intrinsicWithId(
-              InstBeingReplaced, {Intrinsic::ripple_block_index}))
+              InstBeingReplaced, {Intrinsic::ripple_block_index});
+          RippleIndexInst && getCachedSeries(RippleIndexInst))
         ReplacementValue = LinearSeries::constructLinearSeriesVector(
             cast<IntegerType>(RippleIndexInst->getType()),
             VecShape.flatShape());
@@ -11653,6 +11715,35 @@ Ripple::getRippleGetSizeValue(const IntrinsicInst *RippleGetSize) {
     return BlockShape[rippleToTensor({ProcElem, Dimension})];
   } else
     return 1;
+}
+
+bool Ripple::isNonWrappingSeriesLeaf(Value *V, bool UnsignedSeries) {
+  if (isa<ConstantInt>(V))
+    return true;
+  if (auto *Arg = dyn_cast<Argument>(V))
+    return getRippleShape(Arg, /*ShapePropagation=*/true).isScalar();
+  if (auto *I = dyn_cast<Instruction>(V)) {
+    // A scalar-shaped instruction does not vary along the series lanes.
+    if (getRippleShape(I).isScalar())
+      return true;
+    // A vector-shaped instruction with only zero slopes is a splat across the
+    // series lanes.
+    ConstructedSeries CS = getCachedSeries(I);
+    // A potential series must remain usable so dependent series stay
+    // potential and can be revisited when it promotes to valid.
+    if (!CS.isNotASeries() && CS.LS->hasZeroSlopes())
+      return true;
+  }
+  if (auto *BlockIndex = dyn_cast<IntrinsicInst>(V);
+      BlockIndex &&
+      BlockIndex->getIntrinsicID() == Intrinsic::ripple_block_index) {
+    // The block index takes the values [0, BlockSize - 1] across the lanes.
+    unsigned BitWidth = BlockIndex->getType()->getScalarSizeInBits();
+    uint64_t MaxIndex = getRippleShape(BlockIndex).flatShape() - 1;
+    return UnsignedSeries ? isUIntN(BitWidth, MaxIndex)
+                          : isIntN(BitWidth, MaxIndex);
+  }
+  return false;
 }
 
 TensorShape

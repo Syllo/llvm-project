@@ -553,8 +553,13 @@ public:
   /// truncation because of the undefined behavior semantics on overflow.
   ///
   /// True when Extend(AX + B) = Extend(AX) + Extend(B) stands.
-  static bool canDistributeExtAcrossSeries(Value *CastOperand,
-                                           bool UnsignedSeries);
+  ///
+  /// @p IsNonWrappingLeaf returns true for values known not to wrap across
+  /// the lanes of the series. Other values must be no-wrap arithmetic, PHI or
+  /// select whose operands recursively satisfy the same condition.
+  static bool
+  canDistributeExtAcrossSeries(Value *CastOperand, bool UnsignedSeries,
+                               function_ref<bool(Value *)> IsNonWrappingLeaf);
 
 private:
   /// @brief The base value
@@ -2268,10 +2273,17 @@ private:
   /// @brief Returns the tensor shape of RippleSetShape
   TensorShape setShapeToTensorShape(const IntrinsicInst *RippleSetShape) const;
 
-  /// @brief Returns the size of the dimension requested by a the
-  /// ripple.get.size intrinsic
+  /// @brief Returns the dimension size requested by a ripple.block.getsize
+  /// intrinsic.
   TensorShape::DimSize
   getRippleGetSizeValue(const IntrinsicInst *RippleGetSize);
+
+  /// @brief Returns true if @p V is a leaf of a linear series that does not
+  /// wrap in its own type across the series lanes: a constant, a scalar-shaped
+  /// argument or instruction, an instruction with zero slopes, or a
+  /// ripple.block.index whose block size fits in the (signed if not
+  /// @p UnsignedSeries) index type.
+  bool isNonWrappingSeriesLeaf(Value *V, bool UnsignedSeries);
 
   /// @brief Populates @p BSArgs with pairs <argument index,
   /// ripple_set_block_shape intrinsic> for each argument we can trace back to
