@@ -71,6 +71,9 @@ function(set_hexagon_version_info HEXAGON_ARCH_VERSION EXTRA_HEXAGON_FLAGS_OUT Q
 endfunction()
 
 # Detect QuRT
+if ("${HEXAGON_ARCH_VERSION}" STREQUAL "")
+  set(HEXAGON_ARCH_VERSION "$ENV{HEXAGON_ARCH_VERSION}")
+endif()
 if ("${HEXAGON_SDK_ROOT}" STREQUAL "")
   set(HEXAGON_SDK_ROOT "$ENV{HEXAGON_SDK_ROOT}")
 endif()
@@ -94,10 +97,12 @@ else()
   set (HAS_QURT "TRUE")
 endif()
 
-# Detect the tool set. Several variables can influence this.
-# Preferred: find a toolset in which the compiler used to build compiler-rt sits
+# Detect the legacy SDK include directory when one is available.  An LLVM
+# installation does not have the SDK's target/ directory; its clang finds the
+# Hexagon headers in its resource directory without an explicit -I flag.
+# Keep supporting SDK toolsets, but do not require that layout when compiler-rt
+# is built with the clang being installed.
 if (NOT "${CMAKE_C_COMPILER}" STREQUAL "")
-  # Expected structure: HEXAGON_TOOLS_ROOT/bin/clang
   message(NOTICE "Picking up tools from c compiler ${CMAKE_C_COMPILER}")
   get_filename_component(_clang_parent "${CMAKE_C_COMPILER}" DIRECTORY)
 else()
@@ -108,19 +113,24 @@ endif()
 if (NOT "${_clang_parent}" STREQUAL "")
   get_filename_component(_tools_base "${_clang_parent}" DIRECTORY)
   message(NOTICE "Looking for a toolset at ${_tools_base}")
-  # We need the target/ subdirectory to be there in order to use the toolset
-  set (_toolset_target_dir "${_tools_base}/target")
-  if (IS_DIRECTORY "${_toolset_target_dir}")
-    message(STATUS "Found toolset at ${_tools_base}")
-    set (HEXAGON_TOOLS_ROOT "${_tools_base}")
-  else()
-    message(NOTICE "target dir not found at ${_toolset_target_dir}")
-  endif()
 endif()
 
-if ("${HEXAGON_TOOLS_ROOT}" STREQUAL "")
-    message(FATAL_ERROR "Hexagon tools root folder not found. "
-    "Did you setup the SDK environment variables (setup_sdk_env.source) ?")
+set(_hexagon_tools_candidates
+    "${HEXAGON_TOOLS_ROOT}"
+    "$ENV{HEXAGON_TOOLS_ROOT}"
+    "${_tools_base}")
+foreach(_hexagon_tools_root IN LISTS _hexagon_tools_candidates)
+  if(NOT "${_hexagon_tools_root}" STREQUAL "" AND
+     IS_DIRECTORY "${_hexagon_tools_root}/target/hexagon/include")
+    set(HEXAGON_TOOLS_ROOT "${_hexagon_tools_root}")
+    set(RIPPLE_THD_HEXAGON_TOOL_INCLUDE_DIRS
+        "${HEXAGON_TOOLS_ROOT}/target/hexagon/include")
+    message(STATUS "Using Hexagon SDK headers from ${RIPPLE_THD_HEXAGON_TOOL_INCLUDE_DIRS}")
+    break()
+  endif()
+endforeach()
+if ("${RIPPLE_THD_HEXAGON_TOOL_INCLUDE_DIRS}" STREQUAL "")
+  message(STATUS "No legacy Hexagon SDK headers found; using clang resource headers")
 endif()
 
 set(RIPPLE_THD_HEXAGON_FLAGS
@@ -148,7 +158,7 @@ set(RIPPLE_THD_QURT_SOURCES
 
 # Include dirs needed to compile the sources
  set(RIPPLE_THD_QURT_INCLUDE_DIRS
-  "${HEXAGON_TOOLS_ROOT}/target/hexagon/include"
+  ${RIPPLE_THD_HEXAGON_TOOL_INCLUDE_DIRS}
   "${CMAKE_CURRENT_LIST_DIR}/header"
  )
 
@@ -281,7 +291,7 @@ set(RIPPLE_THD_QHPI_SOURCES
 
 # Include dirs needed to compile the sources
 set(RIPPLE_THD_QHPI_INCLUDE_DIRS
-  "${HEXAGON_TOOLS_ROOT}/target/hexagon/include"
+  ${RIPPLE_THD_HEXAGON_TOOL_INCLUDE_DIRS}
   "${CMAKE_CURRENT_LIST_DIR}/header"
 )
 

@@ -110,6 +110,7 @@ jobs:
         targets:
           - arch: Hexagon
             triple: hexagon-unknown-unknown-elf
+            arch_version: v81
             cxx_flags: -stdlib=libc++ -D_USE_GENERIC_XLOCALE_SHIMS -D_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE -D_C99 -D_C_AS_CPP -D_HAS_GENERIC_TEMPLATES=0
             sdk: qualcomm-community-edition
 
@@ -159,6 +160,9 @@ jobs:
           if [ -z "${DEFAULT_HEXAGON_TOOLS_ROOT:-}" ]; then
             echo "ERROR: setup_sdk_env.source did not set DEFAULT_HEXAGON_TOOLS_ROOT" >&2; exit 1
           fi
+          echo "HEXAGON_SDK_ROOT=$HEXAGON_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "HEXAGON_TOOLS_ROOT=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools" >> "$GITHUB_ENV"
+          echo "HEXAGON_ARCH_VERSION=${{ matrix.targets.arch_version }}" >> "$GITHUB_ENV"
           echo "CI_CMAKE_CROSSCOMPILING_EMULATOR=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-sim;--simulated_returnval;--" >> "$GITHUB_ENV"
           echo "CI_HEXAGON_SYSROOT=${DEFAULT_HEXAGON_TOOLS_ROOT}/Tools/target/hexagon" >> "$GITHUB_ENV"
 
