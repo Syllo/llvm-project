@@ -47,7 +47,7 @@ jobs:
           - arch: AArch64
             triple: aarch64-none-linux-gnu
             toolchain-extra-cmake:
-            extra-cmake: -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_CXX_FLAGS="--sysroot=$AARCH64_TOOLCHAIN/aarch64-none-linux-gnu/libc/ --gcc-toolchain=$AARCH64_TOOLCHAIN -march=armv9.2-a" -DCMAKE_CROSSCOMPILING_EMULATOR="qemu-aarch64;-L;$AARCH64_TOOLCHAIN/aarch64-none-linux-gnu/libc"
+            extra-cmake: -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSROOT=$AARCH64_TOOLCHAIN/aarch64-none-linux-gnu/libc/ -DCMAKE_C_FLAGS="--gcc-toolchain=$AARCH64_TOOLCHAIN -march=armv9.2-a" -DCMAKE_CXX_FLAGS="--gcc-toolchain=$AARCH64_TOOLCHAIN -march=armv9.2-a" -DCMAKE_CROSSCOMPILING_EMULATOR="qemu-aarch64;-L;$AARCH64_TOOLCHAIN/aarch64-none-linux-gnu/libc" -DRIPPLE_TEST_SUITE_SME_VECTOR_LENGTH_BYTES=64
 
     steps:
       - name: Checkout Code
@@ -84,6 +84,36 @@ jobs:
 
       - name: Install Ripple Compiler
         run: cmake --install build --prefix ${{ github.workspace }}/install
+
+      - name: Build and install AArch64 Ripple compiler-rt
+        if: matrix.targets.arch == 'AArch64'
+        run: |
+          cmake -G Ninja -S compiler-rt -B build-compiler-rt \
+            -DLLVM_CMAKE_DIR=${{ github.workspace }}/install \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=${{ github.workspace }}/install/bin/clang \
+            -DCMAKE_CXX_COMPILER=${{ github.workspace }}/install/bin/clang++ \
+            -DCOMPILER_RT_BUILD_BUILTINS=OFF \
+            -DCOMPILER_RT_BUILD_RIPPLE=ON \
+            -DCOMPILER_RT_BUILD_CRT=OFF \
+            -DCOMPILER_RT_BUILD_CTX_PROFILE=OFF \
+            -DCOMPILER_RT_BUILD_GWP_ASAN=OFF \
+            -DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
+            -DCOMPILER_RT_BUILD_MEMPROF=OFF \
+            -DCOMPILER_RT_BUILD_ORC=OFF \
+            -DCOMPILER_RT_BUILD_PROFILE=OFF \
+            -DCOMPILER_RT_BUILD_SANITIZERS=OFF \
+            -DCOMPILER_RT_BUILD_XRAY=OFF \
+            -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
+            -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
+            -DCMAKE_C_COMPILER_TARGET=${{ matrix.targets.triple }} \
+            -DCMAKE_CXX_COMPILER_TARGET=${{ matrix.targets.triple }} \
+            -DCMAKE_SYSROOT="$AARCH64_TOOLCHAIN/aarch64-none-linux-gnu/libc" \
+            -DCMAKE_C_FLAGS="--gcc-toolchain=$AARCH64_TOOLCHAIN -march=armv9.2-a" \
+            -DCMAKE_CXX_FLAGS="--gcc-toolchain=$AARCH64_TOOLCHAIN -march=armv9.2-a"
+          cmake --build build-compiler-rt
+          cmake --install build-compiler-rt --prefix "$(./install/bin/clang --print-resource-dir)"
 
       - name: Clone Ripple Test Suite
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
