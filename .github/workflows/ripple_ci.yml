@@ -3,6 +3,10 @@ name: Ripple CI Tests
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   push:
@@ -31,6 +35,7 @@ jobs:
     if: github.repository_owner == 'qualcomm'
     name: Build and Test ripple
     runs-on: [self-hosted, ripple-ci]
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -46,7 +51,9 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Remove stale build directory
         run: rm -rf build
@@ -79,10 +86,14 @@ jobs:
         run: cmake --install build --prefix ${{ github.workspace }}/install
 
       - name: Clone Ripple Test Suite
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: qualcomm/ripple-test-suite
           path: ripple-test-suite
+          persist-credentials: false
+
+      - name: Show Ripple test-suite revision
+        run: git -C ripple-test-suite rev-parse HEAD
 
       - name: Remove stale Ripple test-suite build directory
         run: rm -rf build-ripple-test-suite
@@ -104,6 +115,7 @@ jobs:
     if: github.repository_owner == 'qualcomm'
     name: Build and Test ripple
     runs-on: [self-hosted, ripple-ci]
+    timeout-minutes: 120
     strategy:
       fail-fast: true
       matrix:
@@ -116,18 +128,21 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Remove stale build directory
         run: rm -rf build
 
       - name: Clone eld
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: qualcomm/eld
           # Track ELD fixes on the branch compatible with this LLVM release.
           ref: release/23.x
           path: eld
+          persist-credentials: false
 
       - name: Configure
         run: |
@@ -242,10 +257,14 @@ jobs:
         run: cmake --build build --target check-llvm-transforms-ripple
 
       - name: Clone Ripple Test Suite
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: qualcomm/ripple-test-suite
           path: ripple-test-suite
+          persist-credentials: false
+
+      - name: Show Ripple test-suite revision
+        run: git -C ripple-test-suite rev-parse HEAD
 
       - name: Remove stale Ripple test-suite build directory
         run: rm -rf build-ripple-test-suite
