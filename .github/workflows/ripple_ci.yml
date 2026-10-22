@@ -82,6 +82,9 @@ jobs:
       - name: Ripple LLVM Lit Tests
         run: cmake --build build --target check-llvm-transforms-ripple
 
+      - name: LLVM Unit Tests
+        run: cmake --build build --target check-llvm-unit
+
       - name: Install Ripple Compiler
         run: cmake --install build --prefix ${{ github.workspace }}/install
 
@@ -285,6 +288,9 @@ jobs:
 
       - name: Ripple LLVM Lit Tests
         run: cmake --build build --target check-llvm-transforms-ripple
+
+      - name: LLVM Unit Tests
+        run: cmake --build build --target check-llvm-unit
 
       - name: Clone Ripple Test Suite
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
