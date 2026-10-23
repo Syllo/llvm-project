@@ -108,7 +108,7 @@ jobs:
             -DCOMPILER_RT_BUILD_PROFILE=OFF \
             -DCOMPILER_RT_BUILD_SANITIZERS=OFF \
             -DCOMPILER_RT_BUILD_XRAY=OFF \
-            -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
+            -DCOMPILER_RT_DEFAULT_TARGET_TRIPLE=${{ matrix.targets.triple }} \
             -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
             -DCMAKE_C_COMPILER_TARGET=${{ matrix.targets.triple }} \
             -DCMAKE_CXX_COMPILER_TARGET=${{ matrix.targets.triple }} \
@@ -260,7 +260,7 @@ jobs:
             -DCOMPILER_RT_BUILD_PROFILE=OFF \
             -DCOMPILER_RT_BUILD_SANITIZERS=OFF \
             -DCOMPILER_RT_BUILD_XRAY=OFF \
-            -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
+            -DCOMPILER_RT_DEFAULT_TARGET_TRIPLE=${{ matrix.targets.triple }} \
             -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
             -DCMAKE_C_COMPILER_TARGET=${{ matrix.targets.triple }} \
             -DCMAKE_CXX_COMPILER_TARGET=${{ matrix.targets.triple }} \
