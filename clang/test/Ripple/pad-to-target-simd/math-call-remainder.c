@@ -25,6 +25,13 @@
 
 #include "../ripple_test.h"
 
+// Keep this regression independent of the compiler-rt math headers. The
+// candidate declaration is sufficient for Ripple to replace scalar acosf.
+typedef float f32t32 __attribute__((vector_size(128)));
+extern float acosf(float);
+extern f32t32 ripple_ew_pure_acosf(f32t32)
+    __attribute__((ripple_vector_candidate));
+
 #define N 400
 
 float A[N];
@@ -44,14 +51,14 @@ void run(void) {
         ripple_block_t BS = ripple_set_block_shape(0, CHUNK);
         ripple_parallel(BS, 0);
         for (int i = base; i < base + CHUNK; i++) {
-            pRES[i] = __builtin_ripple_acosf(pA[i]);
+            pRES[i] = acosf(pA[i]);
         }
     }
     if (REM > 0) {
         ripple_block_t BS = ripple_set_block_shape(0, REM);
         ripple_parallel(BS, 0);
         for (int i = N - REM; i < N; i++) {
-            pRES[i] = __builtin_ripple_acosf(pA[i]);
+            pRES[i] = acosf(pA[i]);
         }
     }
     #undef CHUNK

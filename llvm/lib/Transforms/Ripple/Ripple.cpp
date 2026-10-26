@@ -6371,6 +6371,8 @@ void Ripple::ifConvert() {
         BranchPostDom, PredsToSplit, "ripple.vecbranch.selectblock", &DTU);
     // There should only be a jump to BranchPostDom in the split BasicBlock
     setRippleShape(SelectInsertionBlock->getTerminator(), ScalarShape);
+    Instruction *SelectInsertionAnchor =
+        &*SelectInsertionBlock->getFirstInsertionPt();
     for (PHINode &Phi : PredOfBranchPostDomOrigin->phis()) {
       // We have one value flowing in from each branch
       std::vector<Value *> SpecializedPhis;
@@ -6390,11 +6392,16 @@ void Ripple::ifConvert() {
       // Create a possible cascade of selects (for switches)
       Value *SelectedValue = SpecializedPhis[TargetMasks.size() - 1];
       for (unsigned MaskIdx = 0; MaskIdx < TargetMasks.size() - 1; ++MaskIdx) {
-        irBuilder.SetInsertPoint(SelectInsertionBlock->getFirstInsertionPt());
+        irBuilder.SetInsertPoint(SelectInsertionAnchor);
         irBuilder.SetCurrentDebugLocation(Phi.getDebugLoc());
 
         auto MaskToApply = reduceBcastMaskToShape(TargetMasks[MaskIdx].second,
                                                   MaskShape, PhiShape);
+        // Mask construction may update the shared builder's insertion point.
+        // Insert each select before the same stable anchor so select cascades
+        // remain in dependency order.
+        irBuilder.SetInsertPoint(SelectInsertionAnchor);
+        irBuilder.SetCurrentDebugLocation(Phi.getDebugLoc());
         LLVM_DEBUG(dbgs() << "Select between " << *SpecializedPhis[MaskIdx]
                           << " and " << *SelectedValue << " using mask "
                           << *MaskToApply << "\n");
