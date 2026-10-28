@@ -2898,6 +2898,15 @@ void Ripple::padToTargetSIMDWidth() {
           MustBePadded.insert(I);
           AddUserInstsToWorklist(I, Worklist);
         }
+      } else if (auto *FreezeI = dyn_cast<FreezeInst>(I)) {
+        auto PaddedLength =
+            GetMaxPaddedLength({FreezeI, FreezeI->getOperand(0)});
+
+        if (AnyValuesKnownToBeMustPadded(
+                {FreezeI, FreezeI->getOperand(0)}, PaddedLength)) {
+          MustBePadded.insert(I);
+          AddUserInstsToWorklist(I, Worklist);
+        }
       } else if (auto *UnOpI = dyn_cast<UnaryOperator>(I)) {
         auto PaddedLength = GetMaxPaddedLength({UnOpI, UnOpI->getOperand(0)});
 
@@ -3497,6 +3506,26 @@ void Ripple::padToTargetSIMDWidth() {
 
       InstToPadded.insert_or_assign({SelectI, PaddedLength}, NewSelectI);
       InstructionsToRemove.push_back(SelectI);
+    } else if (auto *FreezeI = dyn_cast<FreezeInst>(I)) {
+      auto PaddedLength =
+          GetMaxPaddedLength({FreezeI, FreezeI->getOperand(0)});
+      auto *NewOperand =
+          GetPaddedV(FreezeI->getOperand(0), PaddedLength, InstToPadded);
+
+      irBuilder.SetInsertPoint(FreezeI);
+      auto *NewFreeze =
+          irBuilder.CreateFreeze(NewOperand, FreezeI->getName() + ".pad");
+      InstToPadded.insert_or_assign({FreezeI, PaddedLength}, NewFreeze);
+
+      auto NaturalPaddedLength = GetPaddedLength(FreezeI);
+      if (NaturalPaddedLength != PaddedLength) {
+        auto *NewNaturallyPaddedFreeze =
+            ExtractStartingSubVec(irBuilder, NewFreeze, NaturalPaddedLength);
+        InstToPadded.insert_or_assign({FreezeI, NaturalPaddedLength},
+                                      NewNaturallyPaddedFreeze);
+      }
+
+      InstructionsToRemove.push_back(FreezeI);
     } else if (auto *UnOpI = dyn_cast<UnaryOperator>(I)) {
       auto [EVTType, LegalVT] = GetEvtLegalTypes(UnOpI);
       auto PaddedLength = std::max(LegalVT.getVectorNumElements(),
