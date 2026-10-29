@@ -2824,6 +2824,21 @@ void Ripple::padToTargetSIMDWidth() {
                                          PaddedLength)) {
           MustBePadded.insert(I);
         }
+      } else if (auto *VectorInsert =
+                     intrinsicWithId(I, {Intrinsic::vector_insert})) {
+        // The parent vector and subvector have distinct natural widths.
+        Value *Vector = VectorInsert->getArgOperand(0);
+        Value *Subvector = VectorInsert->getArgOperand(1);
+        unsigned VectorPaddedLength = GetPaddedLength(VectorInsert);
+        unsigned SubvectorPaddedLength = GetPaddedLength(Subvector);
+
+        if (AnyValuesKnownToBeMustPadded({Vector, VectorInsert},
+                                         VectorPaddedLength) ||
+            AnyValuesKnownToBeMustPadded({Subvector},
+                                         SubvectorPaddedLength)) {
+          MustBePadded.insert(I);
+          AddUserInstsToWorklist(I, Worklist);
+        }
       } else if (auto *IntrnscInst = dyn_cast<IntrinsicInst>(I)) {
 
         SmallVector<Value *> Operands(IntrnscInst->arg_begin(),
@@ -3168,6 +3183,55 @@ void Ripple::padToTargetSIMDWidth() {
       LLVM_DEBUG(dbgs() << "[PadToTargetSIMD] Store, " << *StoreI
                         << " was mapped to " << *NewStore << "\n";);
       InstructionsToRemove.push_back(StoreI);
+    } else if (auto *VectorInsert =
+                   intrinsicWithId(I, {Intrinsic::vector_insert})) {
+      irBuilder.SetInsertPoint(VectorInsert);
+      Value *Vector = VectorInsert->getArgOperand(0);
+      Value *Subvector = VectorInsert->getArgOperand(1);
+      unsigned VectorPaddedLength = GetPaddedLength(VectorInsert);
+      unsigned SubvectorPaddedLength = GetPaddedLength(Subvector);
+      Value *PaddedVector =
+          GetPaddedV(Vector, VectorPaddedLength, InstToPadded);
+      Value *PaddedSubvector =
+          GetPaddedV(Subvector, SubvectorPaddedLength, InstToPadded);
+
+      auto *Index = cast<ConstantInt>(VectorInsert->getArgOperand(2));
+      uint64_t InsertIndex = Index->getZExtValue();
+      unsigned OriginalSubvectorLength =
+          cast<FixedVectorType>(Subvector->getType())->getNumElements();
+
+      auto *PaddedVectorTy = cast<FixedVectorType>(PaddedVector->getType());
+      Value *PaddedInsert;
+      if (OriginalSubvectorLength == SubvectorPaddedLength) {
+        // The original index remains valid when the subvector needs no
+        // padding, so preserve the vector.insert directly.
+        PaddedInsert = irBuilder.CreateInsertVector(
+            PaddedVectorTy, PaddedVector, PaddedSubvector, Index,
+            VectorInsert->getName() + ".pad");
+      } else {
+        // The original index need not be a multiple of the padded subvector
+        // width, as required by llvm.vector.insert. Insert the padded
+        // subvector into a padded staging vector at zero, then use a shuffle
+        // with the padded parent to place only the original subvector lanes.
+        Value *PositionedSubvector = irBuilder.CreateInsertVector(
+            PaddedVectorTy, PoisonValue::get(PaddedVectorTy), PaddedSubvector,
+            uint64_t{0}, VectorInsert->getName() + ".pad.subvector");
+        SmallVector<int> Mask(VectorPaddedLength);
+        for (unsigned Lane = 0; Lane < VectorPaddedLength; ++Lane) {
+          if (Lane >= InsertIndex &&
+              Lane < InsertIndex + OriginalSubvectorLength)
+            Mask[Lane] = VectorPaddedLength + Lane - InsertIndex;
+          else
+            Mask[Lane] = Lane;
+        }
+        PaddedInsert = irBuilder.CreateShuffleVector(
+            PaddedVector, PositionedSubvector, Mask,
+            VectorInsert->getName() + ".pad");
+      }
+
+      InstToPadded.insert_or_assign(
+          {VectorInsert, VectorPaddedLength}, PaddedInsert);
+      InstructionsToRemove.push_back(VectorInsert);
     } else if (auto *IntrnscInst = dyn_cast<IntrinsicInst>(I)) {
 
       SmallVector<Value *> Operands(IntrnscInst->arg_begin(),
