@@ -3264,6 +3264,7 @@ void Ripple::padToTargetSIMDWidth() {
   DenseMap<PHINode *, PHINode *> OldPhiToNewPhi;
   SmallVector<Instruction *> InstsThatMustBePaddedRPOT;
   SmallVector<BitCastInst *> FixedVectorBoundaryBitcasts;
+  SmallVector<BitCastInst *> VectorToScalarBitcasts;
 
   for (auto *BB : getFuncRPOT()) {
     for (auto &I : *BB) {
@@ -3271,6 +3272,8 @@ void Ripple::padToTargetSIMDWidth() {
       bool IsBoundary = IsFixedVectorBoundaryBitcast(&I);
       if (IsBoundary)
         FixedVectorBoundaryBitcasts.push_back(cast<BitCastInst>(&I));
+      if (IsScalarVectorBitcast(&I) && !I.getType()->isVectorTy())
+        VectorToScalarBitcasts.push_back(cast<BitCastInst>(&I));
 
       if (InstsThatMustBePadded.find(&I) != InstsThatMustBePadded.end()) {
         InstsThatMustBePaddedRPOT.push_back(&I);
@@ -4038,6 +4041,23 @@ void Ripple::padToTargetSIMDWidth() {
     OldPhi->removeIncomingValueIf([](unsigned X) { return true; }, false);
   }
 
+  // Scalar-result bitcasts retain their exact bit width. If their vector
+  // source was padded, discard its added lanes before the bitcast.
+  for (auto *BC : VectorToScalarBitcasts) {
+    Value *Src = BC->getOperand(0);
+    if (auto *SrcI = dyn_cast<Instruction>(Src);
+        SrcI &&
+        InstsThatMustBePadded.find(SrcI) != InstsThatMustBePadded.end()) {
+      unsigned ExactLength =
+          cast<FixedVectorType>(Src->getType())->getNumElements();
+      irBuilder.SetInsertPoint(BC);
+      BC->setOperand(0, ExtractStartingSubVec(
+                            irBuilder,
+                            GetPaddedV(Src, GetPaddedLength(Src), InstToPadded),
+                            ExactLength));
+    }
+  }
+
   // Re-anchor the native fixed-vector conversion boundaries. A
   // ripple.to.fixed.vector view has scalar Ripple shape, so it was never queued
   // for padding, but its tensor operand may have been: narrow that back to the
@@ -4539,15 +4559,18 @@ void Ripple::genVectorInstructions() {
     irBuilder.SetInsertPoint(rippleReinterp);                                  \
     auto [ReinterpVal, FromShape] =                                            \
         getTensorUse(rippleReinterp->getArgOperandUse(1));                     \
-    /* Bitcast from <srcN x srcTy> to <dstN x TY_L> where dstN is chosen       \
+    /* Use a scalar destination for scalar Ripple shape. Otherwise bitcast     \
+       from <srcN x srcTy> to <dstN x TY_L> where dstN is chosen               \
        so that the total bit width is preserved:                               \
          dstN = srcN * sizeof(srcTy) / sizeof(TY_L) */                         \
     unsigned SrcElemBits = ReinterpVal->getType()->getScalarSizeInBits();      \
     unsigned DstElemBits = (TY_L)->getPrimitiveSizeInBits();                   \
     unsigned DstN = (FromShape->flatShape() * SrcElemBits) / DstElemBits;      \
-    Type *DstVecTy = VectorType::get(TY_L, DstN, /*Scalable=*/false);          \
+    Type *DstTy = TY_L;                                                        \
+    if (!toShape.isScalar())                                                   \
+      DstTy = VectorType::get(TY_L, DstN, /*Scalable=*/false);                 \
     Value *BitCast = irBuilder.CreateBitCast(                                  \
-        ReinterpVal, DstVecTy,                                                 \
+        ReinterpVal, DstTy,                                                    \
         tensorizedName(rippleReinterp->getName(), toShape));                   \
     setReplacementFor(rippleReinterp, BitCast, toShape);                       \
   }

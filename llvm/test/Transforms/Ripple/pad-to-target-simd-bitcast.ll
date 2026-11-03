@@ -330,6 +330,25 @@ define void @vector_reinterpret(ptr %input, ptr %output) #0 {
 ; CHECK: call void @llvm.masked.store.{{.*}}(<{{[0-9]+}} x float> [[VECTOR]],
 ; CHECK: ret void
 
+; SIMD padding must extract the original two source lanes before a
+; vector-to-scalar bitcast, preserving its exact 32-bit input width.
+define i32 @padded_vector_to_scalar_bitcast(ptr %input) #0 {
+  %src = call ptr @llvm.ripple.block.setshape.i32(i32 0, i32 2, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1)
+  %dst = call ptr @llvm.ripple.block.setshape.i32(i32 0, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1)
+  %i = call i32 @llvm.ripple.block.index.i32(ptr %src, i32 0)
+  %p = getelementptr i16, ptr %input, i32 %i
+  %v = load i16, ptr %p, align 2
+  %r = call i32 @llvm.ripple.reinterp.u32.i16(ptr %dst, i16 %v)
+  ret i32 %r
+}
+; CHECK-LABEL: define i32 @padded_vector_to_scalar_bitcast(
+; HVX: [[LOAD:%.*]] = call <64 x i16> @llvm.masked.load.v64i16.p0(
+; NEON: [[LOAD:%.*]] = call <8 x i16> @llvm.masked.load.v8i16.p0(
+; AVX2: [[LOAD:%.*]] = call <16 x i16> @llvm.masked.load.v16i16.p0(
+; CHECK: [[TRIM:%.*]] = call <2 x i16> @llvm.vector.extract.v2i16.{{.*}}(<{{[0-9]+}} x i16> [[LOAD]], i64 0)
+; CHECK: [[SCALAR:%.*]] = bitcast <2 x i16> [[TRIM]] to i32
+; CHECK: ret i32 [[SCALAR]]
+
 declare ptr @llvm.ripple.block.setshape.i32(i32 immarg, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32)
 declare i32 @llvm.ripple.block.index.i32(ptr, i32 immarg)
 declare i16 @llvm.ripple.from.fixed.vector.v2i16(ptr, <2 x i16>)
