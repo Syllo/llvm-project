@@ -6,6 +6,8 @@
 // RUN: %if x86-registered-target %{ %clang_cc1 -I %S/../../lib/Headers/ripple_include -triple x86_64-unknown-linux-gnu -fenable-ripple -O2 -emit-llvm %s -o - | FileCheck %s --check-prefix=LOWERED-GENERIC --implicit-check-not=llvm.ripple.bitcast --implicit-check-not=llvm.masked %}
 // RUN: %if aarch64-registered-target %{ %clang_cc1 -I %S/../../lib/Headers/ripple_include -triple aarch64-unknown-linux-gnu -fenable-ripple -O2 -emit-llvm %s -o - | FileCheck %s --check-prefix=LOWERED-GENERIC --implicit-check-not=llvm.ripple.bitcast --implicit-check-not=llvm.masked %}
 
+// RUN: %clang_cc1 -I %S/../../lib/Headers/ripple_include -triple x86_64-unknown-linux-gnu -fenable-ripple -DTEST_EXPLICIT_TYPE -fsyntax-only -verify -verify-ignore-unexpected=note %s
+
 #include <ripple.h>
 
 using Vec = long long __attribute__((vector_size(256)));
@@ -70,3 +72,14 @@ extern "C" Vec rank3(Vec v) {
 // LOWERED-GENERIC: {{(ret <32 x i64>|store <32 x i64>)}}
 // LOWERED-GENERIC-LABEL: define {{.*}} @rank3(
 // LOWERED-GENERIC: {{(ret <32 x i64>|store <32 x i64>)}}
+
+#ifdef TEST_EXPLICIT_TYPE
+// expected-error@__ripple_vec.h:* {{ripple_to_vec does not accept explicit type template arguments}}
+void explicit_element_type(int x) {
+  ripple_to_vec<4, float>(x);
+}
+// expected-error@__ripple_vec.h:* {{vec_to_ripple does not accept template arguments}}
+void explicit_vector_type(ripple_block_t bs, Vec v) {
+  vec_to_ripple<Vec>(bs, v);
+}
+#endif

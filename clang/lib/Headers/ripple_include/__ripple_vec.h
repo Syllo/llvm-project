@@ -109,65 +109,43 @@ typedef struct ripple_block_shape *ripple_block_t;
 
 /// Converts a Ripple value of T to a <N_EL x T> vector, or to T when N_EL is
 /// one. The Ripple value must contain exactly N_EL elements.
-template <__SIZE_TYPE__ N_EL, typename T>
+/// Cast the Ripple input to convert element values using C/C++ scalar rules.
+/// Use ripple_reinterp_* on the Ripple input to reinterpret its bits.
+// Keep T deduced so an explicit template type cannot introduce a conversion.
+template <__SIZE_TYPE__ N_EL, typename... ExplicitTypes, typename T>
 [[gnu::always_inline]] auto ripple_to_vec(T x)
     -> decltype(__builtin_ripple_to_fixed_vector(N_EL, x)) {
+  static_assert(
+      sizeof...(ExplicitTypes) == 0,
+      "ripple_to_vec does not accept explicit type template arguments");
   return __builtin_ripple_to_fixed_vector(N_EL, x);
 }
 
 /// Converts a vector to a Ripple block with the vector's element type.
 /// The block must contain exactly as many elements as the vector.
-template <typename Vec>
+/// Cast the Ripple result to convert element values using C/C++ scalar rules.
+/// Use ripple_reinterp_* on the Ripple result to reinterpret its bits.
+template <typename... ExplicitTypes, typename Vec>
 [[gnu::always_inline]] auto vec_to_ripple(ripple_block_t BS, Vec x)
     -> decltype(__builtin_ripple_from_fixed_vector(BS, x)) {
+  static_assert(sizeof...(ExplicitTypes) == 0,
+                "vec_to_ripple does not accept template arguments");
   return __builtin_ripple_from_fixed_vector(BS, x);
-}
-
-/// Converts a vector to a Ripple block of T, reinterpreting the vector's
-/// elements as T. The block must contain sizeof(Vec) / sizeof(T) elements.
-template <typename T, typename Vec>
-[[gnu::always_inline]] T vec_to_ripple(ripple_block_t BS, Vec x) {
-  using TypedVec = T __attribute__((vector_size(sizeof(Vec))));
-  return __builtin_ripple_from_fixed_vector(BS, reinterpret_cast<TypedVec>(x));
 }
 
 #else // !defined __cplusplus
 
 /// Converts a Ripple value of T to a <N_EL x T> vector, or to T when N_EL is
 /// one. The Ripple value must contain exactly N_EL elements.
-#define __RIPPLE_TO_VEC_INFER(N_EL, x)                                         \
-  __builtin_ripple_to_fixed_vector((N_EL), (x))
-#define __RIPPLE_TO_VEC_TYPED(N_EL, T, x)                                      \
-  __builtin_ripple_to_fixed_vector((N_EL), (T)(x))
-#define __RIPPLE_TO_VEC_INVALID(...)                                           \
-  _Pragma("GCC error \"ripple_to_vec accepts only 2 or 3 arguments\"")
-#define __RIPPLE_TO_VEC_SELECT(                                                \
-    _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, \
-    NAME, ...)                                                                 \
-  NAME
-#define ripple_to_vec(...)                                                     \
-  __RIPPLE_TO_VEC_SELECT(                                                      \
-      __VA_ARGS__, __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_INVALID,           \
-      __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_INVALID,                        \
-      __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_INVALID,                        \
-      __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_INVALID,                        \
-      __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_INVALID,                        \
-      __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_INVALID,                        \
-      __RIPPLE_TO_VEC_INVALID, __RIPPLE_TO_VEC_TYPED,                          \
-      __RIPPLE_TO_VEC_INFER)(__VA_ARGS__)
+/// Cast the Ripple input to convert element values using C/C++ scalar rules.
+/// Use ripple_reinterp_* on the Ripple input to reinterpret its bits.
+#define ripple_to_vec(N_EL, x) __builtin_ripple_to_fixed_vector((N_EL), (x))
 
 /// Converts a vector to a Ripple block with the vector's element type.
 /// The block must contain exactly as many elements as the vector.
-#define __RIPPLE_VEC_TO_RIPPLE_INFER(BS, x)                                    \
-  __builtin_ripple_from_fixed_vector((BS), (x))
-#define __RIPPLE_VEC_TO_RIPPLE_TYPED(T, BS, x)                                 \
-  __builtin_ripple_from_fixed_vector(                                          \
-      (BS), (T __attribute__((vector_size(sizeof(x)))))(x))
-#define __RIPPLE_VEC_TO_RIPPLE_SELECT(_1, _2, _3, NAME, ...) NAME
-#define vec_to_ripple(...)                                                     \
-  __RIPPLE_VEC_TO_RIPPLE_SELECT(                                               \
-      __VA_ARGS__, __RIPPLE_VEC_TO_RIPPLE_TYPED,                               \
-      __RIPPLE_VEC_TO_RIPPLE_INFER)(__VA_ARGS__)
+/// Cast the Ripple result to convert element values using C/C++ scalar rules.
+/// Use ripple_reinterp_* on the Ripple result to reinterpret its bits.
+#define vec_to_ripple(BS, x) __builtin_ripple_from_fixed_vector((BS), (x))
 
 #endif // __cplusplus
 

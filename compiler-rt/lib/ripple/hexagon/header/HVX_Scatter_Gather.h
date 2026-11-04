@@ -409,13 +409,15 @@ RIPPLE_CANDIDATE_INLINE void ripple_hvx_gather_i64(int64_t *dst,
                                                    size_t region_size) {
   auto BS = ripple_set_block_shape(0, 32);
   size_t v = ripple_id(BS, 0);
-  auto idx = vec_to_ripple<int32_t>(BS, index);
+  auto idx = vec_to_ripple(BS, index);
   int32_t idx_lo = ripple_shuffle(idx, pairs_from_lo) * 2;
   int32_t idx_hi = ripple_shuffle(idx, pairs_from_hi) * 2;
   idx_lo |= v & 1;
   idx_hi |= v & 1;
-  auto index_lo = ripple_to_vec<32, int32_t>(idx_lo * sizeof(uint32_t));
-  auto index_hi = ripple_to_vec<32, int32_t>(idx_hi * sizeof(uint32_t));
+  auto index_lo =
+      ripple_to_vec<32>(static_cast<int32_t>(idx_lo * sizeof(uint32_t)));
+  auto index_hi =
+      ripple_to_vec<32>(static_cast<int32_t>(idx_hi * sizeof(uint32_t)));
   int32_t region_last_byte = (region_size << 3) - 1;
   HVX_GATHER_32(dst, src, index_lo, region_last_byte);
   HVX_GATHER_32(dst + 16, src, index_hi, region_last_byte);
@@ -426,8 +428,8 @@ ripple_mask_hvx_gather_i64(int64_t *dst, const int64_t *src, v32i32 index,
                            size_t region_size, v32i32 mask) {
   auto BS = ripple_set_block_shape(0, 32);
   size_t v = ripple_id(BS, 0);
-  auto idx = vec_to_ripple<int32_t>(BS, index);
-  auto msk = vec_to_ripple<int32_t>(BS, mask);
+  auto idx = vec_to_ripple(BS, index);
+  auto msk = vec_to_ripple(BS, mask);
   int32_t idx_lo = ripple_shuffle(idx, pairs_from_lo) * 2;
   int32_t idx_hi = ripple_shuffle(idx, pairs_from_hi) * 2;
   int32_t msk_lo = ripple_shuffle(msk, pairs_from_lo);
@@ -435,11 +437,13 @@ ripple_mask_hvx_gather_i64(int64_t *dst, const int64_t *src, v32i32 index,
   idx_lo |= v & 1;
   idx_hi |= v & 1;
   int32_t region_last_byte = (region_size << 3) - 1;
-  auto index_lo = ripple_to_vec<32, int32_t>(idx_lo * sizeof(uint32_t));
-  auto mask_lo = ripple_to_vec<32, int32_t>(msk_lo ? -1 : 0);
+  auto index_lo =
+      ripple_to_vec<32>(static_cast<int32_t>(idx_lo * sizeof(uint32_t)));
+  auto mask_lo = ripple_to_vec<32>(static_cast<int32_t>(msk_lo ? -1 : 0));
   HVX_GATHER_MASKED_32(dst, src, index_lo, region_last_byte, mask_lo);
-  auto index_hi = ripple_to_vec<32, int32_t>(idx_hi * sizeof(uint32_t));
-  auto mask_hi = ripple_to_vec<32, int32_t>(msk_hi ? -1 : 0);
+  auto index_hi =
+      ripple_to_vec<32>(static_cast<int32_t>(idx_hi * sizeof(uint32_t)));
+  auto mask_hi = ripple_to_vec<32>(static_cast<int32_t>(msk_hi ? -1 : 0));
   HVX_GATHER_MASKED_32(dst + 16, src, index_hi, region_last_byte, mask_hi);
 }
 
@@ -490,8 +494,8 @@ template <unsigned Slice, size_t N, typename T, typename ElementT,
   if (sliced_mask == 0)
     bitmask = 0;
   Q6_gather(dst, src, last_byte,
-            ripple_to_vec<N, IndexT>(sliced_index - Slice),
-            ripple_to_vec<N, ElementT>(bitmask));
+            ripple_to_vec<N>(static_cast<IndexT>(sliced_index - Slice)),
+            ripple_to_vec<N>(static_cast<ElementT>(bitmask)));
 }
 
 template <size_t N, typename T, typename ElementT, typename IndexT>
@@ -506,8 +510,8 @@ sub_gather_zero(ripple_block_t BS, T *dst, const T *src,
   ElementT zero_element = src[0] << (sizeof(T) * 8 * Slice);
   if (sliced_index != 0 || sliced_mask == 0)
     bitmask = 0;
-  auto hvx_mask = ripple_to_vec<N, ElementT>(bitmask);
-  auto hvx_value = ripple_to_vec<N, ElementT>(zero_element);
+  auto hvx_mask = ripple_to_vec<N>(static_cast<ElementT>(bitmask));
+  auto hvx_value = ripple_to_vec<N>(static_cast<ElementT>(zero_element));
   Q6_vmem_QRIV(hvx_mask, dst, hvx_value);
 }
 
@@ -520,8 +524,8 @@ template <unsigned Slice, size_t N, typename T, typename ElementT,
   auto bitmask = typename ripple::detail::make_unsigned<T>::type(-1U)
                  << (sizeof(T) * 8 * Slice);
   Q6_gather(dst, src, last_byte,
-            ripple_to_vec<N, IndexT>(sliced_index - Slice),
-            ripple_to_vec<N, ElementT>(bitmask));
+            ripple_to_vec<N>(static_cast<IndexT>(sliced_index - Slice)),
+            ripple_to_vec<N>(static_cast<ElementT>(bitmask)));
 }
 
 template <size_t N, typename T, typename ElementT, typename IndexT>
@@ -535,8 +539,8 @@ sub_gather_zero(ripple_block_t BS, T *dst, const T *src,
   ElementT zero_element = src[0] << (sizeof(T) * 8 * Slice);
   if (sliced_index != 0)
     bitmask = 0;
-  auto hvx_mask = ripple_to_vec<N, ElementT>(bitmask);
-  auto hvx_value = ripple_to_vec<N, ElementT>(zero_element);
+  auto hvx_mask = ripple_to_vec<N>(static_cast<ElementT>(bitmask));
+  auto hvx_value = ripple_to_vec<N>(static_cast<ElementT>(zero_element));
   Q6_vmem_QRIV(hvx_mask, dst, hvx_value);
 }
 
@@ -546,7 +550,7 @@ RIPPLE_CANDIDATE_INLINE void ripple_hvx_gather_i8(int8_t *dst,
                                                   size_t region_size) {
   auto BS = ripple_set_block_shape(0, 64, 2);
   size_t last_byte = region_size - 1;
-  auto idx = vec_to_ripple<int32_t>(BS, index);
+  auto idx = vec_to_ripple(BS, index);
   idx = ripple_shuffle(idx, shuffle_unzip<2, 0, 0>);
   sub_gather<0, 64, int8_t, int16_t, int32_t>(BS, dst, src, last_byte, idx);
   sub_gather<1, 64, int8_t, int16_t, int32_t>(BS, dst, src, last_byte, idx);
@@ -558,9 +562,9 @@ ripple_mask_hvx_gather_i8(int8_t *dst, const int8_t *src, v128i32 index,
                           size_t region_size, v128i32 mask) {
   auto BS = ripple_set_block_shape(0, 64, 2);
   size_t last_byte = region_size - 1;
-  auto idx = vec_to_ripple<int32_t>(BS, index);
+  auto idx = vec_to_ripple(BS, index);
   idx = ripple_shuffle(idx, shuffle_unzip<2, 0, 0>);
-  auto msk = vec_to_ripple<int32_t>(BS, mask);
+  auto msk = vec_to_ripple(BS, mask);
   msk = ripple_shuffle(msk, shuffle_unzip<2, 0, 0>);
   sub_gather<0, 64, int8_t, int16_t, int32_t>(BS, dst, src, last_byte, idx,
                                               msk);
@@ -592,7 +596,7 @@ RIPPLE_CANDIDATE_INLINE void ripple_hvx_gather_i8_16(int8_t *dst,
                                                      size_t region_size) {
   auto BS = ripple_set_block_shape(0, 64, 2);
   size_t last_byte = region_size - 1;
-  auto idx = vec_to_ripple<int16_t>(BS, index);
+  auto idx = vec_to_ripple(BS, index);
   idx = ripple_shuffle(idx, shuffle_unzip<2, 0, 0>);
   sub_gather<0, 64, int8_t, int16_t, int16_t>(BS, dst, src, last_byte, idx);
   sub_gather<1, 64, int8_t, int16_t, int16_t>(BS, dst, src, last_byte, idx);
@@ -604,9 +608,9 @@ ripple_mask_hvx_gather_i8_16(int8_t *dst, const int8_t *src, v128i16 index,
                              size_t region_size, v128i16 mask) {
   auto BS = ripple_set_block_shape(0, 64, 2);
   size_t last_byte = region_size - 1;
-  auto idx = vec_to_ripple<int16_t>(BS, index);
+  auto idx = vec_to_ripple(BS, index);
   idx = ripple_shuffle(idx, shuffle_unzip<2, 0, 0>);
-  auto msk = vec_to_ripple<int16_t>(BS, mask);
+  auto msk = vec_to_ripple(BS, mask);
   msk = ripple_shuffle(msk, shuffle_unzip<2, 0, 0>);
   sub_gather<0, 64, int8_t, int16_t, int16_t>(BS, dst, src, last_byte, idx,
                                               msk);
@@ -625,8 +629,8 @@ template <unsigned Slice, size_t N, typename ElementT, typename IndexT,
                                                    ElementT src, IndexT idx) {
   ElementT src_slice = ripple_slice(src, -1, Slice);
   int offset = idx * sizeof(T) + Slice * sizeof(ElementT);
-  Q6_scatter(dst, last_byte, ripple_to_vec<N, ElementT>(src_slice),
-             ripple_to_vec<N, IndexT>(offset));
+  Q6_scatter(dst, last_byte, ripple_to_vec<N>(static_cast<ElementT>(src_slice)),
+             ripple_to_vec<N>(static_cast<IndexT>(offset)));
 }
 
 template <unsigned Slice, size_t N, typename ElementT, typename IndexT,
@@ -636,9 +640,9 @@ partial_scatter(ripple_block_t BS, T *dst, size_t last_byte, ElementT src,
                 IndexT idx, MaskT msk) {
   ElementT src_slice = ripple_slice(src, -1, Slice);
   int offset = idx * sizeof(T) + Slice * sizeof(ElementT);
-  Q6_scatter(dst, last_byte, ripple_to_vec<N, ElementT>(src_slice),
-             ripple_to_vec<N, IndexT>(offset),
-             ripple_to_vec<N, MaskT>(msk != 0 ? -1 : 0));
+  Q6_scatter(dst, last_byte, ripple_to_vec<N>(static_cast<ElementT>(src_slice)),
+             ripple_to_vec<N>(static_cast<IndexT>(offset)),
+             ripple_to_vec<N>(static_cast<MaskT>(msk != 0 ? -1 : 0)));
 }
 
 RIPPLE_CANDIDATE_INLINE void ripple_hvx_scatter_i64(int64_t *dst, v32i32 index,
@@ -646,10 +650,10 @@ RIPPLE_CANDIDATE_INLINE void ripple_hvx_scatter_i64(int64_t *dst, v32i32 index,
                                                     size_t region_size) {
   size_t last_byte = region_size * sizeof(int64_t) - 1;
   auto BS = ripple_set_block_shape(0, 32, 2);
-  auto s = vec_to_ripple<int32_t>(BS, src);
+  auto s = vec_to_ripple(BS, reinterpret_cast<v64i32>(src));
   s = ripple_shuffle(s, shuffle_unzip<2, 0, 0>);
   auto BS2 = ripple_set_block_shape(0, 32);
-  auto idx = vec_to_ripple<int32_t>(BS2, index);
+  auto idx = vec_to_ripple(BS2, index);
   partial_scatter<0, 32, int32_t, int32_t>(BS2, dst, last_byte, s, idx);
   partial_scatter<1, 32, int32_t, int32_t>(BS2, dst, last_byte, s, idx);
 }
@@ -659,11 +663,11 @@ ripple_mask_hvx_scatter_i64(int64_t *dst, v32i32 index, v32i64 src,
                             size_t region_size, v32i32 mask) {
   size_t last_byte = region_size * sizeof(int64_t) - 1;
   auto BS = ripple_set_block_shape(0, 32, 2);
-  auto s = vec_to_ripple<int32_t>(BS, src);
+  auto s = vec_to_ripple(BS, reinterpret_cast<v64i32>(src));
   s = ripple_shuffle(s, shuffle_unzip<2, 0, 0>);
   auto BS2 = ripple_set_block_shape(0, 32);
-  auto idx = vec_to_ripple<int32_t>(BS2, index);
-  auto msk = vec_to_ripple<int32_t>(BS2, mask);
+  auto idx = vec_to_ripple(BS2, index);
+  auto msk = vec_to_ripple(BS2, mask);
   partial_scatter<0, 32, int32_t, int32_t, int32_t>(BS2, dst, last_byte, s, idx,
                                                     msk);
   partial_scatter<1, 32, int32_t, int32_t, int32_t>(BS2, dst, last_byte, s, idx,
@@ -714,8 +718,8 @@ template <unsigned Slice, size_t N, typename ElementT, typename IndexT,
   IndexT offset = (sliced_index - Slice) * sizeof(T);
   auto bitmask = typename ripple::detail::make_unsigned<T>::type(-1U)
                  << (sizeof(T) * 8 * Slice);
-  Q6_scatter(dst, last_byte, src, ripple_to_vec<N, IndexT>(offset),
-             ripple_to_vec<N, ElementT>(bitmask));
+  Q6_scatter(dst, last_byte, src, ripple_to_vec<N>(static_cast<IndexT>(offset)),
+             ripple_to_vec<N>(static_cast<ElementT>(bitmask)));
 }
 
 template <size_t N, typename ElementT, typename IndexT, typename T>
@@ -732,7 +736,7 @@ sub_scatter_zero(ripple_block_t BS, T *dst, size_t last_byte, HVX_Vector src,
   // The mask must be spelled v64i16 explicitly: an unqualified HVX_Vector
   // converts to both the v64i16 and v32i32 mask overloads at equal rank.
   v64i16 shifted_mask = Q6_Vuh_vlsr_VuhR(
-      (ripple_to_vec<N, ElementT>(bitmask)), sizeof(T) * 8);
+      (ripple_to_vec<N>(static_cast<ElementT>(bitmask))), sizeof(T) * 8);
   Q6_scatter(dst, last_byte, Q6_Vuh_vlsr_VuhR(src, sizeof(T) * 8), zero_offsets,
              shifted_mask);
 }
@@ -749,8 +753,8 @@ template <unsigned Slice, size_t N, typename ElementT, typename IndexT,
                  << (sizeof(T) * 8 * Slice);
   if (sliced_mask == 0)
     bitmask = 0;
-  Q6_scatter(dst, last_byte, src, ripple_to_vec<N, IndexT>(offset),
-             ripple_to_vec<N, ElementT>(bitmask));
+  Q6_scatter(dst, last_byte, src, ripple_to_vec<N>(static_cast<IndexT>(offset)),
+             ripple_to_vec<N>(static_cast<ElementT>(bitmask)));
 }
 
 template <size_t N, typename ElementT, typename IndexT, typename T>
@@ -768,7 +772,7 @@ sub_scatter_zero(ripple_block_t BS, T *dst, size_t last_byte, HVX_Vector src,
   // The mask must be spelled v64i16 explicitly: an unqualified HVX_Vector
   // converts to both the v64i16 and v32i32 mask overloads at equal rank.
   v64i16 shifted_mask = Q6_Vuh_vlsr_VuhR(
-      (ripple_to_vec<N, ElementT>(bitmask)), sizeof(T) * 8);
+      (ripple_to_vec<N>(static_cast<ElementT>(bitmask))), sizeof(T) * 8);
   Q6_scatter(dst, last_byte, Q6_Vuh_vlsr_VuhR(src, sizeof(T) * 8), zero_offsets,
              shifted_mask);
 }
@@ -778,7 +782,7 @@ RIPPLE_CANDIDATE_INLINE void ripple_hvx_scatter_i8(int8_t *dst, v128i32 index,
                                                    size_t region_size) {
   auto BS = ripple_set_block_shape(0, 64, 2);
   size_t last_byte = region_size - 1;
-  auto idx = vec_to_ripple<int32_t>(BS, index);
+  auto idx = vec_to_ripple(BS, index);
   idx = ripple_shuffle(idx, shuffle_unzip<2, 0, 0>);
   sub_scatter<0, 64, int16_t, int32_t>(BS, dst, last_byte, src, idx);
   sub_scatter<1, 64, int16_t, int32_t>(BS, dst, last_byte, src, idx);
@@ -790,9 +794,9 @@ ripple_mask_hvx_scatter_i8(int8_t *dst, v128i32 index, v128i8 src,
                            size_t region_size, v128i32 mask) {
   auto BS = ripple_set_block_shape(0, 64, 2);
   size_t last_byte = region_size - 1;
-  auto idx = vec_to_ripple<int32_t>(BS, index);
+  auto idx = vec_to_ripple(BS, index);
   idx = ripple_shuffle(idx, shuffle_unzip<2, 0, 0>);
-  auto msk = vec_to_ripple<int32_t>(BS, mask);
+  auto msk = vec_to_ripple(BS, mask);
   msk = ripple_shuffle(msk, shuffle_unzip<2, 0, 0>);
   sub_scatter<0, 64, int16_t, int32_t>(BS, dst, last_byte, src, idx, msk);
   sub_scatter<1, 64, int16_t, int32_t>(BS, dst, last_byte, src, idx, msk);
@@ -819,7 +823,7 @@ RIPPLE_CANDIDATE_INLINE void ripple_hvx_scatter_i8_16(int8_t *dst,
                                                       size_t region_size) {
   auto BS = ripple_set_block_shape(0, 64, 2);
   size_t last_byte = region_size - 1;
-  auto idx = vec_to_ripple<int16_t>(BS, index);
+  auto idx = vec_to_ripple(BS, index);
   idx = ripple_shuffle(idx, shuffle_unzip<2, 0, 0>);
   sub_scatter<0, 64, int16_t, int16_t>(BS, dst, last_byte, src, idx);
   sub_scatter<1, 64, int16_t, int16_t>(BS, dst, last_byte, src, idx);
@@ -831,9 +835,9 @@ ripple_mask_hvx_scatter_i8_16(int8_t *dst, v128i16 index, v128i8 src,
                               size_t region_size, v128i16 mask) {
   auto BS = ripple_set_block_shape(0, 64, 2);
   size_t last_byte = region_size - 1;
-  auto idx = vec_to_ripple<int16_t>(BS, index);
+  auto idx = vec_to_ripple(BS, index);
   idx = ripple_shuffle(idx, shuffle_unzip<2, 0, 0>);
-  auto msk = vec_to_ripple<int16_t>(BS, mask);
+  auto msk = vec_to_ripple(BS, mask);
   msk = ripple_shuffle(msk, shuffle_unzip<2, 0, 0>);
   sub_scatter<0, 64, int16_t, int16_t>(BS, dst, last_byte, src, idx, msk);
   sub_scatter<1, 64, int16_t, int16_t>(BS, dst, last_byte, src, idx, msk);

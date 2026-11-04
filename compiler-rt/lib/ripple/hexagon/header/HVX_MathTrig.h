@@ -22,20 +22,12 @@
 
 // The vector conversion helpers are templates in C++ and macros in C.
 #ifdef __cplusplus
-#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec<N, T>((BS), (X))
-#define _VEC_TO_RIPPLE(N, T, BS, X) vec_to_ripple<N, T>((BS), (X))
+#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec<N>((T)(X))
 #else
-#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec(N, T, (BS), (X))
-#define _VEC_TO_RIPPLE(N, T, BS, X) vec_to_ripple(N, T, (BS), (X))
+#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec(N, (T)(X))
 #endif
-
-#ifdef __cplusplus
-#define _RIPPLE_TO_VEC_2D(N, T, BS, X) ripple_to_vec_2d<N, T>((BS), (X))
-#define _VEC_TO_RIPPLE_2D(N, T, BS, X) vec_to_ripple_2d<N, T>((BS), (X))
-#else
-#define _RIPPLE_TO_VEC_2D(N, T, BS, X) ripple_to_vec_2d(N, T, (BS), (X))
-#define _VEC_TO_RIPPLE_2D(N, T, BS, X) vec_to_ripple_2d(N, T, (BS), (X))
-#endif
+#define _VEC_TO_RIPPLE(N, T, BS, X)                                            \
+  vec_to_ripple((BS), (T __attribute__((vector_size(sizeof(X)))))(X))
 
 #ifdef __cplusplus
 extern "C" {
@@ -232,10 +224,10 @@ RIPPLE_INTRIN_INLINE f32t32 __ripple_trig_paynehanekf(f32t32 vx,
     unsigned char indices =
         ripple_stack(BSlookup_idxstack, window_base + i, window_base + i + 1u,
                      window_base + i + 1u, window_base + i + 2u);
-    unsigned short looked_up = _VEC_TO_RIPPLE_2D(
+    unsigned short looked_up = _VEC_TO_RIPPLE(
         128, unsigned short, BSlookup_idxs,
         __ripple_trig_vlut_64u16(
-            _RIPPLE_TO_VEC_2D(128, unsigned char, BSlookup_idxstack, indices),
+            _RIPPLE_TO_VEC(128, unsigned char, BSlookup_idxstack, indices),
             _RIPPLE_TO_VEC(64, unsigned short, BSlookup_tbl,
                            two_over_pi_tbl_prepared)));
     unsigned int window_i_ip1_pair = ripple_reinterp_u32(
@@ -498,5 +490,3 @@ RIPPLE_CANDIDATE_INLINE f32t32 ripple_ew_pure_tanf(f32t32 vx) {
 
 #undef _RIPPLE_TO_VEC
 #undef _VEC_TO_RIPPLE
-#undef _RIPPLE_TO_VEC_2D
-#undef _VEC_TO_RIPPLE_2D

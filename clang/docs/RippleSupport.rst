@@ -61,15 +61,44 @@ and neither fixed-vector value is transformed by Ripple. The pass lowers both
 conversions without temporary arrays.
 
 ``vec_to_ripple(block, vector)`` infers both the element type and element count
-from the vector argument. Legacy untyped vectors can explicitly select an
-element type with ``vec_to_ripple<type>(block, vector)`` in C++ or
-``vec_to_ripple(type, block, vector)`` in C. In C++,
-``ripple_to_vec<count>(value)`` can infer the element type from ``value``. In C,
-the equivalent spelling is ``ripple_to_vec(count, value)``. Both languages also
-provide an explicit element-type form: ``ripple_to_vec<count, type>(value)`` in
-C++ and ``ripple_to_vec(count, type, value)`` in C. An explicit type may be
-needed when integer promotions or a legacy target API obscure the operation's
-semantic element type.
+from the vector argument. In C++, ``ripple_to_vec<count>(value)`` infers the
+element type from ``value``. In C, the equivalent spelling is
+``ripple_to_vec(count, value)``. These helpers preserve bits and do not accept
+explicit element-type arguments.
+
+The element count in ``ripple_to_vec`` is explicit so that the output vector's
+type and size are known at compile time. After shape propagation, the compiler
+statically verifies that the Ripple value contains exactly that many elements
+and diagnoses a mismatch. For example, ``ripple_to_vec<32>(value)`` with a
+``float`` value specifies a 32-element, 128-byte output vector.
+
+To convert element values, cast the Ripple input before calling
+``ripple_to_vec`` or cast the result of ``vec_to_ripple`` using scalar C/C++
+conversion rules. For example, use
+``ripple_to_vec<32>(static_cast<float>(value))`` in C++ or
+``ripple_to_vec(32, (float)value)`` in C to produce a vector of floats.
+
+To reinterpret bits as a different element type, use the ``ripple_reinterp_*``
+helpers after ``vec_to_ripple`` or before ``ripple_to_vec``. For example, to
+reinterpret a native vector of four 32-bit integers as eight 16-bit integers,
+use the following in either C or C++:
+
+.. code-block:: c
+
+   ripple_block_t source_block = ripple_set_block_shape(0, 4);
+   ripple_block_t destination_block = ripple_set_block_shape(0, 8);
+   int32_t value = vec_to_ripple(source_block, vector);
+   int16_t reinterpreted = ripple_reinterp_i16(destination_block, value);
+
+The source block matches the native vector's element count, while the
+destination block matches the reinterpreted element count. Both blocks have
+equal total bit width. A scalar cast such as ``(int16_t)value`` instead converts
+each element numerically and preserves the element count.
+
+Use ``ripple_reshape(destination_block, value)`` to change the block dimensions
+while preserving the element type and total element count, for example from
+32 elements to an 8-by-4 block. A numeric cast preserves the block shape;
+changing the element size alone does not require a reshape.
 
 Passing a block shape as a function argument is intended only to request
 specialization. The callee's definition must be available in the same LLVM

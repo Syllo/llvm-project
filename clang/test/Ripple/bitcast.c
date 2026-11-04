@@ -2,9 +2,9 @@
 // RUN: %if hexagon-registered-target %{ %clang_cc1 -I %S/../../lib/Headers/ripple_include -triple hexagon -fenable-ripple -O2 -emit-llvm %s -o - | FileCheck %s --check-prefix=HEX --implicit-check-not=alloca --implicit-check-not=llvm.ripple.bitcast %}
 // RUN: %if x86-registered-target %{ %clang_cc1 -I %S/../../lib/Headers/ripple_include -triple x86_64-unknown-linux-gnu -fenable-ripple -O2 -emit-llvm %s -o - | FileCheck %s --check-prefix=GENERIC --implicit-check-not=llvm.ripple.bitcast %}
 // RUN: %if aarch64-registered-target %{ %clang_cc1 -I %S/../../lib/Headers/ripple_include -triple aarch64-unknown-linux-gnu -fenable-ripple -O2 -emit-llvm %s -o - | FileCheck %s --check-prefix=GENERIC --implicit-check-not=llvm.ripple.bitcast %}
-// RUN: %if hexagon-registered-target %{ %clang_cc1 -I %S/../../lib/Headers/ripple_include -triple hexagon -fenable-ripple -DTEST_TOO_MANY -fsyntax-only -verify %s %}
-// RUN: %if x86-registered-target %{ %clang_cc1 -I %S/../../lib/Headers/ripple_include -triple x86_64-unknown-linux-gnu -fenable-ripple -DTEST_TOO_MANY -fsyntax-only -verify %s %}
-// RUN: %if aarch64-registered-target %{ %clang_cc1 -I %S/../../lib/Headers/ripple_include -triple aarch64-unknown-linux-gnu -fenable-ripple -DTEST_TOO_MANY -fsyntax-only -verify %s %}
+// RUN: %if hexagon-registered-target %{ %clang_cc1 -I %S/../../lib/Headers/ripple_include -triple hexagon -fenable-ripple -DTEST_TOO_MANY -fsyntax-only -verify -verify-ignore-unexpected=note %s %}
+// RUN: %if x86-registered-target %{ %clang_cc1 -I %S/../../lib/Headers/ripple_include -triple x86_64-unknown-linux-gnu -fenable-ripple -DTEST_TOO_MANY -fsyntax-only -verify -verify-ignore-unexpected=note %s %}
+// RUN: %if aarch64-registered-target %{ %clang_cc1 -I %S/../../lib/Headers/ripple_include -triple aarch64-unknown-linux-gnu -fenable-ripple -DTEST_TOO_MANY -fsyntax-only -verify -verify-ignore-unexpected=note %s %}
 
 #include <ripple.h>
 typedef short Vec __attribute__((vector_size(16)));
@@ -12,7 +12,10 @@ typedef int RawVec __attribute__((vector_size(16)));
 
 #ifdef TEST_TOO_MANY
 void too_many_arguments(int x) {
-  ripple_to_vec(4, int, x, x); // expected-error {{ripple_to_vec accepts only 2 or 3 arguments}}
+  ripple_to_vec(4, int, x); // expected-error {{too many arguments provided to function-like macro invocation}}
+  // expected-error@-1 {{use of undeclared identifier 'ripple_to_vec'}}
+  vec_to_ripple(int, 0, x); // expected-error {{too many arguments provided to function-like macro invocation}}
+  // expected-error@-1 {{use of undeclared identifier 'vec_to_ripple'}}
 }
 #endif
 
@@ -26,9 +29,20 @@ Vec round_trip(Vec v) {
 
 Vec explicit_element_type(RawVec v) {
   ripple_block_t bs = ripple_set_block_shape(0, 8);
-  return ripple_to_vec(8, short, vec_to_ripple(short, bs, v));
+  return ripple_to_vec(8, vec_to_ripple(bs, (Vec)v));
 }
 // HEX-LABEL: define {{.*}} @explicit_element_type(
+// HEX: store <4 x i32> %v, ptr %agg.result
+// HEX: ret void
+
+// Reinterpreting in Ripple must lower identically to the native cast above.
+Vec ripple_element_type(RawVec v) {
+  ripple_block_t source = ripple_set_block_shape(0, 4);
+  ripple_block_t destination = ripple_set_block_shape(0, 8);
+  return ripple_to_vec(
+      8, ripple_reinterp_i16(destination, vec_to_ripple(source, v)));
+}
+// HEX-LABEL: define {{.*}} @ripple_element_type(
 // HEX: store <4 x i32> %v, ptr %agg.result
 // HEX: ret void
 
@@ -49,7 +63,7 @@ Vec rank2(Vec v) {
 
 Vec rank3(Vec v) {
   ripple_block_t bs = ripple_set_block_shape(0, 2, 2, 2);
-  return ripple_to_vec(8, short, vec_to_ripple(bs, v));
+  return ripple_to_vec(8, vec_to_ripple(bs, v));
 }
 // HEX-LABEL: define {{.*}} @rank3(
 // HEX: store <8 x i16> %v, ptr %agg.result
@@ -58,6 +72,9 @@ Vec rank3(Vec v) {
 // GENERIC-LABEL: define {{.*}} @round_trip(
 // GENERIC: ret <8 x i16> %{{.*}}
 // GENERIC-LABEL: define {{.*}} @explicit_element_type(
+// GENERIC: bitcast <4 x i32> %{{.*}} to <8 x i16>
+// GENERIC: ret <8 x i16> %{{.*}}
+// GENERIC-LABEL: define {{.*}} @ripple_element_type(
 // GENERIC: bitcast <4 x i32> %{{.*}} to <8 x i16>
 // GENERIC: ret <8 x i16> %{{.*}}
 // GENERIC-LABEL: define {{.*}} i32 @single_lane(i32 {{.*}}%x)

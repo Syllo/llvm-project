@@ -14,12 +14,12 @@ extern "C" {
 Vector_t norm(VectorPair_t pair) {
 // CHECK: define dso_local{{.*}}@norm
   ripple_block_t BS = ripple_set_block_shape(0, 32, 2);
-  int32_t x = vec_to_ripple<int32_t>(BS, pair);
+  int32_t x = vec_to_ripple(BS, pair);
   // This "zip" shuffle turned a sequence of pairs into a pair of sequences
   int32_t even_odds = ripple_shuffle(x, rzip::shuffle_unzip<2, 0, 0>);
   int32_t evens = ripple_slice(even_odds, -1, 0); // 32x1 shape
   int32_t odds = ripple_slice(even_odds, -1, 1); // 32x1 shape
-  return ripple_to_vec<32, int32_t>(evens * odds);
+  return ripple_to_vec<32>(evens * odds);
 }
 
 
@@ -27,12 +27,12 @@ Vector_t norm(VectorPair_t pair) {
 Vector_t norm2(VectorPair_t pair) {
 // CHECK: define dso_local{{.*}}@norm2
   ripple_block_t BS = ripple_set_block_shape(0, 32, 2);
-  int32_t x = vec_to_ripple<int32_t>(BS, pair);
+  int32_t x = vec_to_ripple(BS, pair);
   // This "zip" shuffle turned a sequence of pairs into a pair of sequences
   int32_t even_odds = ripple_shuffle(x, rzip::shuffle_unzip<2, 0, 0>);
   int32_t evens = ripple_slice(even_odds, -1, 0); // 32x1 shape
   int32_t odds = ripple_slice(even_odds, -1, 1); // 32x1 shape
-  return ripple_to_vec<32, int32_t>(evens * odds);
+  return ripple_to_vec<32>(evens * odds);
 }
 
 }

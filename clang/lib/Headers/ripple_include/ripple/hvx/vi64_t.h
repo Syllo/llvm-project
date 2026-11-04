@@ -35,11 +35,17 @@
 #include <ripple_hvx.h>
 
 #ifdef __cplusplus
-#define vi64_r2v(n, t, b, x) ripple_to_vec<n, t>(x)
-#define vi64_v2r(t, b, x) vec_to_ripple<t>(b, x)
+#define vi64_r2v(n, t, b, x) ripple_to_vec<n>(static_cast<t>(x))
+#define vi64_v2r(t, b, x)                                                      \
+  vec_to_ripple(                                                               \
+      b, reinterpret_cast<t __attribute__((vector_size(sizeof(x))))>(x))
 #else
-#define vi64_r2v(n, t, b, x) ripple_to_vec(n, t, x)
-#define vi64_v2r(t, b, x) vec_to_ripple(t, b, x)
+#define vi64_r2v(n, t, b, x) ripple_to_vec(n, (t)(x))
+// Clang's vector extension defines casts between vector types with equal total
+// byte sizes as bit reinterpretations. Numeric lane conversion uses
+// __builtin_convertvector.
+#define vi64_v2r(t, b, x)                                                      \
+  vec_to_ripple(b, (t __attribute__((vector_size(sizeof(x)))))(x))
 #endif
 
 #ifndef VI64_HVX_PE

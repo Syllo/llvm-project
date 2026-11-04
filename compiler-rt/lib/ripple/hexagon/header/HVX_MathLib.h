@@ -917,12 +917,12 @@ RIPPLE_INTRIN_INLINE HVX_Vector rem_vu16(HVX_Vector num, HVX_Vector den) {
 
 // The vector conversion helpers are templates in C++ and macros in C.
 #ifdef __cplusplus
-#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec<N, T>((BS), (X))
-#define _VEC_TO_RIPPLE(N, T, BS, X) vec_to_ripple<N, T>((BS), (X))
+#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec<N>((T)(X))
 #else
-#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec(N, T, (BS), (X))
-#define _VEC_TO_RIPPLE(N, T, BS, X) vec_to_ripple(N, T, (BS), (X))
+#define _RIPPLE_TO_VEC(N, T, BS, X) ripple_to_vec(N, (T)(X))
 #endif
+#define _VEC_TO_RIPPLE(N, T, BS, X)                                            \
+  vec_to_ripple((BS), (T __attribute__((vector_size(sizeof(X)))))(X))
 
 // Use multiply followed by add; these candidates do not guarantee the
 // single rounding of a fused operation.
