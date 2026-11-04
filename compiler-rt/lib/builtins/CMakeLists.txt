@@ -866,6 +866,20 @@ set(avr_SOURCES
   ${GENERIC_SOURCES}
 )
 
+# These conversion routines use HVX half-float and QFloat instructions.
+set(hexagon_qfloat_SOURCES
+  hexagon/ieee_qfloat_conv_hf_to_b_rne.S
+  hexagon/ieee_qfloat_fast_convert_hf_to_b_rne.S
+  hexagon/ieee_qfloat_conv_hf_to_h_rne.S
+  hexagon/ieee_qfloat_fast_convert_hf_to_h_rne.S
+  hexagon/ieee_qfloat_conv_hf_to_ub_rne.S
+  hexagon/ieee_qfloat_fast_convert_hf_to_ub_rne.S
+  hexagon/ieee_qfloat_conv_hf_to_uh_rne.S
+  hexagon/ieee_qfloat_fast_convert_hf_to_uh_rne.S
+)
+set_source_files_properties(${hexagon_qfloat_SOURCES} PROPERTIES
+  COMPILE_OPTIONS "-mhvx")
+
 # hexagon arch
 set(hexagon_SOURCES
   hexagon/common_entry_exit_abi1.S
@@ -894,14 +908,7 @@ set(hexagon_SOURCES
   hexagon/udivsi3.S
   hexagon/umoddi3.S
   hexagon/umodsi3.S
-  hexagon/ieee_qfloat_conv_hf_to_b_rne.S
-  hexagon/ieee_qfloat_fast_convert_hf_to_b_rne.S
-  hexagon/ieee_qfloat_conv_hf_to_h_rne.S
-  hexagon/ieee_qfloat_fast_convert_hf_to_h_rne.S
-  hexagon/ieee_qfloat_conv_hf_to_ub_rne.S
-  hexagon/ieee_qfloat_fast_convert_hf_to_ub_rne.S
-  hexagon/ieee_qfloat_conv_hf_to_uh_rne.S
-  hexagon/ieee_qfloat_fast_convert_hf_to_uh_rne.S
+  ${hexagon_qfloat_SOURCES}
   ${GENERIC_SOURCES}
   ${GENERIC_TF_SOURCES}
 )
