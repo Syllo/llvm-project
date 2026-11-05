@@ -3348,6 +3348,22 @@ void Ripple::padToTargetSIMDWidth() {
 
       auto *NewLHS = GetPaddedV(Lhs, PaddedLength, InstToPadded);
       auto *NewRHS = GetPaddedV(Rhs, PaddedLength, InstToPadded);
+      if (BinOpI->getOpcode() == Instruction::SDiv ||
+          BinOpI->getOpcode() == Instruction::UDiv ||
+          BinOpI->getOpcode() == Instruction::SRem ||
+          BinOpI->getOpcode() == Instruction::URem) {
+        unsigned OriginalLength =
+            cast<FixedVectorType>(BinOpI->getType())->getNumElements();
+        if (PaddedLength > OriginalLength) {
+          SmallVector<Constant *, 32> ActiveLanes;
+          for (unsigned Lane = 0; Lane < PaddedLength; ++Lane)
+            ActiveLanes.push_back(irBuilder.getInt1(Lane < OriginalLength));
+          auto *Mask = ConstantVector::get(ActiveLanes);
+          NewRHS = irBuilder.CreateSelect(
+              Mask, NewRHS, ConstantInt::get(NewRHS->getType(), 1),
+              BinOpI->getName() + ".safe.rhs");
+        }
+      }
       auto *NewBinOp = irBuilder.CreateBinOp(
           BinOpI->getOpcode(), NewLHS, NewRHS, BinOpI->getName() + ".pad",
           BinOpI->getMetadata(LLVMContext::MD_fpmath));
