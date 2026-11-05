@@ -4061,8 +4061,11 @@ void Ripple::padToTargetSIMDWidth() {
   // Re-anchor the native fixed-vector conversion boundaries. A
   // ripple.to.fixed.vector view has scalar Ripple shape, so it was never queued
   // for padding, but its tensor operand may have been: narrow that back to the
-  // exact width the native side pins instead of rewriting the view. A
-  // ripple.from.fixed.vector view needs nothing here, since GetPaddedV widens
+  // exact width the native side pins instead of rewriting the view.
+  // A PHI can be rebuilt because an operand was replaced even when its own
+  // lane count is already aligned. Reconnect the view to the replacement in that
+  // case too, or it keeps the old PHI alive when we try to delete it below.
+  // A ripple.from.fixed.vector view needs nothing here, since GetPaddedV widens
   // it on demand for the users that want padded lanes.
   for (auto *BC : FixedVectorBoundaryBitcasts) {
     bool ToRipple = getRippleShape(BC).isVector();
@@ -4073,11 +4076,14 @@ void Ripple::padToTargetSIMDWidth() {
     unsigned PaddedLength = GetPaddedLength(RippleSide);
 
     if (auto *Op = dyn_cast<Instruction>(RippleSide);
-        !ToRipple && Op && PaddedLength != ExactLength &&
+        !ToRipple && Op &&
         InstsThatMustBePadded.find(Op) != InstsThatMustBePadded.end()) {
       irBuilder.SetInsertPoint(BC);
       Value *Padded = GetPaddedV(Op, PaddedLength, InstToPadded);
-      BC->setOperand(0, ExtractStartingSubVec(irBuilder, Padded, ExactLength));
+      BC->setOperand(
+          0, PaddedLength == ExactLength
+                 ? Padded
+                 : ExtractStartingSubVec(irBuilder, Padded, ExactLength));
     }
 
     if (PaddedLength != ExactLength && ORE.enabled()) {
