@@ -2596,7 +2596,7 @@ void Ripple::padToTargetSIMDWidth() {
 
     auto *VectorTy =
         FixedVectorType::get(ArrayTy->getElementType(), Shape.flatShape());
-    return GetPaddedLength(UndefValue::get(VectorTy));
+    return GetPaddedLength(PoisonValue::get(VectorTy));
   };
 
   /// IsFixedVectorBoundaryBitcast: True for the bitcasts that lowering emits
@@ -2630,7 +2630,7 @@ void Ripple::padToTargetSIMDWidth() {
   };
 
   /// GetPaddedV: For a value V, returns a value V', such that V' is
-  /// V padded with undef values so that it is a vector values with \p
+  /// V padded with poison values so that it is a vector with \p
   /// PaddedLength number of elements.
   /// Note: The following things must be true about \p V:
   /// - V should be a constant, OR,
@@ -2674,7 +2674,7 @@ void Ripple::padToTargetSIMDWidth() {
         ElVals.push_back(C->getElementAsConstant(IEl));
       for (uint64_t IEl = C->getType()->getNumElements(); IEl < PaddedLength;
            ++IEl)
-        ElVals.push_back(UndefValue::get(V->getType()->getScalarType()));
+        ElVals.push_back(PoisonValue::get(V->getType()->getScalarType()));
       auto *NewC = ConstantVector::get(ElVals);
       LLVM_DEBUG(dbgs() << "[PadToTargetSIMD] C = " << *C << " will become "
                         << *NewC << "\n";);
@@ -2712,15 +2712,18 @@ void Ripple::padToTargetSIMDWidth() {
           VectorType::get(VType->getScalarType(), PaddedLength, false);
       return ConstantInt::get(NewVType, CInt->getValue());
     }
+    // PoisonValue derives from UndefValue, so handle it first.
     if (isa<PoisonValue>(V)) {
       auto *NewVType =
           VectorType::get(VType->getScalarType(), PaddedLength, false);
       return PoisonValue::get(NewVType);
     }
     if (isa<UndefValue>(V)) {
-      auto *NewVType =
-          VectorType::get(VType->getScalarType(), PaddedLength, false);
-      return UndefValue::get(NewVType);
+      // Preserve undef in the original lanes; only added lanes may be poison.
+      SmallVector<Constant *> ElVals(VType->getElementCount().getFixedValue(),
+                                     UndefValue::get(VType->getElementType()));
+      ElVals.resize(PaddedLength, PoisonValue::get(VType->getElementType()));
+      return ConstantVector::get(ElVals);
     }
     if (auto *C = dyn_cast<ConstantVector>(V)) {
       std::vector<Constant *> ElVals;
@@ -2728,7 +2731,7 @@ void Ripple::padToTargetSIMDWidth() {
         ElVals.push_back(C->getOperand(IEl));
       for (uint64_t IEl = C->getType()->getNumElements(); IEl < PaddedLength;
            ++IEl)
-        ElVals.push_back(UndefValue::get(V->getType()->getScalarType()));
+        ElVals.push_back(PoisonValue::get(V->getType()->getScalarType()));
       auto *NewC = ConstantVector::get(ElVals);
       return NewC;
     }
@@ -3448,7 +3451,7 @@ void Ripple::padToTargetSIMDWidth() {
 
       auto *NewLoad = irBuilder.CreateMaskedLoad(
           NewLoadTy, LoadI->getPointerOperand(), LoadI->getAlign(),
-          ConstantVector::get(MaskEls), UndefValue::get(NewLoadTy),
+          ConstantVector::get(MaskEls), PoisonValue::get(NewLoadTy),
           LoadI->getName() + ".pad");
       LLVM_DEBUG(dbgs() << "[PadToTargetSIMD] Load, " << *LoadI
                         << " was mapped to " << *NewLoad << "\n";);
@@ -5880,7 +5883,9 @@ Expected<Value *> Ripple::tensorBcast(Value *V, const TensorShape &FromShape,
         BaseTy = cast<VectorType>(BaseTy)->getElementType();
       Type *VectorTy =
           VectorType::get(BaseTy, toShape.flatShape(), /*scalable*/ false);
-      return UndefValue::get(VectorTy);
+      // Broadcasting preserves every source lane's undef or poison semantics.
+      return isa<PoisonValue>(C) ? PoisonValue::get(VectorTy)
+                                 : UndefValue::get(VectorTy);
     } else if (auto *SplatVal =
                    C->getType()->isVectorTy() ? C->getSplatValue() : nullptr) {
       return ConstantVector::getSplat(
