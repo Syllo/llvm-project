@@ -3541,9 +3541,11 @@ void Ripple::padToTargetSIMDWidth() {
 
         Value *PaddedMask = GetPaddedV(IntrnscInst->getArgOperand(1),
                                        PaddedLength, InstToPadded);
-        Value *NewMask =
-            irBuilder.CreateAnd(ConstantVector::get(MaskEls), PaddedMask,
-                                PaddedMask->getName() + ".pad");
+        // Select false for padding lanes: and(false, poison) is still poison.
+        Value *NewMask = irBuilder.CreateSelect(
+            ConstantVector::get(MaskEls), PaddedMask,
+            Constant::getNullValue(PaddedMask->getType()),
+            PaddedMask->getName() + ".pad");
         Value *NewPassthru = GetPaddedV(IntrnscInst->getArgOperand(2),
                                         PaddedLength, InstToPadded);
         Align AlignVal(IntrnscInst->getParamAlign(0).valueOrOne());
@@ -3576,9 +3578,11 @@ void Ripple::padToTargetSIMDWidth() {
 
         Value *PaddedMask = GetPaddedV(IntrnscInst->getArgOperand(2),
                                        PaddedLength, InstToPadded);
-        Value *NewMask =
-            irBuilder.CreateAnd(ConstantVector::get(MaskEls), PaddedMask,
-                                PaddedMask->getName() + ".pad");
+        // Select false for padding lanes: and(false, poison) is still poison.
+        Value *NewMask = irBuilder.CreateSelect(
+            ConstantVector::get(MaskEls), PaddedMask,
+            Constant::getNullValue(PaddedMask->getType()),
+            PaddedMask->getName() + ".pad");
         Align AlignVal(IntrnscInst->getParamAlign(1).valueOrOne());
 
         [[maybe_unused]] auto *NewMaskedStore = irBuilder.CreateMaskedStore(
@@ -3606,9 +3610,11 @@ void Ripple::padToTargetSIMDWidth() {
 
         Value *PaddedMask = GetPaddedV(IntrnscInst->getArgOperand(1),
                                        PaddedLength, InstToPadded);
-        Value *NewMask =
-            irBuilder.CreateAnd(ConstantVector::get(MaskEls), PaddedMask,
-                                PaddedMask->getName() + ".pad");
+        // Select false for padding lanes: and(false, poison) is still poison.
+        Value *NewMask = irBuilder.CreateSelect(
+            ConstantVector::get(MaskEls), PaddedMask,
+            Constant::getNullValue(PaddedMask->getType()),
+            PaddedMask->getName() + ".pad");
         Value *NewPassthru = GetPaddedV(IntrnscInst->getArgOperand(2),
                                         PaddedLength, InstToPadded);
 
@@ -3651,9 +3657,11 @@ void Ripple::padToTargetSIMDWidth() {
 
         Value *PaddedMask = GetPaddedV(IntrnscInst->getArgOperand(2),
                                        PaddedLength, InstToPadded);
-        Value *NewMask =
-            irBuilder.CreateAnd(ConstantVector::get(MaskEls), PaddedMask,
-                                PaddedMask->getName() + ".pad");
+        // Select false for padding lanes: and(false, poison) is still poison.
+        Value *NewMask = irBuilder.CreateSelect(
+            ConstantVector::get(MaskEls), PaddedMask,
+            Constant::getNullValue(PaddedMask->getType()),
+            PaddedMask->getName() + ".pad");
 
         irBuilder.CreateMaskedScatter(NewVals, NewPtrs, AlignVal, NewMask);
         InstructionsToRemove.push_back(IntrnscInst);

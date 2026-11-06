@@ -15,7 +15,7 @@ define void @singleBlock(ptr %Arr, i64 %N, i64 %i) #0 {
 ; CHECK-NEXT:    call void @llvm.assume(i1 [[NOOVERFLOWCOND]])
 ; CHECK-NEXT:    [[CMP_RIPPLE_LS_INSTANCE_PAD:%.*]] = call <4 x i1> @llvm.get.active.lane.mask.v4i1.i64(i64 [[I]], i64 [[N]])
 ; CHECK-NEXT:    [[ARRAYIDX_RIPPLE_BRANCH_CLONE:%.*]] = getelementptr inbounds nuw [4 x i8], ptr [[ARR]], i64 [[I]]
-; CHECK-NEXT:    [[CMP_RIPPLE_LS_INSTANCE_PAD_PAD:%.*]] = and <4 x i1> [[CMP_RIPPLE_LS_INSTANCE_PAD]], <i1 true, i1 true, i1 true, i1 false>
+; CHECK-NEXT:    [[CMP_RIPPLE_LS_INSTANCE_PAD_PAD:%.*]] = insertelement <4 x i1> [[CMP_RIPPLE_LS_INSTANCE_PAD]], i1 false, i64 3
 ; CHECK-NEXT:    call void @llvm.masked.store.v4f32.p0(<4 x float> splat (float 5.000000e+00), ptr align 4 [[ARRAYIDX_RIPPLE_BRANCH_CLONE]], <4 x i1> [[CMP_RIPPLE_LS_INSTANCE_PAD_PAD]])
 ; CHECK-NEXT:    ret void
 ;
