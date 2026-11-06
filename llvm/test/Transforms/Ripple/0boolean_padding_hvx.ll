@@ -40,6 +40,11 @@ land.end:                                         ; preds = %land.rhs, %entry
 ; CHECK: select <64 x i1> %[[CMP]], <64 x i1> %{{[a-zA-Z0-9._]+}}, <64 x i1> zeroinitializer
 ; CHECK: shufflevector <64 x i1> %{{[a-zA-Z0-9._]+}}, <64 x i1> poison, <128 x i32> <i32 0,
 ; CHECK-SAME: i32 poison>
-; CHECK: and <64 x i1> %[[CMP]],
+; The load mask preserves the 33 original predicate lanes and supplies false
+; for padding lanes, even when the comparison has poison in those lanes.
+; CHECK: [[LOAD_MASK:%.*]] = shufflevector <64 x i1> %[[CMP]], <64 x i1> <{{((i1 poison, ){33}(i1 false, ){30})}}i1 false>, <64 x i32> <i32 0,
+; CHECK-SAME: i32 32, i32 97,
+; CHECK-SAME: i32 127>
+; CHECK: call <64 x i32> @llvm.masked.load.v64i32.p0(ptr align 4 %{{.*}}, <64 x i1> [[LOAD_MASK]], <64 x i32> poison)
 
 attributes #0 = { nounwind "target-features"="+hvx-length128b,+hvxv79,+v79" }
