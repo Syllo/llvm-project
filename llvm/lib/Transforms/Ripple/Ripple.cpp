@@ -11135,6 +11135,7 @@ LibFunc Ripple::intrinsicToLibFunc(const IntrinsicInst *II) {
     case Type::PPC_FP128TyID:
       return LL;
     case Type::HalfTyID:
+    case Type::BFloatTyID:
       return LibFunc::NotLibFunc;
     default:
       llvm_unreachable("Invalid type in intrinsic");
@@ -11254,8 +11255,8 @@ LibFunc Ripple::intrinsicToLibFunc(const IntrinsicInst *II) {
 StringRef Ripple::intrinsicToLibName(const IntrinsicInst *II,
                                      const TargetLibraryInfo &TLI) {
   auto FPIntrinsicName = [](const IntrinsicInst *II, StringRef LH = {},
-                            StringRef LS = {}, StringRef LD = {},
-                            StringRef LL = {}) -> StringRef {
+                            StringRef LB = {}, StringRef LS = {},
+                            StringRef LD = {}, StringRef LL = {}) -> StringRef {
     switch (II->getArgOperand(0)->getType()->getTypeID()) {
     default:
       llvm_unreachable("Invalid type in intrinsic");
@@ -11265,6 +11266,8 @@ StringRef Ripple::intrinsicToLibName(const IntrinsicInst *II,
       return LD;
     case Type::HalfTyID:
       return LH;
+    case Type::BFloatTyID:
+      return LB;
     case Type::X86_FP80TyID:
     case Type::FP128TyID:
     case Type::PPC_FP128TyID:
@@ -11282,7 +11285,7 @@ StringRef Ripple::intrinsicToLibName(const IntrinsicInst *II,
   }
   LLVM_DEBUG(dbgs() << "Libfunc name for " << *II << " not found!\n");
   // Extrapolate for extra functions not part of TargetLibraryInfo
-#define LIB_MATH_NAMES(Name) Name "f16", Name "f", Name, Name "l"
+#define LIB_MATH_NAMES(Name) Name "f16", Name "bf16", Name "f", Name, Name "l"
   switch (II->getIntrinsicID()) {
   default:
     break;

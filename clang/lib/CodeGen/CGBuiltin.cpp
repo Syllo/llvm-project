@@ -7072,6 +7072,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
 
 #define CASE_RIPPLE_MATH_BUILTIN(Name)                                         \
   case Builtin::BI__builtin_ripple_##Name##f16:                                \
+  case Builtin::BI__builtin_ripple_##Name##bf16:                               \
   case Builtin::BI__builtin_ripple_##Name##f:                                  \
   case Builtin::BI__builtin_ripple_##Name:                                     \
   case Builtin::BI__builtin_ripple_##Name##l:
