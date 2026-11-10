@@ -16,6 +16,9 @@
 #include <hexagon_types.h>
 #include <stdbool.h>
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 // assumes qf32 input val
 // produces qf32 output val
 // end result around 0.7% accurate
@@ -184,5 +187,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_fast_log10_f16(HVX_Vector val,
   return _ripple_internal_Vhf_vmpy_VhfVhf(ripple_fast_log2_f16(val, safe),
                                           Q6_Vh_vsplat_R(0x34d1));
 }
+
+#endif // __HVX_ARCH__ >= 68
 
 #endif

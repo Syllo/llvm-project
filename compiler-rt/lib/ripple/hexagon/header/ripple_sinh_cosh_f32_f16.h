@@ -19,6 +19,9 @@
 #include "ripple_exp_f32_f16_hvx.h"
 #include "ripple_internal_utils_hvx.h"
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 //===------------------------------------------------------------------------===
 // This header defines several internal implementations of vector sinh and cosh
 // The boolean arguments select overflow handling and approximation variants.
@@ -333,5 +336,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_sinhf16_hvx(HVX_Vector x, bool safe) {
   HVX_Vector uNeg = Q6_V_vor_VV(u, maskSignBit);
   return Q6_V_vmux_QVV(sign, uNeg, u);
 }
+
+#endif // __HVX_ARCH__ >= 68
 
 #endif

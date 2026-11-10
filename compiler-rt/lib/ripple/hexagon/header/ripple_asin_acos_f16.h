@@ -17,6 +17,9 @@
 #include "ripple_trunc_round_f32_f16.h"
 #include <hexagon_types.h>
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 // Convert a uint16 value to QF32 and subtract the offset
 // The implicit assumption is that the vector vin
 // Is a vector of unsigned 32-bit words that are simply uint16 values expanded
@@ -162,5 +165,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_acosf16_hvx(HVX_Vector invec) {
   out = Q6_V_vmux_QVV(is_neg_one, pi_hf, out);
   return out;
 }
+
+#endif // __HVX_ARCH__ >= 68
 
 #endif

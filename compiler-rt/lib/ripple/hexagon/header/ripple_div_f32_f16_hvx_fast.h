@@ -18,6 +18,9 @@
 // some utility functions are shared
 #include "ripple_div_f32_f16_hvx.h"
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 //===------------------------------------------------------------------------===
 // This header defines several internal implementations of vector div
 // The boolean arguments select overflow handling and approximation variants.
@@ -163,5 +166,7 @@ ripple_fp16_div_hvx_fast(HVX_Vector numerator, HVX_Vector denominator) {
   HVX_Vector recip = ripple_recip_fp16_fast(denominator);
   return Q6_Vsf_equals_Vqf32(Q6_Vqf16_vmpy_VhfVhf(numerator, recip));
 }
+
+#endif // __HVX_ARCH__ >= 68
 
 #endif

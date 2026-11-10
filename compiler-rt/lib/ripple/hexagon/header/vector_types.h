@@ -8,6 +8,15 @@
 
 #pragma once
 
+// Also provided by __ripple_vec.h; allow either header to be included first.
+#ifndef __has_Float16__
+#if defined(__FLT16_MANT_DIG__)
+#define __has_Float16__ 1
+#else
+#define __has_Float16__ 0
+#endif
+#endif // __has_Float16__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -18,12 +27,14 @@ extern "C" {
 }
 #endif
 
+#if __has_Float16__
 #define __decl_f16_vec_t(VEC_SIZE, VEC_BYTE_WIDTH)                             \
   typedef _Float16 f16t##VEC_SIZE __attribute__((vector_size(VEC_BYTE_WIDTH)))
 
 __decl_f16_vec_t(64, 128);
 
 #undef __decl_f16_vec_t
+#endif // __has_Float16__
 
 #define __decl_f32_vec_t(VEC_SIZE, VEC_BYTE_WIDTH)                             \
   typedef float f32t##VEC_SIZE __attribute__((vector_size(VEC_BYTE_WIDTH)))

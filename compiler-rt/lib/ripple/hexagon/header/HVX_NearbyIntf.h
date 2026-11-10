@@ -34,9 +34,13 @@
 extern "C" {
 #endif
 float nearbyintf(float);
+#if __has_Float16__
 _Float16 nearbyintf16(_Float16);
+#endif // __has_Float16__
 float rintf(float);
+#if __has_Float16__
 _Float16 rintf16(_Float16);
+#endif // __has_Float16__
 #ifdef __cplusplus
 }
 #endif
@@ -71,6 +75,7 @@ RIPPLE_CANDIDATE_INLINE f32t32 ripple_ew_pure_nearbyintf(f32t32 vx) {
   return _RIPPLE_TO_VEC(32, float, BS, result);
 }
 
+#if __has_Float16__
 RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_nearbyintf16(f16t64 vx) {
   // TODO: read the rounding mode from fegetround of fenv.h, current
   // implementation rounds to nearest even.
@@ -101,14 +106,17 @@ RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_nearbyintf16(f16t64 vx) {
 
   return _RIPPLE_TO_VEC(64, _Float16, BS, result);
 }
+#endif // __has_Float16__
 
 RIPPLE_CANDIDATE_INLINE f32t32 ripple_ew_pure_rintf(f32t32 vx) {
   return ripple_ew_pure_nearbyintf(vx);
 }
 
+#if __has_Float16__
 RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_rintf16(f16t64 vx) {
   return ripple_ew_pure_nearbyintf16(vx);
 }
+#endif // __has_Float16__
 
 #undef _RIPPLE_TO_VEC
 #undef _VEC_TO_RIPPLE

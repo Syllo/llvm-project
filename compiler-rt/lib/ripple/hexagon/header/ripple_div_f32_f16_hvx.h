@@ -16,6 +16,9 @@
 #include <hexagon_types.h>
 #include <stdbool.h>
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 //===------------------------------------------------------------------------===
 // This header defines several internal implementations of vector div
 // The boolean arguments select overflow handling and approximation variants.
@@ -275,5 +278,7 @@ ripple_compute_recip_approx_fp16(HVX_Vector vin, bool three_newton) {
     return Q6_Vhf_equals_Vqf16(step1);
   }
 }
+
+#endif // __HVX_ARCH__ >= 68
 
 #endif

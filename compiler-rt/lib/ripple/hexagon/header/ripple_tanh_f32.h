@@ -18,6 +18,9 @@
 #include "ripple_internal_utils_hvx.h"
 #include "ripple_trunc_round_f32_f16.h"
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 // NaN propagates; +Inf goes to 1 and -Inf goes to -1.
 // Rational approximation
 // continuous function
@@ -106,5 +109,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_tanh_f32_hvx(HVX_Vector input) {
   HVX_Vector result = ripple_fp32_div_hvx(num_sf, den_sf);
   return Q6_V_vmux_QVV(is_nan, original_input, result);
 }
+
+#endif // __HVX_ARCH__ >= 68
 
 #endif

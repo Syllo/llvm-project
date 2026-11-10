@@ -41,6 +41,9 @@ RIPPLE_INTRIN_INLINE HVX_Vector _ripple_internal_Vw_vlut16_VwVwR(
   return Q6_V_vor_VV(hi_vals, lo_vals);
 }
 
+// The polynomial and floating-point helpers below use HVX qfloat/FP16
+// arithmetic intrinsics introduced in v68.
+#if __HVX_ARCH__ >= 68
 // This function consumes input values, indices (exotic xval -> index functions
 // are user responsibility) and the AB / CD lookup tables. It spits out degree-7
 // polynomials ( ax + bx^3 + cx^5 + dx^7 ), where a, b, c, and d are looked up
@@ -149,4 +152,6 @@ _ripple_internal_Vhf_vmpy_VhfVhf(HVX_Vector inp1, HVX_Vector inp2) {
 #endif
 }
 
+
+#endif // __HVX_ARCH__ >= 68
 #endif

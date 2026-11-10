@@ -18,6 +18,9 @@
 #include "ripple_div_f32_f16_hvx_fast.h"
 #include "ripple_trunc_round_f32_f16.h"
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 // remainder in [0, 1) after multiplying by the scales
 RIPPLE_INTRIN_INLINE HVX_Vector
 _ripple_find_remainder_sf(HVX_Vector input, const HVX_Vector scales) {
@@ -312,5 +315,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_tanf16_hvx(HVX_Vector input,
 RIPPLE_INTRIN_INLINE HVX_Vector ripple_cotf16_hvx(HVX_Vector input) {
   return ripple_tanf16_hvx(input, false);
 }
+
+#endif // __HVX_ARCH__ >= 68
 
 #endif

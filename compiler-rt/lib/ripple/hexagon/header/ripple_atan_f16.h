@@ -14,6 +14,9 @@
 #include "__ripple_func_attribs.h"
 #include <hexagon_types.h>
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 // ====================================================
 // FUNCTION: 1/(x+1)     y(0) = 1,  y(0.5) = 0.6667, y(1) = 0.5
 // Order:3; continuity: True; Ends forced: True
@@ -105,5 +108,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_atanf16_hvx(HVX_Vector in) {
 
   return approx;
 }
+
+#endif // __HVX_ARCH__ >= 68
 
 #endif

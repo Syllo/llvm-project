@@ -16,6 +16,9 @@
 #include <hexagon_types.h>
 #include <stdbool.h>
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 //===------------------------------------------------------------------------===
 // This header defines several internal implementations of vector exp
 // The boolean arguments select overflow handling and approximation variants.
@@ -245,5 +248,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_expf16_hvx_schraudolph(HVX_Vector x,
 
   return _ripple_exp_helper_polynomial_f16(u);
 }
+
+#endif // __HVX_ARCH__ >= 68
 
 #endif

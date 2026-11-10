@@ -18,6 +18,9 @@
 #include "ripple_internal_utils_hvx.h"
 #include "ripple_trunc_round_f32_f16.h"
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 __attribute__((aligned(sizeof(HVX_Vector)))) static const
     float tanh_f32_fast_AB_poly_lookup[32] = {
         // As
@@ -129,5 +132,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_tanh_f32_fast_hvx(HVX_Vector xval) {
   // add back the sign bit and return
   return Q6_V_vor_VV(sign_bit, result);
 }
+
+#endif // __HVX_ARCH__ >= 68
 
 #endif
