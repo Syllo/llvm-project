@@ -16,6 +16,9 @@
 #include <hexagon_types.h>
 #include <stdbool.h>
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 // safe = handles subnormals (roughly triples runtime)
 // full = 2 runs of Newton's method instead of 1
 
@@ -298,5 +301,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_sqrt_f16(HVX_Vector x, bool safe,
 
   return val;
 }
+
+#endif // __HVX_ARCH__ >= 68
 
 #endif

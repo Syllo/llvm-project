@@ -17,6 +17,9 @@
 
 #include "ripple_sqrt_f32_f16_hvx.h"
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 // safe = handles subnormals (roughly triples runtime)
 // full = 2 runs of Newton's method instead of 1
 // This is based on the sqrt implementations. Same considerations apply here.
@@ -47,5 +50,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_hypot_f16_promote(HVX_Vector a,
   HVX_Vector c2 = Q6_Vhf_equals_Vqf16(c2_qf);
   return ripple_sqrt_f16_promote(c2);
 }
+
+#endif // __HVX_ARCH__ >= 68
 
 #endif

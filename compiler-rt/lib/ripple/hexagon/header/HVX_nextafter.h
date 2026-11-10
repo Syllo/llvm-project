@@ -34,7 +34,9 @@
 extern "C" {
 #endif
 float nextafterf(float, float);
+#if __has_Float16__
 _Float16 nextafterf16(_Float16, _Float16);
+#endif // __has_Float16__
 #ifdef __cplusplus
 }
 #endif
@@ -80,6 +82,7 @@ RIPPLE_CANDIDATE_INLINE f32t32 ripple_ew_pure_nextafterf(f32t32 vx, f32t32 vy) {
   return _RIPPLE_TO_VEC(32, float, BS, result);
 }
 
+#if __has_Float16__
 RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_nextafterf16(f16t64 vx,
                                                            f16t64 vy) {
   ripple_block_t BS = ripple_set_block_shape(0, 64);
@@ -119,6 +122,7 @@ RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_nextafterf16(f16t64 vx,
   }
   return _RIPPLE_TO_VEC(64, _Float16, BS, result);
 }
+#endif // __has_Float16__
 
 #undef _RIPPLE_TO_VEC
 #undef _VEC_TO_RIPPLE

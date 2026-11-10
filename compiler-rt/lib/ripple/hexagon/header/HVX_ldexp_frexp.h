@@ -81,6 +81,7 @@ ripple_ret_t32f32_t32f32_t32ptr_frexpf(f32t32 vnum, i32t32 *vexp) {
   return _RIPPLE_TO_VEC(32, float, BS, fraction);
 }
 
+#if __has_Float16__
 RIPPLE_INTRIN_INLINE _Float16 __ripple_frexpf16(_Float16 num, int16_t *exp) {
   uint16_t num_binary;
   __builtin_memcpy(&num_binary, &num, sizeof(num_binary));
@@ -131,6 +132,7 @@ ripple_ret_t64f16_t64f16_t64ptr_frexpf16(f16t64 vnum, i32t64 *vexp) {
   *vexp = _RIPPLE_TO_VEC(64, int32_t, BS, (int32_t)exp);
   return _RIPPLE_TO_VEC(64, _Float16, BS, fraction);
 }
+#endif // __has_Float16__
 
 // }}}
 
@@ -188,6 +190,7 @@ RIPPLE_CANDIDATE_INLINE f32t32 ripple_ew_pure_ldexpf(f32t32 vnum, i32t32 vexp) {
   return _RIPPLE_TO_VEC(32, float, BS, __ripple_ldexpf(num, exp));
 }
 
+#if __has_Float16__
 RIPPLE_INTRIN_INLINE _Float16 __ripple_ldexpf16(_Float16 num, int16_t exp) {
   uint16_t num_binary;
   __builtin_memcpy(&num_binary, &num, sizeof(num_binary));
@@ -243,16 +246,19 @@ RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_ldexpf16(f16t64 vnum,
   int16_t exp = _VEC_TO_RIPPLE(64, int16_t, BS, vexph);
   return _RIPPLE_TO_VEC(64, _Float16, BS, __ripple_ldexpf16(num, exp));
 }
+#endif // __has_Float16__
 
 RIPPLE_CANDIDATE_INLINE f32t32 ripple_ew_pure_scalbnf(f32t32 vnum,
                                                       i32t32 vexp) {
   return ripple_ew_pure_ldexpf(vnum, vexp);
 }
 
+#if __has_Float16__
 RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_scalbnf16(f16t64 vnum,
                                                         i32t64 vexp) {
   return ripple_ew_pure_ldexpf16(vnum, vexp);
 }
+#endif // __has_Float16__
 
 // }}}
 

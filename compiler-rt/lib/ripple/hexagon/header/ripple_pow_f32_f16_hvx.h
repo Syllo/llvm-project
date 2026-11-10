@@ -18,6 +18,9 @@
 #include "ripple_exp_f32_f16_hvx.h"
 #include "ripple_log_f32_f16_hvx.h"
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 RIPPLE_INTRIN_INLINE HVX_Vector ripple_pow_f32(HVX_Vector a, HVX_Vector b,
                                                bool safe) {
   // multiply by log 2 to change exponential base
@@ -41,5 +44,7 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_pow_f16(HVX_Vector a, HVX_Vector b,
   else
     return ripple_expf16_hvx_schraudolph(log_res_hf, safe);
 }
+
+#endif // __HVX_ARCH__ >= 68
 
 #endif

@@ -70,7 +70,9 @@ typedef union {
   i16t64 as_i16t64;
   u16t64 as_u16t64;
   f32t32 as_f32t32;
+#if __has_Float16__
   f16t64 as_f16t64;
+#endif // __has_Float16__
 } __RippleHVXMathLibCastUnion;
 #define DEFINE_MATH_INTRINSIC_VARIANT_UNARY(ATTRIB, INTRINSIC_NAME,            \
                                             FROM_SCALAR_TYPE, FROM_TYPE,       \
@@ -146,51 +148,71 @@ float sqrtf_safe(float);
 float sqrtf_fast(float);
 float sqrtf_fast_safe(float);
 
+#if __has_Float16__
 _Float16 sqrtf16(_Float16);
 _Float16 sqrtf16_safe(_Float16);
 _Float16 sqrtf16_fast(_Float16);
 _Float16 sqrtf16_fast_safe(_Float16);
+#endif // __has_Float16__
 
 float rsqrtf(float);
 float rsqrtf_safe(float);
 float rsqrtf_fast(float);
 float rsqrtf_fast_safe(float);
 
+#if __has_Float16__
 _Float16 rsqrtf16(_Float16);
 _Float16 rsqrtf16_safe(_Float16);
 _Float16 rsqrtf16_fast(_Float16);
 _Float16 rsqrtf16_fast_safe(_Float16);
+#endif // __has_Float16__
 
 float hypotf(float, float);
 float hypotf_safe(float, float);
 float hypotf_fast(float, float);
 float hypotf_fast_safe(float, float);
 
+#if __has_Float16__
 _Float16 hypotf16(_Float16, _Float16);
 _Float16 hypotf16_safe(_Float16, _Float16);
 _Float16 hypotf16_fast(_Float16, _Float16);
 _Float16 hypotf16_fast_safe(_Float16, _Float16);
+#endif // __has_Float16__
 
 float tanhf(float);
 float tanhf_fast(float);
+#if __has_Float16__
 _Float16 tanhf16(_Float16);
+#endif // __has_Float16__
 
 // Trigonometric functions.
 float sinf(float);
+#if __has_Float16__
 _Float16 sinf16(_Float16);
+#endif // __has_Float16__
 float cosf(float);
+#if __has_Float16__
 _Float16 cosf16(_Float16);
+#endif // __has_Float16__
 float tanf(float);
+#if __has_Float16__
 _Float16 tanf16(_Float16);
+#endif // __has_Float16__
 
 // Inverse trigonometric functions.
 float asinf(float);
+#if __has_Float16__
 _Float16 asinf16(_Float16);
+#endif // __has_Float16__
 float acosf(float);
+#if __has_Float16__
 _Float16 acosf16(_Float16);
+#endif // __has_Float16__
 float atanf(float);
 float atan2f(float, float);
+#if __has_Float16__
 _Float16 atanf16(_Float16);
+#endif // __has_Float16__
 
 // Hyperbolic functions.
 float sinhf(float);
@@ -198,20 +220,32 @@ float coshf(float);
 
 // Rounding functions.
 float ceilf(float);
+#if __has_Float16__
 _Float16 ceilf16(_Float16);
+#endif // __has_Float16__
 float floorf(float);
+#if __has_Float16__
 _Float16 floorf16(_Float16);
+#endif // __has_Float16__
 float roundf(float);
+#if __has_Float16__
 _Float16 roundf16(_Float16);
+#endif // __has_Float16__
 float truncf(float);
+#if __has_Float16__
 _Float16 truncf16(_Float16);
+#endif // __has_Float16__
 
 // Power function.
 float powf(float, float);
+#if __has_Float16__
 _Float16 powf16(_Float16, _Float16);
+#endif // __has_Float16__
 
 float fmaf(float, float, float);
+#if __has_Float16__
 _Float16 fmaf16(_Float16, _Float16, _Float16);
+#endif // __has_Float16__
 
 // pass-through scalar versions for the additional vector versions of functions.
 // The exact meaning of "fast" and "UNSAFE" (for the vector version) are
@@ -232,17 +266,23 @@ float expf_fast(float x);
 // DOES NOT OVERFLOW CORRECTLY: you are responsible for reasonable input!
 float expf_fast_UNSAFE(float x);
 
+#if __has_Float16__
 _Float16 expf16(_Float16);
+#endif // __has_Float16__
 
 // errors on the scale of 2% relative to std::exp
 // rougly 4x faster than exp_vf16
+#if __has_Float16__
 _Float16 expf16_fast(_Float16 x);
+#endif // __has_Float16__
 
 // same precision as exp_vf16_fast
 // roughly 6x faster than exp_vf16
 // DOES NOT OVERFLOW CORRECTLY: you are responsible for reasonable input!
 //  -- fp16 overflows earlier than you think. Undef behavior ~ input 10.3
+#if __has_Float16__
 _Float16 expf16_fast_UNSAFE(_Float16 x);
+#endif // __has_Float16__
 
 float logf(float);
 float log1pf(float);
@@ -251,11 +291,15 @@ float log1pf(float);
 // roughly 30% faster than log_vf
 float logf_fast(float x);
 
+#if __has_Float16__
 _Float16 logf16(_Float16);
+#endif // __has_Float16__
 
 // errors on the scale of 0.7% relative to std::log
 // rougly 40% faster than log_vf16
+#if __has_Float16__
 _Float16 logf16_fast(_Float16 x);
+#endif // __has_Float16__
 
 float log2f(float);
 
@@ -263,11 +307,15 @@ float log2f(float);
 // roughly 30% faster than log2_vf
 float log2f_fast(float x);
 
+#if __has_Float16__
 _Float16 log2f16(_Float16);
+#endif // __has_Float16__
 
 // errors on the scale of 0.7% relative to std::log
 // rougly 40% faster than log2_vf16
+#if __has_Float16__
 _Float16 log2f16_fast(_Float16 x);
+#endif // __has_Float16__
 
 float log10f(float);
 
@@ -275,23 +323,31 @@ float log10f(float);
 // roughly 30% faster than log10_vf
 float log10f_fast(float x);
 
+#if __has_Float16__
 _Float16 log10f16(_Float16);
+#endif // __has_Float16__
 
 // errors on the scale of 0.7% relative to std::log
 // rougly 40% faster than log10_vf16
+#if __has_Float16__
 _Float16 log10f16_fast(_Float16 x);
 
 _Float16 sinhf16(_Float16);
+#endif // __has_Float16__
 
 // errors on the scale of 1-2%
 // about 30 % faster than default sinh_vf16
+#if __has_Float16__
 _Float16 sinhf16_fast(_Float16 x);
 
 _Float16 coshf16(_Float16);
+#endif // __has_Float16__
 
 // errors on the scale of 1-2%
 // about 30 % faster than default cosh_vf16
+#if __has_Float16__
 _Float16 coshf16_fast(_Float16 x);
+#endif // __has_Float16__
 
 // Errors on the scale of 2e-5
 float divf(float x, float y);
@@ -306,15 +362,19 @@ float recipf_fast(float x);
 
 // Errors on the scale of 5e-3
 // Uses recip_fp32_fast under the hood, with extra optimizations
+#if __has_Float16__
 _Float16 divf16(_Float16 x, _Float16 y);
 _Float16 recipf16(_Float16 x);
+#endif // __has_Float16__
 
 // Errors on the scale of 1-2%
 // More than 2x faster than div_vf16
 // Does not handle subnormals (goes to inf) nor inverse subnormals (goes to 0)
 // Computes reciprocal first, so accuracy is the same as 1.0 / den
+#if __has_Float16__
 _Float16 divf16_fast(_Float16 x, _Float16 y);
 _Float16 recipf16_fast(_Float16 x);
+#endif // __has_Float16__
 
 int divi(int x, int y);
 unsigned int divu(unsigned int x, unsigned int y);
@@ -326,16 +386,22 @@ unsigned short divu16(unsigned short x, unsigned short y);
 short remi16(short x, short y);
 unsigned short remu16(unsigned short x, unsigned short y);
 
+#if __has_Float16__
 _Float16 powf16_fast(_Float16, _Float16);
 
 _Float16 tanf16_fast(_Float16);
 _Float16 cotf16_fast(_Float16);
 
 _Float16 ldexpf16(_Float16, int);
+#endif // __has_Float16__
 float ldexpf(float, int);
+#if __has_Float16__
 _Float16 scalbnf16(_Float16, int);
+#endif // __has_Float16__
 float scalbnf(float, int);
+#if __has_Float16__
 _Float16 frexpf16(_Float16, int *);
+#endif // __has_Float16__
 float frexpf(float, int *);
 
 #ifdef __cplusplus
@@ -492,6 +558,7 @@ __attribute__((always_inline)) static inline long double frexpl(long double X,
     return __builtin_ripple_##op##f(X, Y);                                     \
   }
 
+#if __has_Float16__
 #define emulate_spec_unary_f16_mathfn(op)                                      \
   __attribute__((always_inline)) static inline _Float16 op##f16(               \
       _Float16 Val) {                                                          \
@@ -508,6 +575,7 @@ emulate_spec_binary_f16_mathfn(atan2);
 emulate_spec_unary_f16_mathfn(exp2);
 emulate_spec_unary_f16_mathfn(exp10);
 emulate_spec_unary_f16_mathfn(roundeven);
+#endif // __has_Float16__
 
 // Only do this when <math.h> isn't available: when it is, it already
 // declares/defines these names (some libcs, e.g. hexagon's, give real bodies
@@ -531,6 +599,10 @@ emulate_spec_unary_float_mathfn(roundeven);
 // module-local so they are inlined into each TU that includes this header and
 // are not exported.
 
+// HVX qfloat and FP16 arithmetic intrinsics are available from v68.
+// The math wrappers below require them, including for FP32 operations;
+// their shared helpers are guarded with the wrappers.
+#if __HVX_ARCH__ >= 68
 RIPPLE_INTRIN_INLINE HVX_VectorPred ripple_is_zero_vf(HVX_Vector vin) {
   // Matches +0 and -0 by masking the sign bit.
   const HVX_Vector abs_mask = Q6_V_vsplat_R(0x7fffffff);
@@ -879,6 +951,8 @@ RIPPLE_INTRIN_INLINE HVX_Vector recip_vf16_fast(HVX_Vector vin) {
   return ripple_recip_fp16_fast(vin);
 }
 
+
+#endif // __HVX_ARCH__ >= 68
 /////////////////////////////////////////////////////////////////////////////
 // Integer Div
 RIPPLE_INTRIN_INLINE HVX_Vector div_vi(HVX_Vector num, HVX_Vector den) {
@@ -936,6 +1010,7 @@ RIPPLE_CANDIDATE_INLINE f32t32 ripple_ew_pure_fmaf(f32t32 va, f32t32 vb,
   return _RIPPLE_TO_VEC(32, float, BS, result);
 }
 
+#if __has_Float16__
 RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_fmaf16(f16t64 va, f16t64 vb,
                                                  f16t64 vc) {
   ripple_block_t BS = ripple_set_block_shape(0, 64);
@@ -945,10 +1020,12 @@ RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_fmaf16(f16t64 va, f16t64 vb,
   _Float16 result = a * b + c;
   return _RIPPLE_TO_VEC(64, _Float16, BS, result);
 }
+#endif // __has_Float16__
 
 #undef _RIPPLE_TO_VEC
 #undef _VEC_TO_RIPPLE
 
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, acos, f16, f16t64,
                                     i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, asin, f16, f16t64,
@@ -961,18 +1038,29 @@ DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, cosh, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, cot, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
+#endif // __has_Float16__
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, ceil, f, f32t32,
                                     i32t32, ew_pure_, )
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, ceil, f16, f16t64,
                                     i32t32, ew_pure_, )
+#endif // __has_Float16__
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, div, f, f32t32,
                                      i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, div, f, f32t32,
                                      i32t32, ew_pure_, _fast)
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, div, f16, f16t64,
                                      i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, div, f16, f16t64,
                                      i32t32, ew_pure_, _fast)
+#endif // __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, div, i, i32t32,
                                      i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, div, u, u32t32,
@@ -981,20 +1069,32 @@ DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, div, i16, i16t64,
                                      i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, div, u16, u16t64,
                                      i32t32, ew_pure_, )
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, exp, f, f32t32,
                                     i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, exp, f, f32t32,
                                     i32t32, ew_pure_, _fast_UNSAFE)
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, exp, f16, f16t64,
                                     i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, exp, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, exp, f16, f16t64,
                                     i32t32, ew_pure_, _fast_UNSAFE)
+#endif // __has_Float16__
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, floor, f, f32t32,
                                     i32t32, ew_pure_, )
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, floor, f16, f16t64,
                                     i32t32, ew_pure_, )
+#endif // __has_Float16__
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, hypot, f, f32t32,
                                      i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, hypot, f, f32t32,
@@ -1003,6 +1103,8 @@ DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, hypot, f, f32t32,
                                      i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, hypot, f, f32t32,
                                      i32t32, ew_pure_, _fast_safe)
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, hypot, f16,
                                      f16t64, i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, hypot, f16,
@@ -1011,32 +1113,58 @@ DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, hypot, f16,
                                      f16t64, i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, hypot, f16,
                                      f16t64, i32t32, ew_pure_, _fast_safe)
+#endif // __has_Float16__
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log, f, f32t32,
                                     i32t32, ew_pure_, _fast)
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
+#endif // __has_Float16__
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log2, f, f32t32,
                                     i32t32, ew_pure_, _fast)
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log2, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
+#endif // __has_Float16__
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log10, f, f32t32,
                                     i32t32, ew_pure_, _fast)
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, log10, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
+#endif // __has_Float16__
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, pow, f, f32t32,
                                      i32t32, ew_pure_, )
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, pow, f16, f16t64,
                                      i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, pow, f16, f16t64,
                                      i32t32, ew_pure_, _fast)
+#endif // __has_Float16__
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, recip, f, f32t32,
                                     i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, recip, f, f32t32,
                                     i32t32, ew_pure_, _fast)
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, recip, f16, f16t64,
                                     i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, recip, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
+#endif // __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, rem, i, i32t32,
                                      i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, rem, u, u32t32,
@@ -1045,10 +1173,17 @@ DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, rem, i16, i16t64,
                                      i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_BINARY(RIPPLE_CANDIDATE_INLINE, rem, u16, u16t64,
                                      i32t32, ew_pure_, )
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, round, f, f32t32,
                                     i32t32, ew_pure_, )
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, round, f16, f16t64,
                                     i32t32, ew_pure_, )
+#endif // __has_Float16__
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, rsqrt, f, f32t32,
                                     i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, rsqrt, f, f32t32,
@@ -1057,6 +1192,8 @@ DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, rsqrt, f, f32t32,
                                     i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, rsqrt, f, f32t32,
                                     i32t32, ew_pure_, _fast_safe)
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, rsqrt, f16, f16t64,
                                     i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, rsqrt, f16, f16t64,
@@ -1069,12 +1206,17 @@ DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sinh, f16, f16t64,
                                     i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sinh, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
+#endif // __has_Float16__
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sqrt, f, f32t32,
                                     i32t32, ew_pure_, _safe)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sqrt, f, f32t32,
                                     i32t32, ew_pure_, _fast)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sqrt, f, f32t32,
                                     i32t32, ew_pure_, _fast_safe)
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sqrt, f16, f16t64,
                                     i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sqrt, f16, f16t64,
@@ -1085,16 +1227,27 @@ DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, sqrt, f16, f16t64,
                                     i32t32, ew_pure_, _fast_safe)
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, tan, f16, f16t64,
                                     i32t32, ew_pure_, _fast)
+#endif // __has_Float16__
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, tanh, f, f32t32,
                                     i32t32, ew_pure_, )
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, tanh, f, f32t32,
                                     i32t32, ew_pure_, _fast)
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, tanh, f16, f16t64,
                                     i32t32, ew_pure_, )
+#endif // __has_Float16__
+// The FP32 candidates require the v68+ HVX math wrappers above.
+#if __HVX_ARCH__ >= 68
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, trunc, f, f32t32,
                                     i32t32, ew_pure_, )
+#endif // __HVX_ARCH__ >= 68
+#if __has_Float16__
 DEFINE_MATH_INTRINSIC_VARIANT_UNARY(RIPPLE_CANDIDATE_INLINE, trunc, f16, f16t64,
                                     i32t32, ew_pure_, )
+#endif // __has_Float16__
 
 #undef RIPPLE_HVX_MATH_EXPAND
 #undef DEFINE_MATH_INTRINSIC_VARIANT_UNARY

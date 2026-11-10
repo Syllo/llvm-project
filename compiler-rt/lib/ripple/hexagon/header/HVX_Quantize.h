@@ -34,8 +34,10 @@ extern "C" {
 
 // Scalar declarations. Ripple candidate names mirror these entry points.
 
+#if __has_Float16__
 uint8_t hvx_quantize_f32_to_u8(float scale_f, int16_t out_offset,
                                const float in);
+#endif // __has_Float16__
 uint16_t hvx_quantize_f32_to_u16(float scale_f, int32_t out_offset,
                                  const float in);
 
@@ -45,6 +47,7 @@ uint16_t hvx_quantize_f32_to_u16(float scale_f, int32_t out_offset,
 
 // ripple_vector_candidate definitions.
 
+#if __has_Float16__
 RIPPLE_CANDIDATE_INLINE v128u8 ripple_pure_ew_hvx_quantize_f32_to_u8(
     float scale_f, int16_t out_offset, const v128f32 in) {
   auto BS = ripple_set_block_shape(0, 128);
@@ -61,6 +64,7 @@ RIPPLE_CANDIDATE_INLINE v128u8 ripple_pure_ew_hvx_quantize_f32_to_u8(
   v128u16 vh = ripple_to_vec<128>(static_cast<uint16_t>(xh));
   return Q6_Vub_vpack_VhVh_sat(Q6_V_hi_W(vh), Q6_V_lo_W(vh));
 }
+#endif // __has_Float16__
 
 RIPPLE_CANDIDATE_INLINE v64u16 ripple_pure_ew_hvx_quantize_f32_to_u16(
     float scale_f, int32_t out_offset, const v64f32 in) {

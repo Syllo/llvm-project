@@ -9,6 +9,8 @@
 #pragma once
 
 #include "__ripple_func_attribs.h"
+
+#if __has_Float16__
 #include <hexagon_protos.h>
 #include <ripple.h>
 #include <ripple_hvx.h>
@@ -204,3 +206,4 @@ RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_tanf16(f16t64 vx) {
 
 #undef _RIPPLE_TO_VEC
 #undef _VEC_TO_RIPPLE
+#endif // __has_Float16__

@@ -38,9 +38,11 @@ float log10f(float);
 float acoshf(float);
 float asinhf(float);
 float atanhf(float);
+#if __has_Float16__
 _Float16 logf16(_Float16);
 _Float16 log2f16(_Float16);
 _Float16 log10f16(_Float16);
+#endif // __has_Float16__
 #ifdef __cplusplus
 }
 #endif
@@ -371,6 +373,7 @@ __ripple_log_is_posinf_or_nan_f16(unsigned short bits) {
   return bits == 0x7c00U || (bits & 0x7fffU) > 0x7c00U;
 }
 
+#if __has_Float16__
 RIPPLE_INTRIN_INLINE _Float16 _log2f16_minimax(_Float16 x) {
   // Coefficients obtained using `sollya file.sollya`.
   // ------- file.sollya ------------------
@@ -413,8 +416,10 @@ RIPPLE_INTRIN_INLINE _Float16 _log2f16_from_bits(unsigned short xbits) {
   }
   return (_Float16)(e) + _log2f16_minimax(xfrac);
 }
+#endif // __has_Float16__
 
 // Evaluates scale * log2f(x) with fp16 range reduction and minimax evaluation.
+#if __has_Float16__
 RIPPLE_INTRIN_INLINE f16t64
 __ripple_log_log2f16_and_scale(f16t64 vx, const _Float16 scale) {
   ripple_block_t BS = ripple_set_block_shape(0, 64);
@@ -453,6 +458,7 @@ RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_log2f16(f16t64 vx) {
 RIPPLE_CANDIDATE_INLINE f16t64 ripple_ew_pure_log10f16(f16t64 vx) {
   return __ripple_log_log2f16_and_scale(vx, (_Float16)(0.3010299956639812f));
 }
+#endif // __has_Float16__
 
 #undef _RIPPLE_TO_VEC
 #undef _VEC_TO_RIPPLE

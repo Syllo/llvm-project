@@ -267,6 +267,8 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_trunc_f16(HVX_Vector val, bool unsafe) {
 //===------------------------------------------------------------------------===
 //===------------------------------------------------------------------------===
 
+// Round, floor, and ceil use HVX floating-point addition available from v68.
+#if __HVX_ARCH__ >= 68
 RIPPLE_INTRIN_INLINE HVX_Vector ripple_round_f32(HVX_Vector val) {
   const HVX_Vector half_sf = Q6_V_vsplat_R(0x3f000000);
 
@@ -389,4 +391,6 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_ceil_f16(HVX_Vector val) {
   return _ripple_internal_Vhf_vadd_VhfVhf(trunc, adj);
 }
 
+
+#endif // __HVX_ARCH__ >= 68
 #endif

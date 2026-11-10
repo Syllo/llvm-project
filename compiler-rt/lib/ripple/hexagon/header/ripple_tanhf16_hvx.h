@@ -16,6 +16,9 @@
 #include <hexagon_types.h>
 #include <stdbool.h>
 
+// The HVX floating-point intrinsics used below are available from v68.
+#if __HVX_ARCH__ >= 68
+
 // tanh table: map x2 -> tanh(x)
 // where x2 = (1-x1)^2,  x1 = min( 1, abs(x)/(16/3))
 //  so x2 in 0..1.0, in 16 cubic segments.
@@ -152,4 +155,6 @@ RIPPLE_INTRIN_INLINE HVX_Vector ripple_tanhf16_hvx(HVX_Vector xval,
   final_tanh = Q6_Vhf_vmin_VhfVhf(final_tanh, Q6_Vh_vsplat_R(0x3C00));
   return final_tanh;
 }
+#endif // __HVX_ARCH__ >= 68
+
 #endif

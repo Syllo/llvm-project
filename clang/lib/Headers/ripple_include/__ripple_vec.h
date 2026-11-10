@@ -79,17 +79,18 @@ typedef struct ripple_block_shape *ripple_block_t;
  */
 #define ripple_parallel_idx(...) __builtin_ripple_parallel_idx(__VA_ARGS__)
 
-// Use the definitions exposed by the targets in clang/lib/Basic/Targets/*.cpp
-// to infer _Float16 and __bf16 support.
-// Ripple only supports ARM/AArch64/X86[_64]/Hexagon for now
-#if (defined(__hexagon__) && __HEXAGON_ARCH__ >= 68) ||                        \
-    __ARM_FEATURE_FP16_SCALAR_ARITHMETIC || __arm64ec__ || __aarch64__ ||      \
-    __SSE2__
+// Also provided by the runtime vector_types.h.
+// Allow either header to be included first.
+#ifndef __has_Float16__
+#if defined(__FLT16_MANT_DIG__)
 #define __has_Float16__ 1
 #else
 #define __has_Float16__ 0
 #endif
+#endif // __has_Float16__
 
+// Use target definitions to infer __bf16 support.
+// Ripple only supports ARM/AArch64/X86[_64]/Hexagon for now.
 #if __STDCPP_BFLOAT16_T__ || __ARM_FEATURE_BF16 || __SSE2__ || __AVX10_2__ ||  \
     (defined(__hexagon__) && __HEXAGON_ARCH__ >= 81)
 #define __has_bf16__ 1
