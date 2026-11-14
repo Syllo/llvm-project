@@ -247,7 +247,7 @@ static __SIZE_TYPE__ shuffle_unzip(__SIZE_TYPE__ dst_id, __SIZE_TYPE__ n) {
   {                                                                            \
     using PtrType = __RippleTyTraits::remove_reference<decltype(ptr)>::type;   \
     PtrType ptr2 = (ptr) + (nv);                                               \
-    unzip_pairs(v, nv, (ptr)[v], ptr2[v], evens, odds);                        \
+    rzip_unzip_pairs(v, nv, (ptr)[v], ptr2[v], evens, odds);                   \
   }
 
 /// @brief Loads three blocks containing a sequence of triples,
@@ -261,8 +261,8 @@ static __SIZE_TYPE__ shuffle_unzip(__SIZE_TYPE__ dst_id, __SIZE_TYPE__ n) {
     using PtrType = __RippleTyTraits::remove_reference<decltype(ptr)>::type;   \
     PtrType ptr2 = (ptr) + (nv);                                               \
     PtrType ptr3 = ptr2 + (nv);                                                \
-    unzip_triples(v, nv, (ptr)[v], ptr2[v], ptr3[v], unzipped0, unzipped1,     \
-                  unzipped2);                                                  \
+    rzip_unzip_triples(v, nv, (ptr)[v], ptr2[v], ptr3[v], unzipped0,           \
+                       unzipped1, unzipped2);                                  \
   }
 
 /// @brief Loads four blocks containing a sequence of quads,
@@ -278,8 +278,8 @@ static __SIZE_TYPE__ shuffle_unzip(__SIZE_TYPE__ dst_id, __SIZE_TYPE__ n) {
     PtrType ptr2 = (ptr) + (nv);                                               \
     PtrType ptr3 = ptr2 + (nv);                                                \
     PtrType *ptr4 = ptr3 + (nv);                                               \
-    unzip_triples(v, nv, (ptr)[v], ptr2[v], ptr3[v], ptr4[v], unzipped0,       \
-                  unzipped1, unzipped2, unzipped3);                            \
+    rzip_unzip_quads(v, nv, (ptr)[v], ptr2[v], ptr3[v], ptr4[v], unzipped0,    \
+                     unzipped1, unzipped2, unzipped3);                         \
   }
 
 } // namespace rzip
