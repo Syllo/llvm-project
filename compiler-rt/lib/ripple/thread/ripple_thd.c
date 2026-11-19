@@ -348,10 +348,4 @@ extern ripple_thd_block_t _ripple_thd_init(int PE_id, void *underlying,
   return block0;
 }
 
-/// @brief A block's underlying runtime
-RIPPLE_THD_SCALAR
-extern void *_ripple_thd_underlying(ripple_thd_block_t block) {
-  return block->underlying;
-}
-
 #undef ripple_dbg

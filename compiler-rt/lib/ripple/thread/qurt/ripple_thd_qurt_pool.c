@@ -75,25 +75,24 @@ void qthd_worker_pool_init(qthd_worker_pool_t pool, qthd_runtime_t *rt,
   for (unsigned t = 0; t < rt->n_thd; t++) {
     qurt_thread_attr_t attr;
 
+    qthd_info_t *thd_info = _thd_info(rt, t);
     qurt_thread_attr_init(&attr);
     qurt_thread_attr_set_stack_size(&attr, stack_size);
-    if (((size_t)rt->stack[t]) % 8 != 0) {
+    if (((size_t)thd_info->stack) % 8 != 0) {
       qurt_printf("[Warning] Thread stack for thread %u (%p) not aligned!\n", t,
-                  rt->stack[t]);
+                  thd_info->stack);
     }
     qurt_thread_attr_set_stack_addr(&attr,
-                                    (unsigned long long *)rt->stack[t]);
+                                    (unsigned long long *)thd_info->stack);
     qurt_thread_attr_set_priority(&attr, priority);
-    qurt_thread_attr_set_name(
-        &attr, &rt->names[QURT_RIPPLE_MAX_THD_NAME_SIZE * t]);
+    qurt_thread_attr_set_name(&attr, thd_info->name);
     qurt_thread_attr_set_detachstate(&attr, QURT_THREAD_ATTR_CREATE_JOINABLE);
 #ifdef RIPPLE_THD_QURT_DEBUG
     qurt_printf("Stack size=%u, stack_addr=0x%x, prio=%u, name=%s\n",
-                stack_size, rt->stack[t], priority,
-                &rt->names[QURT_RIPPLE_MAX_THD_NAME_SIZE * t]);
+                stack_size, thd_info->stack, priority, thd_info->name);
 #endif
 
-    int ret = qurt_thread_create(&rt->threads[t], &attr,
+    int ret = qurt_thread_create(&(thd_info->thread), &attr,
                                  qthd_worker_thread_main, (void *)pool);
     if (ret != QURT_EOK) {
 #ifdef RIPPLE_THD_QURT_DEBUG
@@ -144,6 +143,6 @@ void qthd_worker_pool_exit(qthd_worker_pool_t pool) {
 
   int status;
   for (unsigned i = 0; i < pool->rt->n_thd; i++) {
-    qurt_thread_join(pool->rt->threads[i], &status);
+    qurt_thread_join(pool->rt->thd_info[i].thread, &status);
   }
 }
