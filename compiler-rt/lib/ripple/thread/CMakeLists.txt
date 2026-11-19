@@ -71,6 +71,9 @@ function(set_hexagon_version_info HEXAGON_ARCH_VERSION EXTRA_HEXAGON_FLAGS_OUT Q
 endfunction()
 
 # Detect QuRT
+if ("${HEXAGON_ARCH_VERSION}" STREQUAL "")
+  set(HEXAGON_ARCH_VERSION "$ENV{HEXAGON_ARCH_VERSION}")
+endif()
 if ("${HEXAGON_SDK_ROOT}" STREQUAL "")
   set(HEXAGON_SDK_ROOT "$ENV{HEXAGON_SDK_ROOT}")
 endif()
@@ -95,6 +98,9 @@ else()
 endif()
 
 # Detect the tool set. Several variables can influence this.
+if ("${HEXAGON_TOOLS_ROOT}" STREQUAL "")
+  set(HEXAGON_TOOLS_ROOT "$ENV{HEXAGON_TOOLS_ROOT}")
+endif()
 # Preferred: find a toolset in which the compiler used to build compiler-rt sits
 if (NOT "${CMAKE_C_COMPILER}" STREQUAL "")
   # Expected structure: HEXAGON_TOOLS_ROOT/bin/clang
